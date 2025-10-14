@@ -24,7 +24,7 @@ void main_setup() { // city; required extensions in defines.hpp: FP16S, EQUILIBR
 	// ###################################################################################### define geometry ######################################################################################
 	const float3 center = lbm.center()-float3(0.0f, 0.05f*size, 0.025f*size);
 	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(90.0f));
-	lbm.voxelize_stl(get_resource_path("Building.stl"), center, rotation, size);
+	lbm.voxelize_stl(get_resource_path("city.stl"), center, rotation, size);
 	const uint N=lbm.get_N(), Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); for(uint n=0u, x=0u, y=0u, z=0u; n<N; n++, lbm.coordinates(n, x, y, z)) {
 		if(lbm.flags[n]!=TYPE_S) lbm.u.y[n] = u;
 		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
