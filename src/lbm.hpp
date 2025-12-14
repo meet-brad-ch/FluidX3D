@@ -163,7 +163,7 @@ public:
 		Kernel kernel_graphics_q; // render vorticity (Q-criterion)
 
 #ifdef SURFACE
-		const string path_skybox = get_exe_path()+"../skybox/skybox8k.png";
+		const string path_skybox = get_resource_path("skybox8k.png");
 		Image* skybox_image = nullptr;
 		Memory<int> skybox; // skybox for free surface raytracing
 		Kernel kernel_graphics_rasterize_phi; // rasterize free surface

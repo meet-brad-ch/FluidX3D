@@ -2,6 +2,29 @@
 
 The fastest and most memory efficient lattice Boltzmann CFD software, running on all GPUs and CPUs via [OpenCL](https://github.com/ProjectPhysX/OpenCL-Wrapper "OpenCL-Wrapper"). Free for non-commercial use.
 
+---
+
+## 🔨 About This Fork
+
+This fork provides a **modern CMake build system** to make FluidX3D easier to build and use with IDEs like Visual Studio, VS Code, and CLion. The original build system required manual editing of source files to select examples - this fork enables building each example as a separate target with minimal configuration.
+
+**Key improvements:**
+- ✅ **Modern CMake**: Target-based build system with automatic dependency fetching
+- ✅ **IDE Integration**: Full support for Visual Studio, VS Code, CLion, Qt Creator
+- ✅ **Separate Examples**: Each of the 39 examples builds independently with 1-line CMakeLists.txt
+- ✅ **Unity Build Architecture**: Examples can have different feature configurations simultaneously
+- ✅ **Resource Management**: Centralized `resources/` directory with `get_resource_path()` function
+- ✅ **Easy Build Selection**: `cmake --build build --target <example>` instead of editing source code
+
+**New Documentation:**
+- **[CMAKE.md](CMAKE.md)** - Architecture, unity build design, and how to add examples
+- **[BUILD.md](BUILD.md)** - Build instructions for Windows, Linux, and macOS
+- **[EXAMPLES.md](EXAMPLES.md)** - Complete list of all 39 examples with STL download info
+
+**Original Documentation Below** ⬇️
+
+---
+
 <a href="https://youtu.be/-MkRBeQkLk8"><img src="https://img.youtube.com/vi/o3TPN142HxM/maxresdefault.jpg" width="50%"></img></a><a href="https://youtu.be/1z5-ddsmAag"><img src="https://img.youtube.com/vi/1z5-ddsmAag/maxresdefault.jpg" width="50%"></img></a><br>
 <a href="https://youtu.be/2BPP1oWzvi0"><img src="https://img.youtube.com/vi/2BPP1oWzvi0/maxresdefault.jpg" width="50%"></img></a><a href="https://youtu.be/K5eKxzklXDA"><img src="https://img.youtube.com/vi/K5eKxzklXDA/maxresdefault.jpg" width="50%"></img></a>
 (click on images to show videos on YouTube)
