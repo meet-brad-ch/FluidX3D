@@ -1,5 +1,44 @@
+# Build directories
+/build/
+/build-*/
+/cmake-build-*/
+
+# Build output
 bin/
-temp/
-stl/
-.vs/
-FluidX3D.vcxproj.user
+
+# CMake files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+
+# Compiled object files and executables
+*.o
+*.obj
+*.exe
+*.out
+*.app
+
+# IDE files
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Downloaded STL files
+resources/*.stl

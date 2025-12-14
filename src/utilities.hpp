@@ -4183,8 +4183,43 @@ inline void set_environment_variable(char* s) { // usage: set_environment_variab
 #ifdef UTILITIES_FILE
 #include <fstream> // read/write files
 #ifndef UTILITIES_NO_CPP17
-#include <filesystem> // automatically create directory before writing file, requires C++17
+#include <filesystem> // needed for get_resource_path and other file functions
+#endif // UTILITIES_NO_CPP17
+inline string get_resource_path(const string& relative_path) {
+#ifndef UTILITIES_NO_CPP17
+	// Location 1: CMake compile-time path (development builds with CLion, etc.)
+#ifdef FLUIDX3D_RESOURCE_DIR
+	const string cmake_path = string(FLUIDX3D_RESOURCE_DIR) + "/" + relative_path;
+	if(std::filesystem::exists(cmake_path)) {
+		return cmake_path;
+	}
+#endif // FLUIDX3D_RESOURCE_DIR
+
+	// Location 2: ./resources relative to executable (packaged distribution)
+	const string exe_path = get_exe_path() + "resources/" + relative_path;
+	if(std::filesystem::exists(exe_path)) {
+		return exe_path;
+	}
+
+	// Not found in either location - error out
+	string error_msg = "Resource not found: " + relative_path + "\nSearched in:";
+#ifdef FLUIDX3D_RESOURCE_DIR
+	error_msg += "\n  1. " + string(FLUIDX3D_RESOURCE_DIR) + "/" + relative_path;
+#endif // FLUIDX3D_RESOURCE_DIR
+	error_msg += "\n  2. " + get_exe_path() + "resources/" + relative_path;
+	print_error(error_msg);
+	return "";
+#else
+	// Without C++17 filesystem, trust CMake path if defined, otherwise use executable path
+#ifdef FLUIDX3D_RESOURCE_DIR
+	return string(FLUIDX3D_RESOURCE_DIR) + "/" + relative_path;
+#else
+	return get_exe_path() + "resources/" + relative_path;
+#endif // FLUIDX3D_RESOURCE_DIR
+#endif // UTILITIES_NO_CPP17
+}
 inline vector<string> find_files(const string& path, const string& extension=".*") {
+#ifndef UTILITIES_NO_CPP17
 	vector<string> files;
 	if(std::filesystem::is_directory(path)&&std::filesystem::exists(path)) {
 		for(const auto& entry : std::filesystem::directory_iterator(path)) {
@@ -4192,8 +4227,10 @@ inline vector<string> find_files(const string& path, const string& extension=".*
 		}
 	}
 	return files;
-}
+#else
+	return vector<string>();
 #endif // UTILITIES_NO_CPP17
+}
 inline void create_folder(const string& path) { // create folder if it not already exists
 	const int slash_position = (int)path.rfind('/'); // find last slash dividing the path from the filename
 	if(slash_position==(int)string::npos) return; // no slash found
@@ -4409,7 +4446,7 @@ inline void write_qoi(const string& filename, const Image* image) { // 3-channel
 	delete[] data;
 }
 #ifdef UTILITIES_PNG
-#include "lodepng.hpp"
+#include "lodepng.h"
 inline Image* read_png(const string& filename, Image* image=nullptr) {
 	uint width=0u, height=0u;
 	vector<uchar> data;

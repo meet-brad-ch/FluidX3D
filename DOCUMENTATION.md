@@ -119,41 +119,17 @@
 
 ## 2. Compiling the Source Code
 - There is no "installation" of FluidX3D. Instead, you have to compile the source code yourself.
-- I have made this as easy as possible and this documentation will guide you through it. Nontheless, some basic programming experience with C++ would be good for the setup scripts.
-- First, compile the code as-is; this is the standard FP32 benchmark test case. By default, the fastest installed GPU will be selected automatically. Compile time is about 5 seconds.
-
-### Windows
-- Download and install [Visual Studio Community](https://visualstudio.microsoft.com/de/vs/community/). In Visual Studio Installer, add:
-  - Desktop development with C++
-  - MSVC v142
-  - Windows 10 SDK
-- Open [`FluidX3D.sln`](FluidX3D.sln) in [Visual Studio Community](https://visualstudio.microsoft.com/de/vs/community/).
-- Compile and run by clicking the <kbd>► Local Windows Debugger</kbd> button.
-- To select a specific GPU, open Windows CMD in the `FluidX3D` folder (type `cmd` in File Explorer in the directory field and press <kbd>Enter</kbd>), then run `bin\FluidX3D.exe 0` to select device `0`. You can also select multiple GPUs with `bin\FluidX3D.exe 0 1 3 6` if the setup is [configured as multi-GPU](#the-lbm-class).
-
-### Linux / macOS / Android
-- Compile and run with:
-  ```bash
-  chmod +x make.sh
-  ./make.sh
-  ```
-- Compiling requires [`g++`](https://gcc.gnu.org/) with `C++17`, which is supported since version `8` (check with `g++ --version`). If you have [`make`](https://www.gnu.org/software/make/) installed (check with `make --version`), compiling will will be faster using multiple CPU cores; otherwise compiling falls back to using a single CPU core.
-- To select a specific GPU, enter `./make.sh 0` to compile+run, or `bin/FluidX3D 0` to run on device `0`. You can also select multiple GPUs with `bin/FluidX3D 0 1 3 6` if the setup is [configured as multi-GPU](#the-lbm-class).
-- Operating system (Linux/macOS/Android) and X11 support (required for [`INTERACTIVE_GRAPHICS`](src/defines.hpp)) are detected automatically. In case problems arise, you can still manually select [`target=...`](make.sh#L13) in [`make.sh`](make.sh#L13).
-- On macOS and Android, [`INTERACTIVE_GRAPHICS`](src/defines.hpp) mode is not supported, as no X11 is available. You can still use [`INTERACTIVE_GRAPHICS_ASCII`](src/defines.hpp) though, or [render video](#video-rendering) to the hard drive with regular [`GRAPHICS`](src/defines.hpp) mode.
+- This fork uses a **modern CMake build system**. See **[BUILD.md](BUILD.md)** for complete build instructions for Windows, Linux, and macOS.
+- By default, the fastest installed GPU will be selected automatically.
+- To select specific GPU(s), run with device ID: `./bin/benchmark 0` or `./bin/benchmark 0 1 3 6` for multi-GPU.
 
 <br>
 
-## 3. Go through Sample Setups
-- Now open [`src/setup.cpp`](src/setup.cpp). In here are all the sample setups, each one being a `void main_setup() {...}` function block written in C++. Uncomment one of them, maybe start top-to-bottom.
-- In the line where the `main_setup()` function starts, it says "required extensions in defines.hpp:", followed by a list of extensions in capital letters. Head over to [`src/defines.hpp`](src/defines.hpp) and comment out
-  ```c
-  //#define BENCHMARK
-  ```
-  with a `//`. Then, uncomment all of the extensions required for the setup by removing the `//` in front of the corresponding line.
-- Finally, [compile](#2-compiling-the-source-code) and run the setup with the <kbd>► Local Windows Debugger</kbd> button (Windows) or `./make.sh` (Linux/macOS/Android).
-- Once the interactive graphics window opens, press key <kbd>P</kbd> to start/pause the simulation, and press <kbd>H</kbd> to show the help menu for keyboard controls and visualization settings.
-- Go through some of the sample setups this way, get familiar with their code structure and test the graphics mode.
+## 3. Build and Run Examples
+- This fork includes **37 pre-configured examples**, each as a separate build target.
+- See **[EXAMPLES.md](EXAMPLES.md)** for the complete list of all examples.
+- See **[CMAKE.md](CMAKE.md#adding-new-examples)** for how to create your own custom examples.
+- Once the interactive graphics window opens, press <kbd>P</kbd> to start/pause the simulation, and <kbd>H</kbd> to show the help menu for keyboard controls and visualization settings.
 
 <br>
 
@@ -220,7 +196,7 @@
   units.set_m_kg_s(lbm_length, lbm_velocity, lbm_density=1, si_length, si_velocity, si_density);
   ```
   the base unit conversion factors [m], [kg], [s] are calculated and stored in the `units` struct. Thereafter, any of the conversion functions from [`src/units.hpp`](src/units.hpp) can be used to go from SI to LBM units and back, such as `lbm_nu = units.nu(si_nu)` to convert the kinematic viscosity from SI to LBM units.
-- A good beginner example for this is the "[aerodynamics of a cow](src/setup.cpp)" setup.
+- A good beginner example for this is the [`examples/cow/main.cpp`](examples/cow/main.cpp) example.
 
 ### Initial and Boundary Conditions
 - If not explicitly set, by default all cells have the default values `rho=1`, `u=0`, `flags=0`.
@@ -301,7 +277,7 @@
 ### Loading .stl Files
 - For more complex geometries, you can load `.stl` triangle meshes and voxelize them to the Cartesian simulation grid on the GPU(s).
 - Create a `FluidX3D/stl/` folder next to the `FluidX3D/src/` folder and download the geometry from websites like [Thingiverse](https://www.thingiverse.com/), or create your own.
-- Only binary `.stl` files are supported. Meshes must be watertight (no holes) and all triangles must be oriented such that their normals point to the outside. For conversion from other formats or for splitting composite geometries like helicopter hull and rotors, I recommend [Microsoft 3D Builder](https://apps.microsoft.com/store/detail/3d-builder/9WZDNCRFJ3T6) on Windows or [Blender](https://www.blender.org/) on Windows/Linux.
+- Only binary `.stl` files are supported. For conversion from other formats or for splitting composite geometries like helicopter hull and rotors, I recommend [Microsoft 3D Builder](https://apps.microsoft.com/store/detail/3d-builder/9WZDNCRFJ3T6) on Windows or [Blender](https://www.blender.org/) on Windows/Linux.
 - Load and voxelize simple `.stl` files directly with
   ```c
   lbm.voxelize_stl(get_exe_path()+"../stl/mesh.stl", center, rotation, size);
@@ -324,12 +300,11 @@
   ```
   to load the meshes from the `.stl` files, manually scale/reposition all parts of the mesh the same time, and finally voxelize them on the GPU.
 - To aid with repositioning the mesh, there is `lbm.center()` for the center of the simulation box, as well as the min/max bounding-box coordinates of the mesh `mesh->pmin`/`mesh->pmax`, each a `float3` with (`x`|`y`|`z`) components.
-- Rotating geometries have to be periodically revoxelized, about every 1-10 LBM time steps. In the main simulation loop in the [`main_setup()`](src/setup.cpp) function, first rotate the triangle mesh, then revoxelize on GPU, then compute a few LBM time steps:
+- Rotating geometries have to be periodically revoxelized, about every 1-10 LBM time steps. In the main simulation loop in your example's `main_setup()` function, first rotate the triangle mesh, then revoxelize on GPU, then compute a few LBM time steps:
   ```c
   const uint lbm_T = 100000u; // number of LBM time steps to simulate
   const uint lbm_dt = 4u; // number of LBM time steps between each mesh revoxelization
   lbm.run(0u); // initialize simulation
-  mesh->set_center(mesh->get_center_of_mass()); // set rotation center of mesh to its center of mass
   while(lbm.get_t()<lbm_T) { // main simulation loop
   	mesh->rotate(float3x3(float3(0, 0, 1), lbm_omega*(float)lbm_dt)); // rotate the triangle mesh
   	lbm.voxelize_mesh_on_device(mesh, TYPE_S, center, float3(0.0f), float3(0.0f, 0.0f, lbm_omega)); // revoxelize the rotated triangle mesh, provide the instantaneous angular velocity vector for moving boundaries
@@ -337,12 +312,12 @@
   }
   ```
   Here `lbm_omega` is the angular velocity in radians per time step, `lbm_dt` is the number of simulated time steps between revoxelizations, and `float3(0.0f, 0.0f, lbm_omega)` is the instantaneous angular velocity as a vector along the axis of rotation. The largest displacement of the outermost cells should not exceed `1` cell between revoxelizations; set `lbm_omega = lbm_u/lbm_radius` accordingly.
-- Have a look at the "[Cessna 172](src/setup.cpp)" and "[Bell 222](src/setup.cpp)" setups for some examples.
+- Have a look at [`examples/cessna_172/main.cpp`](examples/cessna_172/main.cpp) and [`examples/bell_222/main.cpp`](examples/bell_222/main.cpp) for reference.
 
 ### Video Rendering
 - For video rendering, disable (comment out) [`INTERACTIVE_GRAPHICS`](src/defines.hpp) and [`INTERACTIVE_GRAPHICS_ASCII`](src/defines.hpp) and enable (uncomment) [`GRAPHICS`](src/defines.hpp) in [`src/defines.hpp`](src/defines.hpp).
 - Set the video resolution as [`GRAPHICS_FRAME_WIDTH`](src/defines.hpp)/[`GRAPHICS_FRAME_HEIGHT`](src/defines.hpp) and the background color as [`GRAPHICS_BACKGROUND_COLOR`](src/defines.hpp). You can also adjust the other [`GRAPHICS_...`](src/defines.hpp) options there, such as semi-transparent rendering mode, or adjust the color scale for velocity with [`GRAPHICS_U_MAX`](src/defines.hpp).
-- A basic loop for rendering video in the [`main_setup()`](src/setup.cpp) function looks like this:
+- A basic loop for rendering video in your example's `main_setup()` function looks like this:
   ```c
   lbm.graphics.visualization_modes = VIS_FLAG_LATTICE|VIS_Q_CRITERION; // set visualization modes, see all available visualization mode macros (VIZ_...) in defines.hpp
   const uint lbm_T = 10000u; // number of LBM time steps to simulate
@@ -357,7 +332,7 @@
   	lbm.run(1u, lbm_T); // run 1 LBM time step
   }
   ```
-- To find suitable camera placement, run the simulation at low resolution in [`INTERACTIVE_GRAPHICS`](src/defines.hpp) mode, rotate/move the camera to the desired position, click the <kbd>Mouse</kbd> to disable mouse rotation, and press <kbd>G</kbd> to print the current camera settings as a copy-paste command in the console. <kbd>Alt</kbd>+<kbd>Tab</kbd> to the console and copy the camera placement command by selecting it with the mouse and right-clicking, then paste it into the [`main_setup()`](src/setup.cpp) function.
+- To find suitable camera placement, run the simulation at low resolution in [`INTERACTIVE_GRAPHICS`](src/defines.hpp) mode, rotate/move the camera to the desired position, click the <kbd>Mouse</kbd> to disable mouse rotation, and press <kbd>G</kbd> to print the current camera settings as a copy-paste command in the console. <kbd>Alt</kbd>+<kbd>Tab</kbd> to the console and copy the camera placement command by selecting it with the mouse and right-clicking, then paste it into your example's `main_setup()` function.
 - To fly the camera along a smooth path through a list of provided keyframe camera placements, use `catmull_rom` splines:
   ```c
   while(lbm.get_t()<=lbm_T) { // main simulation loop
@@ -414,7 +389,7 @@
 - Exported files will automatically be assigned the current simulation time step in their name, in the format `bin/export/u-123456789.vtk`.
 - Be aware that these volumetric files can be gigantic in file size, tens of GigaByte for a single file.
 - You can view/evaluate the `.vtk` files for example in [ParaView](https://www.paraview.org/).
-- It is recommended to use the C++ functionality in the [`main_setup()`](src/setup.cpp) function directly to extract the data of interest and selectively only write that to the hard drive. Therefore, call `lbm.u.read_from_device()` to copy the data from the GPU(s) to CPU RAM, and then you can access it directly, for example
+- It is recommended to use the C++ functionality in your example's `main_setup()` function directly to extract the data of interest and selectively only write that to the hard drive. Therefore, call `lbm.u.read_from_device()` to copy the data from the GPU(s) to CPU RAM, and then you can access it directly, for example
   ```c
   const float lbm_velocity_x = lbm.u.x[lbm.index(x, y, z)];
   ```
@@ -431,12 +406,12 @@
 
 ### Lift/Drag Forces
 - Enable (uncomment) the [`FORCE_FIELD`](src/defines.hpp) extension. This extension allows computing boundary forces on every solid cell (`TYPE_S`) individually, as well as placing an individual volume force on every fluid cell (not used here).
-- In the [`main_setup()`](src/setup.cpp) function, voxelize the mesh with a unique flag combination, such as `(TYPE_S|TYPE_X)` or `(TYPE_S|TYPE_Y)` or `(TYPE_S|TYPE_X|TYPE_Y)`, to distinguish it from all other `(TYPE_S)` cells that might be needed to define other geometry, and compute its center of mass:
+- In your example's `main_setup()` function, voxelize the mesh with a unique flag combination, such as `(TYPE_S|TYPE_X)` or `(TYPE_S|TYPE_Y)` or `(TYPE_S|TYPE_X|TYPE_Y)`, to distinguish it from all other `(TYPE_S)` cells that might be needed to define other geometry, and compute its center of mass:
   ```c
   lbm.voxelize_mesh_on_device(mesh, TYPE_S|TYPE_X); // voxelize mesh with unique flag combination
   const float3 lbm_com = lbm.object_center_of_mass(TYPE_S|TYPE_X); // object center of mass in LBM unit coordinates
   ```
-- To sum over all the individual boundary cells that belong to the object, in the [`main_setup()`](src/setup.cpp) function's main simulation loop call:
+- To sum over all the individual boundary cells that belong to the object, in your example's main simulation loop call:
   ```c
   const float3 lbm_force = lbm.object_force(TYPE_S|TYPE_X); // force on object
   const float3 lbm_torque = lbm.object_torque(lbm_com, TYPE_S|TYPE_X); // torque on object around lbm_com rotation point
@@ -452,7 +427,7 @@
   const float si_force_x = units.si_F(lbm_force.x);
   ```
   after having done [unit conversion](#unit-conversion) with `units.set_m_kg_s(...)`.
-- See the "[Ahmed body](src/setup.cpp)" sample setup for an example. Note that in the highly turbulent regime, computed body forces are too large by up to a factor 2, because even large resolution is not enough to fully capture the turbulent boundary layer. A wall function is still needed.
+- See [`examples/ahmed_body/main.cpp`](examples/ahmed_body/main.cpp) for reference. Note that in the highly turbulent regime, computed body forces are too large by up to a factor 2, because even large resolution is not enough to fully capture the turbulent boundary layer. A wall function is still needed.
 
 <br>
 
@@ -469,7 +444,7 @@ By now you're already familiar with the [additional boundary types](#initial-and
   The interface layer will be automatically initialized during initialization with `lbm.run(0u)`.
 - Addidionally to the 3 flags, each cell also gets assigned a fill level `lbm.phi[n]`: `1` for fluid cells (`TYPE_F`), `]0,1[` for interface cells (`TYPE_I`), and `0` for gas cells (`TYPE_G`). You can set this fill level at initialization, additionally to the cell flag. Do not forget to set the cell flag. If `lbm.phi[n]` is not set manually, it will automatically be initialized such that all fluid cells get `phi=1`, all interface cells get `phi=0.5`, and all gas clls get `phi=0` assigned.
 - For fluid inflow boundary conditions, use [Moving Solid Boundaries](#initial-and-boundary-conditions), and additionally in the adjacent cells to the `TYPE_S` cells with non-zero velocity, set the `TYPE_F` flag.
-- See the "[hydraulic jump](src/setup.cpp)" or the "[raindrop impact](src/setup.cpp)" sample setups.
+- See [`examples/hydraulic_jump/main.cpp`](examples/hydraulic_jump/main.cpp) or [`examples/raindrop/main.cpp`](examples/raindrop/main.cpp) for reference.
 
 ### [`TEMPERATURE`](src/defines.hpp) Extension
 - With the [`TEMPERATURE`](src/defines.hpp) extension, FluidX3D can model thermal convection flows. This extension automatically also enables the [`VOLUME_FORCE`](src/defines.hpp) extension.
@@ -483,7 +458,7 @@ By now you're already familiar with the [additional boundary types](#initial-and
   lbm.flags[n] = TYPE_T; // make the cell n a temperature boundary
   lbm.T[n] = 1.2f; // set this temperature boundary hotter than average
   ```
-- See the "[Rayleigh-Benard convection](src/setup.cpp)" and "[thermal convection](src/setup.cpp)" setups for two examples.
+- See [`examples/rayleigh_benard/main.cpp`](examples/rayleigh_benard/main.cpp) and [`examples/thermal_convection/main.cpp`](examples/thermal_convection/main.cpp) for reference.
 
 ### [`SUBGRID`](src/defines.hpp) Extension
 - Fluid flow is characterized by the Reynolds number<p align="center"><i>Re</i> = <sup><i>x</i>·<i>u</i></sup>&#8725;<sub><i>nu</i></sub></p>with a characteristic length scale `x`, a characteristic velocity `u` and the kinematic shear viscosity `nu`. Larger length scale, larger velocity or smaller viscosity all mean larger Reynolds number.
