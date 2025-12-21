@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Download STL files from Thingiverse for FluidX3D examples.
 
@@ -35,7 +36,7 @@ def download_thingiverse_zip_playwright(thing_url, download_dir, timeout=120000)
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        print("✗ Playwright not installed.", file=sys.stderr)
+        print("[X] Playwright not installed.", file=sys.stderr)
         print("  Install with:", file=sys.stderr)
         print("    pip install playwright", file=sys.stderr)
         print("    playwright install chromium", file=sys.stderr)
@@ -69,14 +70,14 @@ def download_thingiverse_zip_playwright(thing_url, download_dir, timeout=120000)
 
             page = context.new_page()
 
-            print("✓ Browser launched")
+            print("[OK] Browser launched")
 
             # Navigate to page
             print("Loading Thingiverse page...")
             page.goto(thing_url, timeout=timeout, wait_until="domcontentloaded")
             time.sleep(2)  # Give page time to render
 
-            print("✓ Page loaded")
+            print("[OK] Page loaded")
 
             # Find download button - try multiple selectors
             print("Looking for download button...")
@@ -94,13 +95,13 @@ def download_thingiverse_zip_playwright(thing_url, download_dir, timeout=120000)
                 try:
                     download_button = page.locator(selector).first
                     if download_button.is_visible(timeout=2000):
-                        print(f"✓ Found download button with selector: {selector}")
+                        print(f"[OK] Found download button with selector: {selector}")
                         break
                 except:
                     continue
 
             if not download_button or not download_button.is_visible():
-                print("✗ Could not find download button", file=sys.stderr)
+                print("[X] Could not find download button", file=sys.stderr)
                 print("  Page title:", page.title(), file=sys.stderr)
                 browser.close()
                 return None
@@ -112,13 +113,13 @@ def download_thingiverse_zip_playwright(thing_url, download_dir, timeout=120000)
                 print("Waiting for countdown timer and download...")
 
             download = download_info.value
-            print(f"✓ Download started: {download.suggested_filename}")
+            print(f"[OK] Download started: {download.suggested_filename}")
 
             # Save to download directory
             download_path = os.path.join(download_dir, download.suggested_filename)
             download.save_as(download_path)
 
-            print(f"✓ Download complete: {download_path}")
+            print(f"[OK] Download complete: {download_path}")
             file_size = os.path.getsize(download_path)
             print(f"  Size: {file_size / 1024 / 1024:.2f} MB")
 
@@ -126,7 +127,7 @@ def download_thingiverse_zip_playwright(thing_url, download_dir, timeout=120000)
             return download_path
 
         except Exception as e:
-            print(f"✗ Playwright error: {e}", file=sys.stderr)
+            print(f"[X] Playwright error: {e}", file=sys.stderr)
             try:
                 browser.close()
             except:
@@ -160,7 +161,7 @@ def extract_stl_from_zip(zip_path, stl_filename, output_dir):
                         break
 
             if not stl_file:
-                print(f"✗ STL file '{stl_filename}' not found in archive", file=sys.stderr)
+                print(f"[X] STL file '{stl_filename}' not found in archive", file=sys.stderr)
                 print(f"Available STL files:", file=sys.stderr)
                 for f in all_files:
                     if f.endswith('.stl'):
@@ -178,15 +179,15 @@ def extract_stl_from_zip(zip_path, stl_filename, output_dir):
                     target.write(source.read())
 
             file_size = os.path.getsize(output_path)
-            print(f"✓ Extracted: {file_size / 1024 / 1024:.2f} MB")
-            print(f"✓ Saved to: {output_path}")
+            print(f"[OK] Extracted: {file_size / 1024 / 1024:.2f} MB")
+            print(f"[OK] Saved to: {output_path}")
             return True
 
     except zipfile.BadZipFile:
-        print(f"✗ Invalid zip file: {zip_path}", file=sys.stderr)
+        print(f"[X] Invalid zip file: {zip_path}", file=sys.stderr)
         return False
     except Exception as e:
-        print(f"✗ Extraction error: {e}", file=sys.stderr)
+        print(f"[X] Extraction error: {e}", file=sys.stderr)
         return False
 
 
@@ -211,7 +212,7 @@ def download_thingiverse_stl(thing_id, stl_filename, output_dir):
     if os.path.exists(output_stl_path):
         file_size = os.path.getsize(output_stl_path)
         if file_size > 1024:  # More than 1KB
-            print(f"✓ STL file already exists: {output_stl_path}")
+            print(f"[OK] STL file already exists: {output_stl_path}")
             print(f"  Size: {file_size / 1024 / 1024:.2f} MB")
             print("  Use --force to re-download")
             return True
@@ -224,7 +225,7 @@ def download_thingiverse_stl(thing_id, stl_filename, output_dir):
         # Download the zip using Playwright
         zip_path = download_thingiverse_zip_playwright(thing_url, tmp_download_dir)
         if not zip_path:
-            print("\n✗ Failed to download zip", file=sys.stderr)
+            print("\n[X] Failed to download zip", file=sys.stderr)
             print("  Try manual download from:", file=sys.stderr)
             print(f"  {thing_url}", file=sys.stderr)
             return False
@@ -233,7 +234,7 @@ def download_thingiverse_stl(thing_id, stl_filename, output_dir):
         if not extract_stl_from_zip(zip_path, stl_filename, output_dir):
             return False
 
-    print("\n✓ Success!")
+    print("\n[OK] Success!")
     return True
 
 
