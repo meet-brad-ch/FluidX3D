@@ -38,6 +38,17 @@ FetchContent_Declare(
     GIT_TAG        v2024.10.24
 )
 FetchContent_MakeAvailable(opencl_clhpp)
+# Fetch SDFGen (SDF generation utility)
+FetchContent_Declare(
+    sdfgen
+    GIT_REPOSITORY https://github.com/meet-brad-ch/SDFGenFast.git
+    GIT_TAG        master
+)
+FetchContent_MakeAvailable(sdfgen)
+
+# Add SDF cache module (depends on sdfgen)
+add_subdirectory(src/sdf_cache)
+
 
 # Find dependencies - create IMPORTED targets
 if(UNIX)
