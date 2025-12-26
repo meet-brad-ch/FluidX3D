@@ -2,14 +2,49 @@
 
 How to build FluidX3D with CMake on Windows, Linux, and macOS.
 
+## Cloning the Repository
+
+This project uses git submodules. Clone with:
+
+```bash
+git clone --recurse-submodules https://github.com/meet-brad-ch/FluidX3D
+```
+
+If you already cloned without submodules:
+
+```bash
+git submodule update --init
+```
+
+---
+
 ## Quick Start
+
+### Using Build Scripts (Recommended)
+
+```bash
+# Windows
+cd tools
+./configure.bat Release
+./build.bat benchmark Release
+
+# Linux/macOS
+cd tools
+./configure.sh Release
+./build.sh benchmark
+
+# Run
+../bin/benchmark
+```
+
+### Using CMake Directly
 
 ```bash
 # Configure
-cmake -B build
+cmake -B build-Release
 
 # Build specific example
-cmake --build build --target benchmark
+cmake --build build-Release --target benchmark
 
 # Run
 ./bin/benchmark
@@ -37,6 +72,8 @@ cmake --build build --target benchmark
 - X11 libraries
 
 ---
+
+
 
 ## Building on Windows
 
@@ -97,6 +134,8 @@ bin\benchmark.exe
 
 ---
 
+
+
 ## Building on Linux
 
 ```bash
@@ -112,6 +151,8 @@ cmake --build build --target benchmark
 
 ---
 
+
+
 ## Building on macOS
 
 ```bash
@@ -126,6 +167,8 @@ cmake --build build --target benchmark
 ```
 
 ---
+
+
 
 ## Build Targets
 
@@ -168,6 +211,8 @@ Common examples:
 
 ---
 
+
+
 ## Executable Locations
 
 All executables are placed in the `bin/` directory:
@@ -195,6 +240,8 @@ bin\taylor_green_3d.exe
 
 ---
 
+
+
 ## Compiler Optimization
 
 The build system automatically applies optimal flags:
@@ -205,6 +252,8 @@ The build system automatically applies optimal flags:
 | **MSVC** | `/O2 /MP /Ot /GL /fp:fast /LTCG` |
 
 ---
+
+
 
 ## Troubleshooting
 
@@ -299,6 +348,8 @@ rmdir /s /q build && cmake -B build -G "Visual Studio 16 2019" -A x64 && cmake -
 
 ---
 
+
+
 ## Parallel Builds
 
 CMake automatically uses all CPU cores:
@@ -312,6 +363,8 @@ cmake --build build --config Release --parallel
 ```
 
 ---
+
+
 
 ## Additional Resources
 
