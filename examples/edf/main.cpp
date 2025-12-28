@@ -1,47 +1,79 @@
-#include "defines.hpp"
-#include "info.hpp"
-#include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+// Electric Ducted Fan (EDF)
+//
+// Required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, MOVING_BOUNDARIES, SUBGRID
+// STL from: https://www.thingiverse.com/thing:3014759/files
+//
+// Note: This example uses MovingPartsManager for the rotor.
+// Rotor has different Y offset (-0.41) compared to stator (-0.2).
 
-void main_setup() { // electric ducted fan (EDF); required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, MOVING_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS or GRAPHICS
-	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint3 lbm_N = resolution(float3(1.0f, 1.5f, 1.0f), 8000u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
-	const float lbm_Re = 1000000.0f;
-	const float lbm_u = 0.1f;
-	const ulong lbm_T = 180000ull;
-	const ulong lbm_dt = 4ull;
-	LBM lbm(lbm_N, units.nu_from_Re(lbm_Re, (float)lbm_N.x, lbm_u));
-	// ###################################################################################### define geometry ######################################################################################
-	const float3 center = lbm.center();
-	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(180.0f));
-	Mesh* stator = read_stl(get_resource_path("edf_v39.stl"), 1.0f, rotation); // https://www.thingiverse.com/thing:3014759/files
-	Mesh* rotor = read_stl(get_resource_path("edf_v391.stl"), 1.0f, rotation); // https://www.thingiverse.com/thing:3014759/files
-	const float scale = 0.98f*stator->get_scale_for_box_fit(lbm.size()); // scale stator and rotor to simulation box size
-	stator->scale(scale);
-	rotor->scale(scale);
-	stator->translate(lbm.center()-stator->get_bounding_box_center()-float3(0.0f, 0.2f*stator->get_max_size(), 0.0f)); // move stator and rotor to simulation box center
-	rotor->translate(lbm.center()-rotor->get_bounding_box_center()-float3(0.0f, 0.41f*stator->get_max_size(), 0.0f));
-	stator->set_center(stator->get_center_of_mass()); // set rotation center of mesh to its center of mass
-	rotor->set_center(rotor->get_center_of_mass());
-	const float lbm_radius=0.5f*rotor->get_max_size(), omega=lbm_u/lbm_radius, domega=omega*(float)lbm_dt;
-	lbm.voxelize_mesh_on_device(stator, TYPE_S, center);
-	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
-		if(lbm.flags[n]==0u) lbm.u.y[n] = 0.3f*lbm_u;
-		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
-	}); // ####################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = VIS_FLAG_SURFACE|VIS_Q_CRITERION;
-	lbm.run(0u, lbm_T); // initialize simulation
-	while(lbm.get_t()<lbm_T) { // main simulation loop
-		lbm.voxelize_mesh_on_device(rotor, TYPE_S, center, float3(0.0f), float3(0.0f, omega, 0.0f));
-		lbm.run(lbm_dt, lbm_T);
-		rotor->rotate(float3x3(float3(0.0f, 1.0f, 0.0f), domega)); // rotate mesh
+#include "defines.hpp"
+#include "lbm.hpp"
+#include "setup/setup.hpp"
+
+void main_setup() {
+	const float32_t fan_diameter_m = 0.09f;      // 90mm EDF
+	const float32_t tip_speed_mps = 100.0f;      // Blade tip speed
+	const float32_t inlet_velocity_mps = 30.0f;  // 30% of tip speed
+	const float32_t simulation_time_s = 0.5f;
+	const uint32_t update_interval = 4u;
+
+	// Configure domain using stator geometry with 180° Z rotation
+	SimulationSetup sim(SimulationConfig("edf_v39.stl")
+		.set_domain_aspect_ratio(1.0f, 1.5f, 1.0f)
+		.set_vram_mb(8000u)
+		.set_geometry_scale(0.98f)
+		.set_rotation_deg(0.0f, 0.0f, 180.0f)
+		.set_center_offset_ratio(0.0f, -0.2f, 0.0f));  // Stator position
+
+	sim.setup();
+	sim.configure_units_with_length(fan_diameter_m, tip_speed_mps, Fluid::AIR);
+	sim.print_reynolds_number(Fluid::AIR);
+
+	// Create LBM
+	LBM lbm = sim.create_lbm(Fluid::AIR);
+
+	// Voxelize stator
+	sim.voxelize(lbm);
+
+	// Configure boundaries - open with inlet velocity
+	BoundaryBuilder(lbm)
+		.set_all_open()
+		.initialize_velocity_y(inlet_velocity_mps)
+		.apply();
+
+	// Configure rotor with different Y offset (difference from stator: -0.41 - (-0.2) = -0.21)
+	MovingPartsManager parts(sim, lbm);
+	parts.add(MovingPart("edf_v391.stl")
+		.set_rotation_axis(RotationAxis::Y)
+		.set_tip_speed_mps(tip_speed_mps)
+		.set_offset_ratio(0.0f, -0.21f, 0.0f)
+		.set_update_interval(update_interval));
+	parts.initialize();
+
+	// Configure graphics
+	GraphicsConfig(lbm)
+		.show_surface()
+		.show_vortices()
+		.apply();
+
+	// Run simulation
+	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time_s);
+	print_info(to_string(simulation_time_s, 2u) + " seconds = " + to_string(total_timesteps) + " time steps");
+
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
-		if(lbm.graphics.next_frame(lbm_T, 30.0f)) {
-			lbm.graphics.set_camera_centered(-70.0f+100.0f*(float)lbm.get_t()/(float)lbm_T, 2.0f, 60.0f, 1.284025f);
+	lbm.run(0u, total_timesteps);
+	while(lbm.get_t() < total_timesteps) {
+		parts.update();
+		lbm.run(update_interval, total_timesteps);
+
+		if(lbm.graphics.next_frame(total_timesteps, 30.0f)) {
+			// Dynamic camera that pans during simulation
+			const float32_t progress = (float32_t)lbm.get_t() / (float32_t)total_timesteps;
+			lbm.graphics.set_camera_centered(-70.0f + 100.0f * progress, 2.0f, 60.0f, 1.284025f);
 			lbm.graphics.write_frame();
 		}
-#endif // GRAPHICS && !INTERACTIVE_GRAPHICS
 	}
-} /**/
+#else
+	parts.run(simulation_time_s, units);
+#endif
+}

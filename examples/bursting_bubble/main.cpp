@@ -24,7 +24,7 @@ void main_setup() { // bursting bubble; required extensions in defines.hpp: FP16
 	const uint lbm_H = to_uint(2.0f*lbm_d);
 	LBM lbm(lbm_N, units.nu(si_nu), 0.0f, 0.0f, -units.f(si_f), lbm_sigma);
 	// ###################################################################################### define geometry ######################################################################################
-	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
+	parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
 		if(z<lbm_H) lbm.flags[n] = TYPE_F;
 		const float r = 0.5f*lbm_d;
 		if(sphere(x, y, z, float3(lbm.center().x, lbm.center().y, (float)lbm_H-0.5f*lbm_d), r+1.0f)) { // bubble

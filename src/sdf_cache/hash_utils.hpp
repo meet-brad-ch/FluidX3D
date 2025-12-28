@@ -40,15 +40,17 @@ uint64_t xxhash64_stl_file(const char* filename, uint64_t seed = 0);
  * - STL vertex data
  * - Target dimensions (nx, ny, nz)
  * - Padding cells
+ * - Fix mesh flag (mesh repair changes SDF content)
  *
  * @param stl_path Path to STL file
  * @param target_nx Target SDF dimension X
  * @param target_ny Target SDF dimension Y
  * @param target_nz Target SDF dimension Z
  * @param padding Padding cells
+ * @param fix_mesh Whether mesh repair is enabled
  * @return 64-bit cache key
  */
-uint64_t compute_sdf_cache_key(const std::string& stl_path, uint32_t target_nx, uint32_t target_ny, uint32_t target_nz, int32_t padding);
+uint64_t compute_sdf_cache_key(const std::string& stl_path, uint32_t target_nx, uint32_t target_ny, uint32_t target_nz, int32_t padding, bool fix_mesh = false);
 
 /**
  * @brief Format hash as 8-character hex string

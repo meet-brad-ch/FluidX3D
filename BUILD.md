@@ -1,6 +1,6 @@
 # Build Instructions
 
-How to build FluidX3D with CMake on Windows, Linux, and macOS.
+How to build FluidX3D on Windows, Linux, and macOS.
 
 ## Cloning the Repository
 
@@ -20,10 +20,10 @@ git submodule update --init
 
 ## Quick Start
 
-### Using Build Scripts (Recommended)
+**Important:** Run scripts directly from the shell. Do NOT prefix with `cmd.exe` or use `cmd //c`.
 
 ```bash
-# Windows
+# Windows (Git Bash, PowerShell, or Developer Command Prompt)
 cd tools
 ./configure.bat Release
 ./build.bat benchmark Release
@@ -35,19 +35,6 @@ cd tools
 
 # Run
 ../bin/benchmark
-```
-
-### Using CMake Directly
-
-```bash
-# Configure
-cmake -B build-Release
-
-# Build specific example
-cmake --build build-Release --target benchmark
-
-# Run
-./bin/benchmark
 ```
 
 ---
@@ -73,134 +60,95 @@ cmake --build build-Release --target benchmark
 
 ---
 
-
-
 ## Building on Windows
 
-### Command Line (Recommended)
+**1. Open any terminal** (Git Bash, PowerShell, or Command Prompt)
 
-**1. Open Developer Command Prompt**
+**2. Navigate to tools directory**
 
-Open **"x64 Native Tools Command Prompt for VS 2019"** (or VS 2022) from Start Menu.
-
-**2. Navigate to Project**
-
-```cmd
-cd /d C:\path\to\FluidX3D
+```bash
+cd tools
 ```
 
-**3. Configure**
+**3. Configure and Build**
 
-```cmd
-cmake -B build -G "Visual Studio 16 2019" -A x64
+```bash
+./configure.bat Release
+./build.bat benchmark Release
 ```
 
-*(Use `"Visual Studio 17 2022"` for VS 2022)*
+**4. Run**
 
-**4. Build**
-
-```cmd
-REM Build single example
-cmake --build build --config Release --target benchmark
-
-REM Build all examples
-cmake --build build --config Release
+```bash
+../bin/benchmark.exe
 ```
-
-**5. Run**
-
-```cmd
-bin\benchmark.exe
-```
-
-### Visual Studio IDE
-
-1. **Configure:**
-   ```cmd
-   cmake -B build -G "Visual Studio 16 2019" -A x64
-   ```
-
-2. **Open solution:**
-   ```cmd
-   start build\FluidX3D.sln
-   ```
-
-3. **Build:**
-   - Select `Release` configuration
-   - Right-click example → **Build**
-
-4. **Run:**
-   - Executables in `bin\<name>.exe`
 
 ---
-
-
 
 ## Building on Linux
 
 ```bash
-# Configure
-cmake -B build
-
-# Build specific example
-cmake --build build --target benchmark
-
-# Run
-./bin/benchmark
+cd tools
+./configure.sh Release
+./build.sh benchmark
+../bin/benchmark
 ```
 
 ---
-
-
 
 ## Building on macOS
 
 ```bash
-# Configure
-cmake -B build
-
-# Build specific example
-cmake --build build --target benchmark
-
-# Run
-./bin/benchmark
+cd tools
+./configure.sh Release
+./build.sh benchmark
+../bin/benchmark
 ```
 
 ---
 
-
-
 ## Build Targets
-
-### List All Examples
-
-```bash
-cmake --build build --target help | grep -E "^\.\.\."
-```
 
 ### Build Specific Example
 
 ```bash
-# Linux/macOS
-cmake --build build --target taylor_green_3d
+cd tools
 
 # Windows
-cmake --build build --config Release --target taylor_green_3d
+./build.bat taylor_green_3d Release
+
+# Linux/macOS
+./build.sh taylor_green_3d
 ```
 
 ### Build All Examples
 
 ```bash
-# Linux/macOS
-cmake --build build -j$(nproc)
+cd tools
 
 # Windows
-cmake --build build --config Release --parallel
+./build.bat all Release
+
+# Linux/macOS
+./build.sh all
 ```
+
+### Verifying API Changes
+
+When modifying shared code (e.g., `SimulationSetup`, `MovingPartsManager`, `BoundaryBuilder`),
+build all examples to verify nothing is broken:
+
+```bash
+cd tools
+./build.bat all Release   # Windows
+./build.sh all            # Linux/macOS
+```
+
+This builds all examples that depend on the modified API and catches compilation errors early.
 
 ### Example Names
 
-See [EXAMPLES.md](EXAMPLES.md) for the complete list of 39 examples.
+See [EXAMPLES.md](EXAMPLES.md) for the complete list of examples.
 
 Common examples:
 - [`benchmark`](examples/benchmark/) - Performance benchmark
@@ -211,36 +159,19 @@ Common examples:
 
 ---
 
-
-
 ## Executable Locations
 
 All executables are placed in the `bin/` directory:
 
-```
-# Linux/macOS
-./bin/<example_name>
-
-# Windows
-bin\<example_name>.exe
-```
-
-**Examples:**
 ```bash
 # Linux/macOS
-./bin/benchmark
-./bin/cow
-./bin/taylor_green_3d
+../bin/<example_name>
 
 # Windows
-bin\benchmark.exe
-bin\cow.exe
-bin\taylor_green_3d.exe
+..\bin\<example_name>.exe
 ```
 
 ---
-
-
 
 ## Compiler Optimization
 
@@ -253,15 +184,7 @@ The build system automatically applies optimal flags:
 
 ---
 
-
-
 ## Troubleshooting
-
-### Windows: Compiler not found
-
-**Problem:** `where cl.exe` returns "INFO: Could not find files"
-
-**Solution:** Use **"x64 Native Tools Command Prompt for VS 2019"** instead of regular `cmd.exe`
 
 ### Windows: Resource files not found
 
@@ -271,15 +194,6 @@ The build system automatically applies optimal flags:
 1. Ensure files are in `resources/` directory
 2. For STL files: `python resources/download_all_thingiverse_stl.py`
 3. Verify: `dir resources`
-
-### Windows: OpenCL.lib not found
-
-**Problem:** Linker cannot find OpenCL.lib
-
-**Solution:**
-1. Install GPU drivers (includes OpenCL runtime)
-2. Verify `third_party/OpenCL/lib/OpenCL.lib` exists
-3. Clean rebuild: `rmdir /s /q build && cmake -B build -G "Visual Studio 16 2019" -A x64`
 
 ### Linux: X11 not found
 
@@ -325,46 +239,26 @@ sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal main'
 sudo apt update && sudo apt install cmake
 ```
 
-### Build fails with "error C2039" (Windows)
-
-**Problem:** Compiler errors about missing C++17 features
-
-**Solution:**
-- Ensure **MSVC v142 (Visual Studio 2019)** or newer
-- C++17 should be automatic with CMake 3.20+
-
 ### Configuration changes not applied
 
 **Problem:** Changed `defines.hpp` but example behavior unchanged
 
 **Solution:** Clean rebuild:
 ```bash
+cd tools
+
 # Linux/macOS
-rm -rf build && cmake -B build && cmake --build build --target <example>
+rm -rf ../build-Release
+./configure.sh Release
+./build.sh <example>
 
 # Windows
-rmdir /s /q build && cmake -B build -G "Visual Studio 16 2019" -A x64 && cmake --build build --config Release --target <example>
+rmdir /s /q ..\build-Release
+./configure.bat Release
+./build.bat <example> Release
 ```
 
 ---
-
-
-
-## Parallel Builds
-
-CMake automatically uses all CPU cores:
-
-```bash
-# Linux/macOS
-cmake --build build -j$(nproc)
-
-# Windows
-cmake --build build --config Release --parallel
-```
-
----
-
-
 
 ## Additional Resources
 

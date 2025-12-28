@@ -1,27 +1,20 @@
-#include "defines.hpp"
-#include "info.hpp"
-#include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+// Cessna 172 propeller aircraft
+//
+// Required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, MOVING_BOUNDARIES, SUBGRID
+// STL from: https://www.thingiverse.com/thing:814319/files
+// Note: Requires manually splitting Airplane.stl into body and rotor components.
 
-void main_setup() { // Cessna 172 propeller aircraft; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, MOVING_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS or GRAPHICS
-	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint3 lbm_N = resolution(float3(1.0f, 0.8f, 0.25f), 8000u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
-	const float lbm_u = 0.075f;
-	const float lbm_width = 0.95f*(float)lbm_N.x;
-	const ulong lbm_dt = 4ull; // revoxelize rotor every dt time steps
-	const float si_T = 1.0f;
-	const float si_width = 11.0f;
-	const float si_u = 226.0f/3.6f;
-	const float si_nu=1.48E-5f, si_rho=1.225f;
-	units.set_m_kg_s(lbm_width, lbm_u, 1.0f, si_width, si_u, si_rho);
-	const float lbm_nu = units.nu(si_nu);
-	const ulong lbm_T = units.t(si_T);
-	print_info("Re = "+to_string(to_uint(units.si_Re(si_width, si_u, si_nu))));
-	print_info(to_string(si_T, 3u)+" seconds = "+to_string(lbm_T)+" time steps");
-	LBM lbm(lbm_N, units.nu(si_nu));
-	// ###################################################################################### define geometry ######################################################################################
+#include "defines.hpp"
+#include "lbm.hpp"
+#include "setup/setup.hpp"
+
+void main_setup() {
+	const float32_t wingspan_m = 11.0f;
+	const float32_t flight_speed_mps = 226.0f / 3.6f;  // 226 km/h
+	const float32_t simulation_time_s = 1.0f;
+	const uint32_t update_interval = 4u;
+
+	// Check for required STL files
 	const string body_path = get_resource_path("Cessna-172-Skyhawk-body.stl");
 	const string rotor_path = get_resource_path("Cessna-172-Skyhawk-rotor.stl");
 	if(body_path.empty() || rotor_path.empty()) {
@@ -35,37 +28,65 @@ void main_setup() { // Cessna 172 propeller aircraft; required extensions in def
 		wait();
 		return;
 	}
-	Mesh* plane = read_stl(body_path); // https://www.thingiverse.com/thing:814319/files
-	Mesh* rotor = read_stl(rotor_path); // plane and rotor separated with Microsoft 3D Builder
-	const float scale = lbm_width/plane->get_bounding_box_size().x; // scale plane and rotor to simulation box size
-	plane->scale(scale);
-	rotor->scale(scale);
-	const float3 offset = lbm.center()-plane->get_bounding_box_center(); // move plane and rotor to simulation box center
-	plane->translate(offset);
-	rotor->translate(offset);
-	plane->set_center(plane->get_center_of_mass()); // set rotation center of mesh to its center of mass
-	rotor->set_center(rotor->get_center_of_mass());
-	const float lbm_radius=0.5f*rotor->get_max_size(), omega=-lbm_u/lbm_radius, domega=omega*(float)lbm_dt;
-	lbm.voxelize_mesh_on_device(plane);
-	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
-		if(lbm.flags[n]!=TYPE_S) lbm.u.y[n] = lbm_u;
-		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
-	}); // ####################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = VIS_FLAG_SURFACE|VIS_Q_CRITERION;
-	lbm.run(0u, lbm_T); // initialize simulation
-	while(lbm.get_t()<=lbm_T) { // main simulation loop
-		lbm.voxelize_mesh_on_device(rotor, TYPE_S, rotor->get_center(), float3(0.0f), float3(0.0f, omega, 0.0f)); // revoxelize mesh on GPU
-		lbm.run(lbm_dt, lbm_T); // run dt time steps
-		rotor->rotate(float3x3(float3(0.0f, 1.0f, 0.0f), domega)); // rotate mesh
+
+	// Configure static body
+	SimulationSetup sim(SimulationConfig("Cessna-172-Skyhawk-body.stl")
+		.set_domain_aspect_ratio(1.0f, 0.8f, 0.25f)
+		.set_vram_mb(8000u)
+		.set_geometry_scale(0.95f)
+		.set_reference_axis(SimulationConfig::ReferenceAxis::X));
+
+	sim.setup();
+	sim.configure_units_with_length(wingspan_m, flight_speed_mps, Fluid::AIR);
+	sim.print_reynolds_number(Fluid::AIR);
+
+	LBM lbm = sim.create_lbm(Fluid::AIR);
+
+	// Voxelize body
+	sim.voxelize(lbm);
+
+	// Configure boundaries
+	BoundaryBuilder(lbm)
+		.set_open_boundaries()
+		.initialize_velocity_y(flight_speed_mps)
+		.apply();
+
+	// Configure propeller
+	MovingPartsManager parts(sim, lbm);
+	parts.add(MovingPart("Cessna-172-Skyhawk-rotor.stl")
+		.set_rotation_axis(RotationAxis::Y)
+		.set_tip_speed_mps(flight_speed_mps)
+		.reverse_direction()
+		.set_update_interval(update_interval));
+	parts.initialize();
+
+	// Configure graphics
+	GraphicsConfig(lbm)
+		.show_surface()
+		.show_vortices()
+		.apply();
+
+	// Run simulation
+	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time_s);
+	print_info(to_string(simulation_time_s, 3u) + " seconds = " + to_string(lbm_T) + " time steps");
+
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
-		if(lbm.graphics.next_frame(lbm_T, 5.0f)) {
-			lbm.graphics.set_camera_free(float3(0.192778f*(float)Nx, -0.669183f*(float)Ny, 0.657584f*(float)Nz), -77.0f, 27.0f, 100.0f);
-			lbm.graphics.write_frame(get_exe_path()+"export/a/");
-			lbm.graphics.set_camera_free(float3(0.224926f*(float)Nx, -0.594332f*(float)Ny, -0.277894f*(float)Nz), -65.0f, -14.0f, 100.0f);
-			lbm.graphics.write_frame(get_exe_path()+"export/b/");
-			lbm.graphics.set_camera_free(float3(-0.000000f*(float)Nx, 0.650189f*(float)Ny, 1.461048f*(float)Nz), 90.0f, 40.0f, 100.0f);
-			lbm.graphics.write_frame(get_exe_path()+"export/c/");
-		}
-#endif // GRAPHICS && !INTERACTIVE_GRAPHICS
-	}
-} /**/
+	VideoRecorder()
+		.add("front", CameraConfig()
+			.set_free_position(0.192778f, -0.669183f, 0.657584f)
+			.set_angles(-77.0f, 27.0f)
+			.set_fov(100.0f))
+		.add("bottom", CameraConfig()
+			.set_free_position(0.224926f, -0.594332f, -0.277894f)
+			.set_angles(-65.0f, -14.0f)
+			.set_fov(100.0f))
+		.add("back", CameraConfig()
+			.set_free_position(0.0f, 0.650189f, 1.461048f)
+			.set_angles(90.0f, 40.0f)
+			.set_fov(100.0f))
+		.set_fps(5.0f)
+		.record(lbm, simulation_time_s, units, [&]() { parts.update(); }, update_interval);
+#else
+	parts.run(simulation_time_s, units);
+#endif
+}

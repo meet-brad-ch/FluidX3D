@@ -12,7 +12,7 @@ void main_setup() { // Taylor-Couette flow; required extensions in defines.hpp: 
 	const uint threads = (uint)thread::hardware_concurrency();
 	vector<uint> seed(threads);
 	for(uint t=0u; t<threads; t++) seed[t] = 42u+t;
-	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), threads, [&](ulong n, uint t) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
+	const uint Nx=lbm.get_Nx(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), threads, [&](ulong n, uint t) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
 		if(!cylinder(x, y, z, lbm.center(), float3(0u, 0u, Nz), (float)(Nx/2u-1u))) lbm.flags[n] = TYPE_S;
 		if( cylinder(x, y, z, lbm.center(), float3(0u, 0u, Nz), (float)(Nx/4u   ))) {
 			const float3 relative_position = lbm.relative_position(n);

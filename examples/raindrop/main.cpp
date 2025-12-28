@@ -24,7 +24,6 @@ void main_setup() { // raindrop impact; required extensions in defines.hpp: FP16
 	const float si_u = si_us[select_drop_size]; // impact velocity [m/s] (4.50-9.55m/s)
 	units.set_m_kg_s(lbm_D, lbm_u, 1.0f, si_D, si_u, si_rho); // calculate 3 independent conversion factors (m, kg, s)
 	const float lbm_nu = units.nu(si_nu);
-	const ulong lbm_T = units.t(si_T);
 	const float lbm_f = units.f(si_rho, si_g);
 	const float lbm_sigma = units.sigma(si_sigma);
 	print_info("D = "+to_string(si_D, 6u));
@@ -65,6 +64,7 @@ void main_setup() { // raindrop impact; required extensions in defines.hpp: FP16
 	}); // ####################################################################### run simulation, export images and data ##########################################################################
 	lbm.graphics.visualization_modes = lbm.get_D()==1u ? VIS_PHI_RAYTRACE : VIS_PHI_RASTERIZE;
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS) && !defined(INTERACTIVE_GRAPHICS_ASCII)
+	const ulong lbm_T = units.t(si_T);
 	lbm.run(0u, lbm_T); // initialize simulation
 	while(lbm.get_t()<=lbm_T) { // main simulation loop
 		if(lbm.graphics.next_frame(lbm_T, 20.0f)) { // generate video
