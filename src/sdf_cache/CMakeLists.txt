@@ -20,6 +20,13 @@ set_target_properties(sdf_cache PROPERTIES
     CXX_EXTENSIONS OFF
 )
 
+# Stricter warnings for sdf_cache code (warnings as errors)
+if(MSVC)
+    target_compile_options(sdf_cache PRIVATE /W4 /WX)
+else()
+    target_compile_options(sdf_cache PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
 # Link against SDFGen unified library (includes CPU and GPU implementations)
 # sdfgen_common provides the unified interface and links to both sdfgen_cpu and sdfgen_gpu
 target_link_libraries(sdf_cache PUBLIC sdfgen_common)

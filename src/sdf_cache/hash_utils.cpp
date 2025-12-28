@@ -127,7 +127,7 @@ uint64_t xxhash64_stl_file(const char* filename, uint64_t seed) {
 }
 
 // Compute SDF cache key from all parameters affecting SDF output
-uint64_t compute_sdf_cache_key(const std::string& stl_path, uint32_t target_nx, uint32_t target_ny, uint32_t target_nz, int32_t padding) {
+uint64_t compute_sdf_cache_key(const std::string& stl_path, uint32_t target_nx, uint32_t target_ny, uint32_t target_nz, int32_t padding, bool fix_mesh) {
     // Start with STL file hash
     uint64_t hash = xxhash64_stl_file(stl_path.c_str(), 0);
 
@@ -138,6 +138,10 @@ uint64_t compute_sdf_cache_key(const std::string& stl_path, uint32_t target_nx, 
 
     // Mix in padding
     hash = xxhash64(&padding, sizeof(padding), hash);
+
+    // Mix in fix_mesh flag (mesh repair changes SDF content)
+    uint8_t fix_mesh_byte = fix_mesh ? 1 : 0;
+    hash = xxhash64(&fix_mesh_byte, sizeof(fix_mesh_byte), hash);
 
     return hash;
 }

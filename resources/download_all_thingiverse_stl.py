@@ -20,6 +20,11 @@ import sys
 import time
 from pathlib import Path
 
+# Fix Windows console encoding for Unicode characters
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 # Add current directory to path to import download_thingiverse_stl
 sys.path.insert(0, str(Path(__file__).parent))
 

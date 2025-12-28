@@ -27,8 +27,26 @@ function(add_fluidx3d_example)
         ${FLUIDX3D_SRC_DIR}/lbm.cpp
         ${FLUIDX3D_SRC_DIR}/main.cpp
         ${FLUIDX3D_SRC_DIR}/shapes.cpp
+        ${FLUIDX3D_SRC_DIR}/setup/simulation/geometry_scaler.cpp
+        ${FLUIDX3D_SRC_DIR}/setup/sdf/sdf_generator.cpp
         ${FLUIDX3D_LODEPNG_DIR}/lodepng.cpp
     )
+
+    # ==========================================================================
+    # Stricter warnings for Setup API code only
+    # ==========================================================================
+    set(STRICT_WARNING_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+        ${FLUIDX3D_SRC_DIR}/setup/simulation/geometry_scaler.cpp
+        ${FLUIDX3D_SRC_DIR}/setup/sdf/sdf_generator.cpp
+    )
+    if(MSVC)
+        # /external:I marks directories as external, /external:W0 suppresses warnings from them
+        set_source_files_properties(${STRICT_WARNING_SOURCES} PROPERTIES COMPILE_FLAGS
+            "/W4 /WX /external:anglebrackets /external:I \"${FLUIDX3D_SRC_DIR}\" /external:W0")
+    else()
+        set_source_files_properties(${STRICT_WARNING_SOURCES} PROPERTIES COMPILE_FLAGS "-Wall -Wextra -Wpedantic -Werror")
+    endif()
 
     # ==========================================================================
     # Include directories (example's defines.hpp overrides core's)
@@ -40,6 +58,7 @@ function(add_fluidx3d_example)
         ${FLUIDX3D_SRC_DIR}                # FluidX3D source headers (lbm.hpp, graphics.hpp, etc.)
         ${FLUIDX3D_LODEPNG_DIR}            # Fetched LodePNG
         ${PROJECT_SOURCE_DIR}/src          # For relative includes
+        ${FLUIDX3D_SRC_DIR}/setup          # Setup module headers
     )
 
     include(configs)
@@ -83,7 +102,7 @@ function(add_fluidx3d_example)
     # Link libraries (platform-specific)
     # ==========================================================================
     # Common libraries
-    target_link_libraries(${EXAMPLE_NAME} PRIVATE OpenCL)
+    target_link_libraries(${EXAMPLE_NAME} PRIVATE OpenCL sdf_cache)
 
     # Platform-specific libraries
     if(WIN32)

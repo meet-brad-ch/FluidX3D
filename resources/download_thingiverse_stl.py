@@ -19,6 +19,11 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+# Fix Windows console encoding for Unicode characters
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 
 def download_thingiverse_zip_playwright(thing_url, download_dir, timeout=120000):
     """

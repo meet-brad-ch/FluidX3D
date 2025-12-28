@@ -42,3 +42,4 @@ Thumbs.db
 
 # Downloaded STL files
 resources/*.stl
+/resources/sdf_cache/

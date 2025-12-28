@@ -9,7 +9,7 @@ void main_setup() { // 2D Taylor-Green vortices (use D2Q9); required extensions 
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
 	LBM lbm(1024u, 1024u, 1u, 0.02f);
 	// ###################################################################################### define geometry ######################################################################################
-	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
+	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
 		const float A = 0.2f;
 		const uint periodicity = 5u;
 		const float a=(float)Nx/(float)periodicity, b=(float)Ny/(float)periodicity;

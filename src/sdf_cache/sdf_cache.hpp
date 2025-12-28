@@ -17,6 +17,7 @@ struct SDFCacheConfig {
     std::string cache_directory = "resources/sdf_cache/";
     bool enable_cache = true;
     bool force_regenerate = false;
+    bool fix_mesh = false;  ///< Repair non-watertight meshes before SDF generation
     bool verbose = false;
 };
 
@@ -80,6 +81,7 @@ public:
      * @brief Set verbose output
      */
     void set_verbose(bool verbose);
+/**     * @brief Find cached SDF without generating (lookup only)     *     * @param stl_path Path to STL file     * @param target_nx Target SDF dimension X     * @param target_ny Target SDF dimension Y     * @param target_nz Target SDF dimension Z     * @param padding Padding cells (default: 1)     * @return Path to cached SDF, or empty string if not found     */    std::string find_cached(const std::string& stl_path, uint32_t target_nx, uint32_t target_ny, uint32_t target_nz, int32_t padding = 1);
 
 private:
     SDFCacheConfig config_;

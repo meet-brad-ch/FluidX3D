@@ -5,22 +5,48 @@
 #include "setup.hpp"
 #include "shapes.hpp"
 
-void main_setup() { // thermal convection; required extensions in defines.hpp: FP16S, VOLUME_FORCE, TEMPERATURE, INTERACTIVE_GRAPHICS
-	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	LBM lbm(32u, 196u, 60u, 1u, 1u, 1u, 0.02f, 0.0f, 0.0f, -0.0005f, 0.0f, 1.0f, 1.0f);
-	// ###################################################################################### define geometry ######################################################################################
-	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
-		if(y==1) {
-			lbm.T[n] = 1.8f;
-			lbm.flags[n] = TYPE_T;
-		} else if(y==Ny-2) {
-			lbm.T[n] = 0.3f;
-			lbm.flags[n] = TYPE_T;
-		}
-		lbm.rho[n] = units.rho_hydrostatic(0.0005f, (float)z, 0.5f*(float)Nz); // initialize density with hydrostatic pressure
-		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_S; // all non periodic
-	}); // ####################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = VIS_FLAG_LATTICE|VIS_STREAMLINES;
+void main_setup() { // thermal convection; required extensions: FP16S, VOLUME_FORCE, TEMPERATURE, INTERACTIVE_GRAPHICS
+	// physical parameters (SI units)
+	const float domain_x_m = 0.1f;     // 10cm wide
+	const float domain_y_m = 0.6f;     // 60cm long (flow direction)
+	const float domain_z_m = 0.2f;     // 20cm tall
+
+	const float T_hot_K = 350.0f;      // hot wall: 350K (77°C)
+	const float T_cold_K = 300.0f;     // cold wall: 300K (27°C)
+	const float delta_T = T_hot_K - T_cold_K;
+
+	// buoyancy velocity scale for natural convection: u ~ sqrt(g * beta * dT * L)
+	const float u_buoyancy = sqrtf(9.81f * Fluid::AIR.thermal_expansion * delta_T * domain_z_m);
+
+	// simulation setup (domain-only, no geometry)
+	SimulationSetup sim(SimulationConfig()
+		.set_domain_size_m(domain_x_m, domain_y_m, domain_z_m)
+		.set_vram_mb(2000u));
+
+	sim.setup();
+	sim.configure_units(u_buoyancy, Fluid::AIR);
+
+	// create LBM with thermal parameters (air properties, gravity in -Z)
+	LBM lbm = sim.create_lbm_thermal(Fluid::AIR, 9.81f, Axis::Z);
+
+	// thermal boundary conditions (SI temperatures in Kelvin)
+	ThermalBuilder(lbm)
+		.set_hot_wall(Face::Y_MIN, T_hot_K)
+		.set_cold_wall(Face::Y_MAX, T_cold_K)
+		.set_gravity_axis(Axis::Z)
+		.initialize_hydrostatic_pressure()
+		.apply();
+
+	// solid walls
+	BoundaryBuilder(lbm)
+		.set_solid_walls()
+		.apply();
+
+	// graphics
+	GraphicsConfig(lbm)
+		.show_surface()
+		.show_streamlines()
+		.apply();
+
 	lbm.run();
-	//lbm.run(1000u); lbm.u.read_from_device(); println(lbm.u.x[lbm.index(Nx/2u, Ny/2u, Nz/2u)]); wait(); // test for binary identity
 } /**/

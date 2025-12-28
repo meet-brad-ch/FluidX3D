@@ -1,47 +1,76 @@
-#include "defines.hpp"
-#include "info.hpp"
-#include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+// City Wind Simulation
+//
+// Required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID
+// STL from: resources/city.stl
+//
+// Urban wind flow simulation with atmospheric boundary layer profile.
+// Demonstrates power-law wind profile for realistic urban aerodynamics.
 
-void main_setup() { // city; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, GRAPHICS
-	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint L = 512u; // 2152u
-	const float kmh = 1.0f;
-	const float si_u = kmh/3.6f;
-	const float si_x = 1000.0f;
-	const float si_rho = 1.225f;
-	const float si_nu = 1.48E-5f;
-	const float Re = units.si_Re(si_x, si_u, si_nu);
-	print_info("Re = "+to_string(Re));
-	const float u = 0.07f;
-	const float size = 1.7f*(float)L;
-	units.set_m_kg_s(size, u, 1.0f, si_x, si_u, si_rho);
-	const float nu = units.nu(si_nu);
-	print_info("1s = "+to_string(units.t(1.0f)));
-	LBM lbm(L, L*2u, L/2u, units.nu_from_Re(Re, (float)L, u));
-	// ###################################################################################### define geometry ######################################################################################
-	const float3 center = lbm.center()-float3(0.0f, 0.05f*size, 0.025f*size);
-	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(90.0f));
-	lbm.voxelize_stl(get_resource_path("city.stl"), center, rotation, size);
-	const uint N=lbm.get_N(), Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); for(uint n=0u, x=0u, y=0u, z=0u; n<N; n++, lbm.coordinates(n, x, y, z)) {
-		if(lbm.flags[n]!=TYPE_S) lbm.u.y[n] = u;
-		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
-		if(z==0u) lbm.flags[n] = TYPE_S;
-	}	// ####################################################################### run simulation, export images and data ##########################################################################
-	key_4 = true;
-	Clock clock;
-	lbm.run(0u);
-	while(lbm.get_t()<108000u) {
-		lbm.graphics.set_camera_free(float3(-1.088245f*(float)Nx, -0.443919f*(float)Ny, 1.717979f*(float)Nz), 215.0f, 39.0f, 70.0f);
-		lbm.graphics.write_frame_png(get_exe_path()+"export/a/");
-		lbm.graphics.set_camera_free(float3(0.203233f*(float)Nx, 0.036325f*(float)Ny, 0.435000f*(float)Nz), 56.0f, 45.0f, 105.0f);
-		lbm.graphics.write_frame_png(get_exe_path()+"export/b/");
-		lbm.graphics.set_camera_free(float3(-0.283501f*(float)Nx, -0.099679f*(float)Ny, 0.175468f*(float)Nz), 234.0f, 29.0f, 117.0f);
-		lbm.graphics.write_frame_png(get_exe_path()+"export/c/");
-		lbm.run(90u); // run LBM in parallel while CPU is voxelizing the next frame
-	}
-	write_file(get_exe_path()+"time.txt", print_time(clock.stop()));
-	//lbm.run();
-} /**/
+#include "defines.hpp"
+#include "lbm.hpp"
+#include "setup/setup.hpp"
+
+void main_setup() {
+	const float32_t city_size_m = 1000.0f;       // City block size in meters
+	const float32_t wind_speed_mps = 10.0f;      // Wind speed at reference height
+	const float32_t reference_height_m = 100.0f; // Reference height for wind profile
+	const float32_t simulation_time_s = 60.0f;   // 1 minute of simulation
+
+	// Configure domain - 1:2:0.5 aspect ratio
+	SimulationSetup sim(SimulationConfig("city.stl")
+		.set_domain_aspect_ratio(1.0f, 2.0f, 0.5f)
+		.set_vram_mb(2152u)
+		.set_geometry_scale(1.7f)
+		.set_rotation_deg(0.0f, 0.0f, 90.0f)
+		.set_center_offset_ratio(0.0f, -0.05f, -0.025f));
+
+	sim.setup();
+	sim.configure_units_with_length(city_size_m, wind_speed_mps, Fluid::AIR);
+	sim.print_reynolds_number(Fluid::AIR);
+
+	// Create LBM
+	LBM lbm = sim.create_lbm(Fluid::AIR);
+
+	// Voxelize city geometry
+	sim.voxelize(lbm);
+
+	// Configure boundaries with atmospheric boundary layer wind profile
+	// Power-law profile: U(z) = U_ref * (z / z_ref)^alpha
+	// alpha = 0.25 for urban/suburban terrain
+	BoundaryBuilder(lbm)
+		.set_solid_floor()
+		.set_open_boundaries()
+		.set_wind_profile_power_law(wind_speed_mps, reference_height_m, 0.25f)
+		.set_wind_direction(Face::Y_MIN)
+		.apply();
+
+	// Configure graphics
+	GraphicsConfig(lbm)
+		.show_surface()
+		.show_vortices()
+		.apply();
+
+	// Run simulation
+	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time_s);
+	print_info(to_string(simulation_time_s, 0u) + " seconds = " + to_string(total_timesteps) + " time steps");
+
+#if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
+	VideoRecorder()
+		.add("a", CameraConfig()
+			.set_free_position(-1.088245f, -0.443919f, 1.717979f)
+			.set_angles(215.0f, 39.0f)
+			.set_fov(70.0f))
+		.add("b", CameraConfig()
+			.set_free_position(0.203233f, 0.036325f, 0.435000f)
+			.set_angles(56.0f, 45.0f)
+			.set_fov(105.0f))
+		.add("c", CameraConfig()
+			.set_free_position(-0.283501f, -0.099679f, 0.175468f)
+			.set_angles(234.0f, 29.0f)
+			.set_fov(117.0f))
+		.set_fps(30.0f)
+		.record(lbm, simulation_time_s, units);
+#else
+	lbm.run();
+#endif
+}

@@ -2,6 +2,7 @@
 #include "hash_utils.hpp"
 #include "sdfgen_unified.h"
 #include "sdf_io.h"
+#include "mesh_repair.h"
 #include "vec.h"
 #include <iostream>
 #include <filesystem>
@@ -16,13 +17,6 @@ namespace fs = std::filesystem;
 
 // Note: SDF Cache is now dimension-driven instead of VRAM-driven
 // The caller (GeometrySetup) calculates target dimensions and passes them directly
-
-// Helper function to format hash as 8-character hex string
-static std::string format_hash(uint64_t hash) {
-    std::ostringstream oss;
-    oss << std::hex << std::setw(8) << std::setfill('0') << (hash & 0xFFFFFFFF);
-    return oss.str();
-}
 
 // Load binary STL file (simple format: 80-byte header + triangles)
 static bool load_binary_stl(const char* filename, std::vector<Vec3f>& vertList, std::vector<Vec3ui>& faceList,
@@ -100,7 +94,7 @@ std::string SDFCacheManager::get_or_generate(const std::string& stl_path, uint32
     }
 
     // Compute cache key
-    uint64_t cache_key = compute_sdf_cache_key(stl_path, target_nx, target_ny, target_nz, padding);
+    uint64_t cache_key = compute_sdf_cache_key(stl_path, target_nx, target_ny, target_nz, padding, config_.fix_mesh);
 
     // Get STL basename
     fs::path stl_file(stl_path);
@@ -188,6 +182,22 @@ void SDFCacheManager::set_verbose(bool verbose) {
     config_.verbose = verbose;
 }
 
+std::string SDFCacheManager::find_cached(const std::string& stl_path, uint32_t target_nx, uint32_t target_ny, uint32_t target_nz, int32_t padding) {
+    if (!config_.enable_cache) {
+        return "";
+    }
+
+    // Compute cache key
+    uint64_t cache_key = compute_sdf_cache_key(stl_path, target_nx, target_ny, target_nz, padding, config_.fix_mesh);
+
+    // Get STL basename
+    fs::path stl_file(stl_path);
+    std::string stl_basename = stl_file.stem().string();
+
+    // Look for cached SDF
+    return find_cached_sdf(stl_basename, cache_key, target_nx, target_ny, target_nz);
+}
+
 std::string SDFCacheManager::find_cached_sdf(const std::string& stl_basename, uint64_t expected_hash, uint32_t nx, uint32_t ny, uint32_t nz) {
     // Look for files matching: {basename}_sdf_{nx}x{ny}x{nz}_{hash8}.sdf
     std::string hash_str = format_hash(expected_hash);
@@ -239,6 +249,40 @@ std::string SDFCacheManager::generate_sdf(const std::string& stl_path, uint32_t 
         return "";
     }
 
+    // Weld duplicate vertices (STL files have separate vertices per triangle)
+    int welded = meshio::weld_vertices(vertList, faceList, 1e-5f);
+    if (config_.verbose && welded > 0) {
+        std::cout << "[SDF Cache] Welded " << welded << " duplicate vertices" << std::endl;
+    }
+
+    // Analyze mesh watertightness
+    meshio::MeshAnalysis analysis = meshio::analyze_mesh(vertList, faceList);
+    if (config_.verbose) {
+        meshio::print_mesh_analysis(analysis, false);
+    }
+
+    // Optionally repair non-watertight meshes
+    if (config_.fix_mesh && !analysis.is_watertight) {
+        if (config_.verbose) {
+            std::cout << "[SDF Cache] Attempting mesh repair..." << std::endl;
+        }
+        int holes_filled = meshio::repair_mesh(vertList, faceList, 0.0f);
+        if (holes_filled > 0) {
+            // Recalculate bounding box after repair
+            min_box = Vec3f(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+            max_box = Vec3f(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
+            for (const auto& v : vertList) {
+                update_minmax(v, min_box, max_box);
+            }
+            if (config_.verbose) {
+                std::cout << "[SDF Cache] Filled " << holes_filled << " holes" << std::endl;
+            }
+        }
+    } else if (!analysis.is_watertight && config_.verbose) {
+        std::cout << "[SDF Cache] WARNING: Mesh is not watertight. SDF sign may be incorrect." << std::endl;
+        std::cout << "[SDF Cache] Use fix_mesh=true in config to attempt automatic repair." << std::endl;
+    }
+
     if (config_.verbose) {
         std::cout << "[SDF Cache] Generating SDF: " << faceList.size() << " triangles, grid spacing: ";
     }
@@ -273,13 +317,13 @@ std::string SDFCacheManager::generate_sdf(const std::string& stl_path, uint32_t 
     fs::path stl_file(stl_path);
     std::string stl_basename = stl_file.stem().string();
 
-    char dims[128];
-    sprintf(dims, "_sdf_%dx%dx%d", phi_grid.ni, phi_grid.nj, phi_grid.nk);
-    std::string filename = stl_basename + std::string(dims);
+    std::ostringstream dims;
+    dims << "_sdf_" << phi_grid.ni << "x" << phi_grid.nj << "x" << phi_grid.nk;
+    std::string filename = stl_basename + dims.str();
 
     if (config_.enable_cache) {
         // Add hash to filename
-        uint64_t cache_key = compute_sdf_cache_key(stl_path, target_nx, target_ny, target_nz, padding);
+        uint64_t cache_key = compute_sdf_cache_key(stl_path, target_nx, target_ny, target_nz, padding, config_.fix_mesh);
         std::string hash_str = format_hash(cache_key);
         filename += "_" + hash_str;
     }
