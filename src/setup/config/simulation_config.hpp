@@ -138,6 +138,10 @@ private:
     float32_t center_offset_y_ { 0.0f };  ///< Y offset as ratio of geometry reference length
     float32_t center_offset_z_ { 0.0f };  ///< Z offset as ratio of geometry reference length
 
+    // Position by bounding box minimum (pmin) instead of center
+    bool has_pmin_offset_ { false };      ///< If true, use pmin-based positioning
+    float3 pmin_offset_ratio_ { 0.0f, 0.0f, 0.0f };  ///< Offset for pmin as ratio of reference length
+
     // Voxelization kernel selection
     VoxelizationMode voxelization_mode_ { VoxelizationMode::SDF };  ///< Voxelization kernel (default: SDF)
 
@@ -621,6 +625,37 @@ public:
         center_offset_x_ = x;
         center_offset_y_ = y;
         center_offset_z_ = z;
+        return *this;
+    }
+
+    /**
+     * @brief Set geometry position by bounding box minimum (pmin)
+     * @param x X offset for pmin as ratio of reference length
+     * @param y Y offset for pmin as ratio of reference length
+     * @param z Z offset for pmin as ratio of reference length
+     * @return Reference to this object for method chaining
+     *
+     * Positions the geometry such that its bounding box minimum (pmin) is at
+     * the specified offset from the domain origin. Values are expressed as
+     * ratios of the geometry's reference length.
+     *
+     * This is useful when you need to position geometry relative to its bottom/
+     * back corner rather than its center (e.g., placing a cow's feet near the floor).
+     *
+     * @par Example:
+     * @code
+     * SimulationConfig("Cow_t.stl")
+     *     .set_domain_aspect_ratio(1.0f, 2.0f, 1.0f)
+     *     .set_geometry_scale(0.65f)
+     *     .set_pmin_offset_ratio(0.0f, 0.1f, 0.01f);  // Y: 10% gap, Z: near floor
+     * @endcode
+     *
+     * @note Only used in ASPECT_RATIO mode
+     * @note Mutually exclusive with set_center_offset_ratio()
+     */
+    SimulationConfig& set_pmin_offset_ratio(float32_t x, float32_t y, float32_t z) {
+        has_pmin_offset_ = true;
+        pmin_offset_ratio_ = float3(x, y, z);
         return *this;
     }
 };

@@ -1,7 +1,4 @@
 // Aerodynamics of a cow using Setup API
-//
-// Demonstrates SimulationSetup for automatic geometry handling with
-// transparent SDF caching for improved voxelization quality.
 
 #include "defines.hpp"
 #include "lbm.hpp"
@@ -9,16 +6,18 @@
 
 void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS or GRAPHICS
 	const float32_t flow_velocity_mps = 1.0f;
+	const float32_t cow_size_m = 2.4f;
 
 	SimulationSetup sim(SimulationConfig("Cow_t.stl")
+		.set_domain_aspect_ratio(1.0f, 2.0f, 1.0f)
 		.set_vram_mb(1000u)
+		.set_geometry_scale(0.65f)
 		.set_rotation_deg(180.0f, 0.0f, 180.0f)
-		.set_clearances_m(0.24f, 0.24f, 0.0f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::MAX)
-		.set_fix_mesh(true));
+		.set_reference_axis(SimulationConfig::ReferenceAxis::Y)
+		.set_pmin_offset_ratio(0.0f, 0.1f, 0.006f));
 
 	sim.setup();
-	sim.configure_units(flow_velocity_mps, Fluid::AIR);
+	sim.configure_units_with_length(cow_size_m, flow_velocity_mps, Fluid::AIR, 0.075f);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
