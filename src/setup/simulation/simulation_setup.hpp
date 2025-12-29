@@ -163,35 +163,58 @@ private:
         // We'll set a nominal SI reference size (can be overridden by configure_units)
         results.si_reference_size = 1.0f;  // Will be set properly by configure_units
 
-        // Calculate center position with offsets
-        // Base center is domain center
-        float3 center = float3(
-            0.5f * (float)lbm_N.x,
-            0.5f * (float)lbm_N.y,
-            0.5f * (float)lbm_N.z
-        );
-
-        // Apply center offsets as ratio of geometry length
-        center.x += config.center_offset_x_ * results.lbm_reference_size;
-        center.y += config.center_offset_y_ * results.lbm_reference_size;
-        center.z += config.center_offset_z_ * results.lbm_reference_size;
-
-        results.center_lbm = center;
-
-        // Base grid is the geometry size (for SDF generation)
-        // In aspect ratio mode, we estimate this from the geometry scale
-        results.base_grid = uint3(
-            (uint32_t)(config.geometry_scale_ * (float)lbm_N.x),
-            (uint32_t)(config.geometry_scale_ * (float)lbm_N.y),
-            (uint32_t)(config.geometry_scale_ * (float)lbm_N.z)
-        );
-
-        // Create rotation matrix (includes angle of attack)
+        // Create rotation matrix first (needed for mesh loading)
         results.rotation_matrix = create_rotation_matrix();
 
-        // Resolve geometry path (STL mode only for aspect ratio mode)
+        // Resolve geometry path
         resolved_geometry_path = get_resource_path(config.geometry_filename);
-        config.use_sdf = false;  // Aspect ratio mode uses STL voxelization
+
+        // Calculate center position
+        float3 center;
+        if(config.has_pmin_offset_) {
+            // Load mesh to get actual bounding box after rotation
+            Mesh* mesh = read_stl(resolved_geometry_path, 1.0f, results.rotation_matrix);
+            const float3 mesh_size = mesh->get_bounding_box_size();
+            const float32_t mesh_ref_dim = get_reference_dimension(mesh_size);
+
+            // Scale factor: how many LBM cells per mesh unit
+            const float32_t scale = results.lbm_reference_size / mesh_ref_dim;
+
+            // Actual half-size in LBM cells
+            const float3 half_size = 0.5f * scale * mesh_size;
+
+            // Update base_grid with actual scaled dimensions
+            results.base_grid = uint3(
+                (uint32_t)(scale * mesh_size.x + 0.5f),
+                (uint32_t)(scale * mesh_size.y + 0.5f),
+                (uint32_t)(scale * mesh_size.z + 0.5f)
+            );
+
+            delete mesh;
+
+            // Position: X centered in domain, Y/Z use pmin offset
+            center.x = 0.5f * (float32_t)lbm_N.x;
+            center.y = config.pmin_offset_ratio_.y * results.lbm_reference_size + half_size.y;
+            center.z = config.pmin_offset_ratio_.z * results.lbm_reference_size + half_size.z;
+        } else {
+            // Default: center in domain with optional offset
+            const float3 domain_center = 0.5f * float3(
+                (float32_t)lbm_N.x,
+                (float32_t)lbm_N.y,
+                (float32_t)lbm_N.z
+            );
+            const float3 offset(config.center_offset_x_, config.center_offset_y_, config.center_offset_z_);
+            center = domain_center + offset * results.lbm_reference_size;
+
+            // Estimate base_grid from geometry scale (uniform assumption)
+            results.base_grid = uint3(
+                (uint32_t)(config.geometry_scale_ * (float32_t)lbm_N.x),
+                (uint32_t)(config.geometry_scale_ * (float32_t)lbm_N.y),
+                (uint32_t)(config.geometry_scale_ * (float32_t)lbm_N.z)
+            );
+        }
+
+        results.center_lbm = center;
 
         if(config.verbose) {
             print_info("Geometry: " + config.geometry_filename + " (aspect ratio mode)");
