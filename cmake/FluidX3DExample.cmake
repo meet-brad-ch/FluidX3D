@@ -5,7 +5,7 @@
 # Internal: executable TARGET from the setup SOURCES (ARGN) and the core, configured by DEFINES_DIR/defines.hpp.
 # The setup sources form the OBJECT library <TARGET>_setup, which gets first-party warnings; the core sources do not.
 function(_fluidx3d_add_executable TARGET DEFINES_DIR)
-    add_library(${TARGET}_setup OBJECT ${ARGN} ${FLUIDX3D_SETUP_SOURCES})
+    add_library(${TARGET}_setup OBJECT ${ARGN})
     target_include_directories(${TARGET}_setup PUBLIC ${DEFINES_DIR})
     target_link_libraries(${TARGET}_setup PUBLIC fluidx3d::core PRIVATE fluidx3d::warnings)
 

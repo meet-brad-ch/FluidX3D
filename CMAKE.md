@@ -65,7 +65,7 @@ This build system uses a **unity build** approach where each example compiles al
 - No shared library = No ODR violations
 - Matches original FluidX3D architecture philosophy
 
-**Exception: the Setup API library.** The parts of the Setup API that do not include `lbm.hpp` (physical quantities, unit scaling) do not depend on `defines.hpp`. They are compiled once into the static library `fluidx3d::setup` (`lib/setup/CMakeLists.txt`) and unit-tested on the CPU. The parts that use the LBM are compiled per example, like the core.
+**Exception: the Setup API library.** The parts of the Setup API that do not include `lbm.hpp` (physical quantities, unit scaling, lattice and geometry sizing, SDF generation) do not depend on `defines.hpp`; what they need from an example's configuration, the bytes per lattice cell, is passed in. They are compiled once into the static library `fluidx3d::setup` (`lib/setup/CMakeLists.txt`) and unit-tested on the CPU. The parts that use the LBM are compiled per example, like the core.
 
 ---
 
@@ -107,7 +107,7 @@ add_fluidx3d_example(NAME cow)
 
 For an example `<name>`, `add_fluidx3d_example()` creates:
 
-1. **`<name>_setup`** (OBJECT library): the example's `main.cpp` and the per-example Setup API sources, with the example directory (its `defines.hpp`) on the include path and `fluidx3d::warnings` applied.
+1. **`<name>_setup`** (OBJECT library): the example's `main.cpp`, which also compiles the Setup API headers that use the LBM, with the example directory (its `defines.hpp`) on the include path and `fluidx3d::warnings` applied.
 2. **`<name>`** (executable in `bin/`): the core sources (`graphics.cpp`, `info.cpp`, `kernel.cpp`, `lbm.cpp`, `main.cpp`, `shapes.cpp`), linked with `<name>_setup` and `fluidx3d::core`.
 3. **`<name>_baseline`** and the CTest test **`baseline_<name>`** (when `FLUIDX3D_BUILD_TESTS` is on): a headless build of the same example that prints its setup state instead of running (see [Tests](#tests)).
 
@@ -244,7 +244,7 @@ Tests are built when `FLUIDX3D_BUILD_TESTS` is on (the default) and run with CTe
 
 | Label | What it checks | Needs |
 |-------|----------------|-------|
-| `unit` | Setup API library (quantities, unit scaling), one CTest test per GoogleTest `TEST` | CPU only |
+| `unit` | Setup API library (quantities, unit scaling, lattice and geometry sizing), one CTest test per GoogleTest `TEST` | CPU only |
 | `baseline` | Each example's setup state (grid, units, cell flag counts, velocities, graphics settings) against `tests/baselines/<name>.txt`, with a relative tolerance of 1e-4 | OpenCL device |
 
 ```bash

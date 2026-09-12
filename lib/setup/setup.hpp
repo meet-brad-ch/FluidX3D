@@ -17,7 +17,8 @@
 #include "setup/config/camera_config.hpp"
 #include "setup/config/simulation_config.hpp"
 
-#include "setup/simulation/geometry_scaler.hpp"
+#include "setup/domain/lattice.hpp"
+#include "setup/domain/geometry_scaler.hpp"
 #include "setup/simulation/mesh_loader.hpp"
 #include "setup/simulation/simulation_setup.hpp"
 

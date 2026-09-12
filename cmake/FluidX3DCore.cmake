@@ -10,12 +10,8 @@ set(FLUIDX3D_CORE_SOURCES
     ${FLUIDX3D_SRC_DIR}/main.cpp
     ${FLUIDX3D_SRC_DIR}/shapes.cpp
 )
-# Setup API (lib/setup), compiled per executable as well (it includes lbm.hpp)
-set(FLUIDX3D_SETUP_DIR ${PROJECT_SOURCE_DIR}/lib/setup)
-set(FLUIDX3D_SETUP_SOURCES
-    ${FLUIDX3D_SETUP_DIR}/simulation/geometry_scaler.cpp
-    ${FLUIDX3D_SETUP_DIR}/sdf/sdf_generator.cpp
-)
+# The Setup API's sources are in the library fluidx3d::setup (lib/setup); its headers that use the LBM
+# are compiled with each example's main.cpp.
 
 add_library(fluidx3d_core INTERFACE)
 add_library(fluidx3d::core ALIAS fluidx3d_core)
