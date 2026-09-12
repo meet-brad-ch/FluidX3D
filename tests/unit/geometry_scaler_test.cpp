@@ -1,11 +1,10 @@
 #include <gtest/gtest.h> // before utilities.hpp, which includes <Windows.h> without NOMINMAX
 
 #include "setup/domain/geometry_scaler.hpp"
+#include "box_stl.hpp"
 
 #include <cmath>
-#include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <string>
 
 namespace {
@@ -13,33 +12,6 @@ namespace {
 constexpr LatticeMemory d3q19_fp16 { 55u };
 constexpr GeometryScaler::Clearances no_clearances { 0.0f, 0.0f, 0.0f };
 constexpr GeometryScaler::Clearances wide_clearances { 0.0f, 10.0f, 10.0f }; // bottom, top, sides in m
-
-// Binary STL (the only format read_stl() reads) of an axis-aligned box from the origin to (sx, sy, sz) m.
-class BoxStl {
-public:
-    BoxStl(const std::string& name, float sx, float sy, float sz) : path_(std::filesystem::temp_directory_path() / name) {
-        const float corners[8][3] = { {0, 0, 0}, {sx, 0, 0}, {sx, sy, 0}, {0, sy, 0}, {0, 0, sz}, {sx, 0, sz}, {sx, sy, sz}, {0, sy, sz} };
-        const int triangles[12][3] = { {0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
-                                       {2, 3, 7}, {2, 7, 6}, {1, 2, 6}, {1, 6, 5}, {0, 4, 7}, {0, 7, 3} };
-        std::ofstream file(path_, std::ios::binary);
-        const char header[80] = {};
-        file.write(header, sizeof(header));
-        const std::uint32_t count = 12u;
-        file.write(reinterpret_cast<const char*>(&count), sizeof(count));
-        for(const auto& triangle : triangles) {
-            const float normal[3] = { 0.0f, 0.0f, 0.0f };
-            file.write(reinterpret_cast<const char*>(normal), sizeof(normal));
-            for(const int corner : triangle) file.write(reinterpret_cast<const char*>(corners[corner]), 3 * sizeof(float));
-            const std::uint16_t attributes = 0u;
-            file.write(reinterpret_cast<const char*>(&attributes), sizeof(attributes));
-        }
-    }
-    ~BoxStl() { std::filesystem::remove(path_); }
-    std::string path() const { return path_.string(); }
-
-private:
-    std::filesystem::path path_;
-};
 
 TEST(GeometryScaler, ReadsTheGeometrySizeInMetres) {
     const BoxStl box("fluidx3d_test_box_size.stl", 4.0f, 2.0f, 1.0f);

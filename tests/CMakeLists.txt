@@ -41,6 +41,9 @@ fluidx3d_add_test(fluidx3d_setup_tests
         unit/unit_scale_test.cpp
         unit/lattice_test.cpp
         unit/geometry_scaler_test.cpp
+        unit/domain_plan_test.cpp
     LINK
         fluidx3d::setup
 )
+# test geometry files are written here; SimulationConfig finds them relative to resources/
+target_compile_definitions(fluidx3d_setup_tests PRIVATE FLUIDX3D_TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}")
