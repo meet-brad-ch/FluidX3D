@@ -6,7 +6,8 @@
 #include "setup/boundaries/boundary_flags.hpp"
 
 #include "setup/config/simulation_config.hpp"
-#include "setup/simulation/geometry_scaler.hpp"
+#include "setup/domain/geometry_scaler.hpp"
+#include "setup/domain/lattice.hpp"
 #include "setup/sdf/sdf_generator.hpp"
 #include "setup/simulation/mesh_loader.hpp"
 
@@ -75,6 +76,21 @@ private:
         return base_rotation;
     }
 
+    // device memory per cell of this example's lattice (it depends on its defines.hpp)
+    static LatticeMemory lattice_memory() {
+#ifdef D2Q9
+        return { bytes_per_cell_device(), 2u };
+#else
+        return { bytes_per_cell_device(), 3u };
+#endif
+    }
+
+    // grid with this aspect ratio that fills the VRAM budget
+    uint3 grid_for_vram(const float3& aspect) const {
+        const GridSize grid = grid_for_memory(aspect.x, aspect.y, aspect.z, config.vram_mb, lattice_memory());
+        return uint3(grid.x, grid.y, grid.z);
+    }
+
     uint32_t get_reference_axis_dimension(const uint3& dims) {
         switch(config.reference_axis) {
             case SimulationConfig::ReferenceAxis::X: return dims.x;
@@ -89,7 +105,7 @@ private:
     // ASPECT_RATIO mode: domain from aspect ratio and VRAM budget, geometry scaled to fit
     Results setup_aspect_ratio_mode() {
         const float3 aspect(config.aspect_x_, config.aspect_y_, config.aspect_z_);
-        const uint3 lbm_N = resolution(aspect, config.vram_mb);
+        const uint3 lbm_N = grid_for_vram(aspect);
 
         results.Nx = lbm_N.x;
         results.Ny = lbm_N.y;
@@ -158,7 +174,7 @@ private:
     Results setup_domain_only_mode() {
         const float max_dim = fmax(fmax(config.domain_size_x_m_, config.domain_size_y_m_), config.domain_size_z_m_);
         const float3 aspect(config.domain_size_x_m_ / max_dim, config.domain_size_y_m_ / max_dim, config.domain_size_z_m_ / max_dim);
-        const uint3 lbm_N = resolution(aspect, config.vram_mb);
+        const uint3 lbm_N = grid_for_vram(aspect);
 
         results.Nx = lbm_N.x;
         results.Ny = lbm_N.y;
@@ -216,8 +232,8 @@ public:
         clearances.side_m = config.side_clearance_m;
 
         GeometryScaler scaler = (config.resolution_mode_ == SimulationConfig::ResolutionMode::VOXEL_SIZE)
-            ? GeometryScaler(original_stl_path_, config.voxel_size_m_, config.max_vram_mb_, scaler_axis)
-            : GeometryScaler(original_stl_path_, config.vram_mb, clearances, scaler_axis);
+            ? GeometryScaler(original_stl_path_, config.voxel_size_m_, config.max_vram_mb_, lattice_memory(), scaler_axis)
+            : GeometryScaler(original_stl_path_, config.vram_mb, clearances, lattice_memory(), scaler_axis);
 
         results.base_grid = scaler.get_stl_size_cells();
 

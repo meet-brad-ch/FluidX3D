@@ -1,5 +1,6 @@
 #pragma once
 #include "setup/core/types.hpp"
+#include "setup/domain/lattice.hpp"
 #include "utilities.hpp"
 
 // Scale between an STL geometry in m and the lattice: cell size from a VRAM budget (for geometry plus clearances)
@@ -19,6 +20,7 @@ public:
         const string& stl_path,
         uint32_t vram_mb,
         const Clearances& clearances,
+        LatticeMemory lattice,
         ReferenceAxis reference_axis = ReferenceAxis::Y
     );
 
@@ -27,6 +29,7 @@ public:
         const string& stl_path,
         float32_t voxel_size_meters,
         uint32_t max_vram_mb,
+        LatticeMemory lattice,
         ReferenceAxis reference_axis = ReferenceAxis::Y
     );
 
@@ -55,6 +58,7 @@ private:
     uint32_t vram_mb_;
     ReferenceAxis reference_axis_;
     Clearances clearances_;
+    LatticeMemory lattice_;
 
     void load_stl_and_calculate_scaling(); // VRAM budget mode
     void calculate_from_voxel_size(float32_t voxel_size_m, uint32_t max_vram_mb);
