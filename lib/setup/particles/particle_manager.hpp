@@ -5,6 +5,10 @@
 #include "units.hpp"
 #include <vector>
 
+#ifndef PARTICLES
+#error "setup/particles/particle_manager.hpp needs PARTICLES in defines.hpp"
+#endif // PARTICLES
+
 extern Units units; // global units object from lbm.cpp
 
 // Seeding patterns in SI units for ParticleManager; positions in m from the domain's corner at the origin.

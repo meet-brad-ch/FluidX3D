@@ -11,6 +11,10 @@
 #include <thread>
 #include <vector>
 
+#ifndef TEMPERATURE
+#error "setup/boundaries/thermal_builder.hpp needs TEMPERATURE in defines.hpp"
+#endif // TEMPERATURE
+
 extern Units units; // global units object from lbm.cpp
 
 /// @brief Hot and cold walls, hydrostatic and perturbed start (TEMPERATURE extension); apply() writes them to the grid.

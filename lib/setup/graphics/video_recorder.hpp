@@ -12,6 +12,10 @@
 #include <string>
 #include <vector>
 
+#ifndef GRAPHICS
+#error "setup/graphics/video_recorder.hpp needs GRAPHICS (or INTERACTIVE_GRAPHICS) in defines.hpp"
+#endif // GRAPHICS
+
 extern Units units; // global units object from lbm.cpp
 
 /// @brief Runs the simulation and renders it from each camera: 60 frames per second of a video set_video_length() long,

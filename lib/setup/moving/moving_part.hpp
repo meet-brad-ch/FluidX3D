@@ -2,6 +2,7 @@
 
 #include "setup/core/types.hpp"
 #include "setup/core/quantity.hpp"
+#include "utilities.hpp" // the core's float3 and string
 #include <optional>
 
 enum class RotationAxis { X, Y, Z };

@@ -12,6 +12,10 @@
 #include <optional>
 #include <vector>
 
+#ifndef SURFACE
+#error "setup/surface/surface_builder.hpp needs SURFACE in defines.hpp"
+#endif // SURFACE
+
 extern Units units; // global units object from lbm.cpp
 
 /// @brief Free surface setup (SURFACE extension) in physical units: water, gas bubbles, solid walls and objects,

@@ -7,6 +7,10 @@
 #include "lbm.hpp"
 #include "units.hpp"
 
+#ifndef FORCE_FIELD
+#error "setup/analysis/force_analyzer.hpp needs FORCE_FIELD in defines.hpp"
+#endif // FORCE_FIELD
+
 extern Units units; // global units object from lbm.cpp
 
 // Force and drag coefficient on the object voxelized with TYPE_S|TYPE_X (SimulationSetup::enable_force_tracking(),
