@@ -64,6 +64,12 @@ public:
         return *this;
     }
 
+    GraphicsConfig& show_velocity_field() {
+        visualization_modes_ |= VIS_FIELD;
+        field_mode_ = static_cast<int32_t>(FieldMode::VELOCITY);
+        return *this;
+    }
+
     GraphicsConfig& show_density_field() {
         visualization_modes_ |= VIS_FIELD;
         field_mode_ = static_cast<int32_t>(FieldMode::DENSITY);

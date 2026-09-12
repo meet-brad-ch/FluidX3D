@@ -52,7 +52,7 @@ void main_setup() {
 	const Speed descent_velocity = -0.1f * tip_speed;
 	BoundaryBuilder(lbm)
 		.set_open_boundaries()
-		.initialize_velocity(0.0_mps, forward_velocity, descent_velocity)
+		.initialize_velocity({ 0.0_mps, forward_velocity, descent_velocity })
 		.apply();
 
 	// Configure rotors

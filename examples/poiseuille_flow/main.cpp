@@ -1,68 +1,75 @@
-#include "defines.hpp"
-#include "info.hpp"
-#include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+// Poiseuille flow validation in physical units, using Setup API: pipe flow (D2Q9: channel flow) driven by a pressure
+// gradient, compared with the analytic profile u(r) = u_center*(1-r²/R²)
 
-void main_setup() { // Poiseuille flow validation; required extensions in defines.hpp: VOLUME_FORCE
-	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint R = 63u; // channel radius (default: 63)
-	const float umax = 0.1f; // maximum velocity in channel center (must be < 0.57735027f)
-	const float tau = 1.0f; // relaxation time (must be > 0.5f), tau = nu*3+0.5
-	const float nu = units.nu_from_tau(tau); // nu = (tau-0.5)/3
-	const uint H = 2u*(R+1u);
+#include "defines.hpp"
+#include "lbm.hpp"
+#include "setup/setup.hpp"
+
+void main_setup() { // Poiseuille flow validation; required extensions: VOLUME_FORCE
+	const Length radius = 1.0_cm;         // the pipe's (D2Q9: half the channel's width)
+	const Length cell = radius / 63.0f;   // 63 cells, as the original
+	const Length diameter = 2.0f * (radius + cell); // the domain across the pipe, with its wall
+	const KinematicViscosity viscosity = Fluid::WATER.kinematic_viscosity;
+	// the original lattice setup: center speed 0.1 at relaxation time 1 (lattice viscosity 1/6), so u = 0.6*nu/cell
+	const Speed center_speed = 0.6f * viscosity / cell; // 3.8 mm/s in water
+
 #ifndef D2Q9
-	LBM lbm(H, lcm(sq(H), WORKGROUP_SIZE)/sq(H), H, nu, 0.0f, units.f_from_u_Poiseuille_3D(umax, 1.0f, nu, R), 0.0f); // 3D
+	SimulationSetup sim(Domain::box(diameter, cell, diameter).cell_size(cell)); // 128 x 1 x 128 cells, periodic along Y
 #else // D2Q9
-	LBM lbm(lcm(H, WORKGROUP_SIZE)/H, H, 1u, nu, units.f_from_u_Poiseuille_2D(umax, 1.0f, nu, R), 0.0f, 0.0f); // 2D
+	SimulationSetup sim(Domain::box(cell, diameter, cell).cell_size(cell)); // 1 x 128 x 1 cells, periodic along X
 #endif // D2Q9
-	// ###################################################################################### define geometry ######################################################################################
-	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
+	sim.setup();
+	sim.configure_units(center_speed, Fluid::WATER, 0.1f);
+
 #ifndef D2Q9
-		if(!cylinder(x, y, z, lbm.center(), float3(0u, Ny, 0u), 0.5f*(float)min(Nx, Nz)-1.0f)) lbm.flags[n] = TYPE_S; // 3D
+	const Acceleration drive = 4.0f * center_speed * viscosity / (radius * radius); // pressure gradient per density
+	LBM lbm = sim.create_lbm(viscosity, { Acceleration{}, drive, Acceleration{} });
+	BoundaryBuilder(lbm)
+		.add_solid(!Shape::cylinder({ 0.5f * diameter, 0.5f * cell, 0.5f * diameter }, Axis::Y, radius, cell))
+		.apply();
 #else // D2Q9
-		if(y==0u||y==Ny-1u) lbm.flags[n] = TYPE_S; // 2D
+	const Acceleration drive = 2.0f * center_speed * viscosity / (radius * radius);
+	LBM lbm = sim.create_lbm(viscosity, { drive, Acceleration{}, Acceleration{} });
+	BoundaryBuilder(lbm)
+		.set_solid_faces({ Face::Y_MIN, Face::Y_MAX })
+		.apply();
 #endif // D2Q9
-	}); // ####################################################################### run simulation, export images and data ##########################################################################
+
+	// the simulated velocities across the pipe against the analytic profile
+	const uint Nx = lbm.get_Nx(), Ny = lbm.get_Ny(), Nz = lbm.get_Nz();
+	const double R = radius.si(), u_center = center_speed.si(), dx = cell.si();
 	double error_min = max_double;
 	while(true) { // main simulation loop
 		lbm.run(1000u);
 		lbm.u.read_from_device();
-		double error_dif=0.0, error_sum=0.0;
+		double error_dif = 0.0, error_sum = 0.0;
+		for(uint z = 0u; z < Nz; z++) {
+			for(uint x = 0u; x < Nx; x++) {
 #ifndef D2Q9
-		for(uint x=0u; x<Nx; x++) {
-			for(uint y=Ny/2u; y<Ny/2u+1u; y++) {
-				for(uint z=0; z<Nz; z++) {
-					const uint n = x+(y+z*Ny)*Nx;
-					const double r = (double)sqrt(sq(x+0.5f-0.5f*(float)Nx)+sq(z+0.5f-0.5f*(float)Nz)); // radius from channel center
-					if(r<R) {
-						const double unum = (double)sqrt(sq(lbm.u.x[n])+sq(lbm.u.y[n])+sq(lbm.u.z[n])); // numerical velocity
-						const double uref = umax*(sq(R)-sq(r))/sq(R); // theoretical velocity profile u = G*(R^2-r^2)
-						error_dif += sq(unum-uref); // L2 error (Krüger p. 138)
-						error_sum += sq(uref);
-					}
-				}
-			}
-		}
+				const uint y = Ny / 2u;
+				const double r = dx * sqrt(sq(x + 0.5f - 0.5f * (float)Nx) + sq(z + 0.5f - 0.5f * (float)Nz)); // from the pipe's axis, m
+				if(r >= R) continue;
+				const uint n = x + (y + z * Ny) * Nx;
 #else // D2Q9
-		for(uint x=Nx/2u; x<Nx/2u+1u; x++) {
-			for(uint y=1u; y<Ny-1u; y++) {
-				const uint n = x+(y+0u*Ny)*Nx;
-				const double r = (double)(y+0.5f-0.5f*(float)Ny); // radius from channel center
-				const double unum = (double)sqrt(sq(lbm.u.x[n])+sq(lbm.u.y[n])); // numerical velocity
-				const double uref = umax*(sq(R)-sq(r))/sq(R); // theoretical velocity profile u = G*(R^2-r^2)
-				error_dif += sq(unum-uref); // L2 error (Krüger p. 138)
-				error_sum += sq(uref);
+				for(uint y = 1u; y < Ny - 1u; y++) {
+				const double r = dx * (y + 0.5f - 0.5f * (float)Ny); // from the channel's center, m
+				const uint n = x + y * Nx;
+#endif // D2Q9
+				const double u_simulated = units.si_u(sqrt(sq(lbm.u.x[n]) + sq(lbm.u.y[n]) + sq(lbm.u.z[n]))); // m/s
+				const double u_analytic = u_center * (1.0 - sq(r) / sq(R));
+				error_dif += sq(u_simulated - u_analytic); // L2 error (Krüger p. 138)
+				error_sum += sq(u_analytic);
+#ifdef D2Q9
+				}
+#endif // D2Q9
 			}
 		}
-#endif // D2Q9
-		if(sqrt(error_dif/error_sum)>=error_min) { // stop when error has converged
-			print_info("Poiseuille flow error converged after "+to_string(lbm.get_t())+" steps to "+to_string(100.0*error_min, 3u)+"%"); // typical expected L2 errors: 2-5% (Krüger p. 256)
+		if(sqrt(error_dif / error_sum) >= error_min) { // stop when error has converged
+			print_info("Poiseuille flow error converged after " + to_string(lbm.get_t()) + " steps to " + to_string(100.0 * error_min, 3u) + "%"); // typical expected L2 errors: 2-5% (Krüger p. 256)
 			wait();
 			exit(0);
 		}
-		error_min = fmin(error_min, sqrt(error_dif/error_sum));
-		print_info("Poiseuille flow error after t="+to_string(lbm.get_t())+" is "+to_string(100.0*error_min, 3u)+"%"); // typical expected L2 errors: 2-5% (Krüger p. 256)
+		error_min = fmin(error_min, sqrt(error_dif / error_sum));
+		print_info("Poiseuille flow error after t=" + to_string(lbm.get_t()) + " is " + to_string(100.0 * error_min, 3u) + "%"); // typical expected L2 errors: 2-5% (Krüger p. 256)
 	}
 } /**/

@@ -1,28 +1,39 @@
-#include "defines.hpp"
-#include "info.hpp"
-#include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+// Taylor-Couette flow between a turning inner and a resting outer cylinder, using Setup API
 
-void main_setup() { // Taylor-Couette flow; required extensions in defines.hpp: MOVING_BOUNDARIES, INTERACTIVE_GRAPHICS
-	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	LBM lbm(96u, 96u, 192u, 1u, 1u, 1u, 0.04f);
-	// ###################################################################################### define geometry ######################################################################################
-	const uint threads = (uint)thread::hardware_concurrency();
-	vector<uint> seed(threads);
-	for(uint t=0u; t<threads; t++) seed[t] = 42u+t;
-	const uint Nx=lbm.get_Nx(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), threads, [&](ulong n, uint t) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
-		if(!cylinder(x, y, z, lbm.center(), float3(0u, 0u, Nz), (float)(Nx/2u-1u))) lbm.flags[n] = TYPE_S;
-		if( cylinder(x, y, z, lbm.center(), float3(0u, 0u, Nz), (float)(Nx/4u   ))) {
-			const float3 relative_position = lbm.relative_position(n);
-			lbm.u.x[n] =  relative_position.y;
-			lbm.u.y[n] = -relative_position.x;
-			lbm.u.z[n] = (1.0f-random(seed[t], 2.0f))*0.001f;
-			lbm.flags[n] = TYPE_S;
-		}
-	}); // ####################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = VIS_FLAG_LATTICE|VIS_STREAMLINES;
+#include "defines.hpp"
+#include "lbm.hpp"
+#include "setup/setup.hpp"
+
+void main_setup() { // Taylor-Couette flow; required extensions: MOVING_BOUNDARIES, INTERACTIVE_GRAPHICS
+	const Length width = 10.0_cm;       // the outer cylinder with its wall
+	const Length cell = width / 96.0f;  // 96 x 96 x 192 cells, as the original
+	const Length height = 2.0f * width;
+	const Length outer_radius = 0.5f * width - cell, inner_radius = 0.25f * width;
+	const Length gap = outer_radius - inner_radius;
+	const float reynolds = 0.25f * 23.0f / 0.04f; // 144: the original lattice setup (surface speed 0.25, gap 23 cells, viscosity 0.04)
+	const Speed surface_speed = reynolds * Fluid::WATER.kinematic_viscosity / gap; // of the inner cylinder: 6 mm/s in water
+
+	SimulationSetup sim(Domain::box(width, width, height).cell_size(cell));
+	sim.setup();
+	sim.configure_units(surface_speed, Fluid::WATER, 0.25f);
+
+	LBM lbm = sim.create_lbm(Fluid::WATER);
+
+	const Position center { 0.5f * width, 0.5f * width, 0.5f * height };
+	const Frequency turn_rate = surface_speed / inner_radius; // radians per second
+	BoundaryBuilder(lbm)
+		.add_solid(!Shape::cylinder(center, Axis::Z, outer_radius, height))
+		.add_moving_solid(Shape::cylinder(center, Axis::Z, inner_radius, height), [=](Position p) {
+			// clockwise about Z; a small axial wave, 2 gaps long, starts the Taylor vortices (the original: random noise)
+			const Speed wave = 0.004f * surface_speed * sinf(pif * (p.z / gap));
+			return Velocity{ turn_rate * (p.y - center.y), -turn_rate * (p.x - center.x), wave };
+		})
+		.apply();
+
+	GraphicsConfig(lbm)
+		.show_flags()
+		.show_streamlines()
+		.apply();
+
 	lbm.run();
-	//lbm.run(4000u); lbm.u.read_from_device(); println(lbm.u.x[lbm.index(Nx/4u, Ny/4u, Nz/2u)]); wait(); // test for binary identity
 } /**/

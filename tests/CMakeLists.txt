@@ -39,6 +39,11 @@ function(fluidx3d_add_test name)
     gtest_discover_tests(${name} PROPERTIES LABELS unit)
 endfunction()
 
+# The core's cell tests (shapes.cpp), which Shape calls; examples compile them with the rest of the core. Core code:
+# no first-party warnings.
+add_library(fluidx3d_test_core_shapes OBJECT ${PROJECT_SOURCE_DIR}/src/shapes.cpp)
+target_link_libraries(fluidx3d_test_core_shapes PRIVATE fluidx3d::setup)
+
 fluidx3d_add_test(fluidx3d_setup_tests
     SOURCES
         unit/quantity_test.cpp
@@ -50,8 +55,10 @@ fluidx3d_add_test(fluidx3d_setup_tests
         unit/domain_test.cpp
         unit/model_placement_test.cpp
         unit/camera_view_test.cpp
+        unit/shape_test.cpp
     LINK
         fluidx3d::setup
+        fluidx3d_test_core_shapes
 )
 # test geometry files are written here; Model finds them relative to resources/
 target_compile_definitions(fluidx3d_setup_tests PRIVATE FLUIDX3D_TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}")

@@ -1,23 +1,33 @@
-#include "defines.hpp"
-#include "info.hpp"
-#include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+// 2D Karman vortex street behind a cylinder, using Setup API
 
-void main_setup() { // 2D Karman vortex street; required extensions in defines.hpp: D2Q9, FP16S, EQUILIBRIUM_BOUNDARIES, INTERACTIVE_GRAPHICS
-	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint R = 16u;
-	const float Re = 250.0f;
-	const float u = 0.10f;
-	LBM lbm(16u*R, 32u*R, 1u, units.nu_from_Re(Re, 2.0f*(float)R, u));
-	// ###################################################################################### define geometry ######################################################################################
-	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
-		if(cylinder(x, y, z, float3(Nx/2u, Ny/4u, Nz/2u), float3(0u, 0u, Nz), (float)R)) lbm.flags[n] = TYPE_S;
-		else lbm.u.y[n] = u;
-		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u) lbm.flags[n] = TYPE_E; // all non periodic
-	}); // ####################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = VIS_FLAG_LATTICE|VIS_FIELD;
-	lbm.graphics.slice_mode = 3;
+#include "defines.hpp"
+#include "lbm.hpp"
+#include "setup/setup.hpp"
+
+void main_setup() { // 2D Karman vortex street; required extensions: D2Q9, FP16S, EQUILIBRIUM_BOUNDARIES, INTERACTIVE_GRAPHICS
+	const Length diameter = 1.0_cm;       // the cylinder's
+	const Length cell = diameter / 32.0f; // 256 x 512 cells, as the original
+	const float reynolds = 250.0f;
+	const Speed flow_speed = reynolds * Fluid::WATER.kinematic_viscosity / diameter; // 2.5 cm/s in water
+
+	SimulationSetup sim(Domain::box(8.0f * diameter, 16.0f * diameter, cell).cell_size(cell)); // one cell high: 2D
+	sim.setup();
+	sim.configure_units(flow_speed, Fluid::WATER, 0.1f);
+
+	LBM lbm = sim.create_lbm(Fluid::WATER);
+
+	BoundaryBuilder(lbm)
+		.add_solid(Shape::cylinder({ 4.0f * diameter, 4.0f * diameter, 0.5f * cell }, Axis::Z, 0.5f * diameter, cell))
+		.set_open_boundaries()
+		.set_periodic(Axis::Z)
+		.initialize_velocity_y(flow_speed)
+		.apply();
+
+	GraphicsConfig(lbm)
+		.show_flags()
+		.show_velocity_field()
+		.set_slice_mode(SliceMode::Z)
+		.apply();
+
 	lbm.run();
 } /**/

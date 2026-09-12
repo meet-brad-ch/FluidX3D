@@ -7,9 +7,10 @@ set(FLUIDX3D_ORIGINALS_REF f3a0e26 CACHE STRING "Git revision of the original ex
 
 # the examples ported to the Setup API
 set(FLUIDX3D_ORIGINALS
-    ahmed_body bell_222 boeing_747 breaking_waves cessna_172 city concorde cow dam_break edf hydraulic_jump
-    mercedes_f1 nasa_crm particle_test radial_fan rayleigh_benard space_shuttle starship thermal_convection
-    tie_fighter xwing
+    ahmed_body bell_222 boeing_747 breaking_waves cessna_172 city concorde cow cylinder_duct dam_break delta_wing
+    edf hydraulic_jump karman_vortex_street lid_driven_cavity mercedes_f1 nasa_crm particle_test poiseuille_flow
+    radial_fan rayleigh_benard space_shuttle starship stokes_drag taylor_couette taylor_green_2d taylor_green_3d
+    thermal_convection tie_fighter xwing
 )
 
 foreach(name IN LISTS FLUIDX3D_ORIGINALS)

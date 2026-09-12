@@ -31,8 +31,9 @@ private:
 
     // gravity as LBM volume force along -gravity_axis (rho*g with the LBM density 1)
     float3 lbm_gravity_force(Acceleration gravity, Axis gravity_axis) const {
-        const float32_t g = to_lbm_acceleration(gravity);
-        return float3(gravity_axis == Axis::X ? -g : 0.0f, gravity_axis == Axis::Y ? -g : 0.0f, gravity_axis == Axis::Z ? -g : 0.0f);
+        return to_lbm_acceleration(AccelerationVector{ gravity_axis == Axis::X ? -gravity : Acceleration{},
+                                                       gravity_axis == Axis::Y ? -gravity : Acceleration{},
+                                                       gravity_axis == Axis::Z ? -gravity : Acceleration{} });
     }
 
     void validate_geometry_file() {
@@ -169,6 +170,10 @@ public:
     float32_t to_lbm_velocity(Speed u) const { return scale_.velocity(u); }
     float32_t to_lbm_length(Length x) const { return scale_.length(x); } ///< in cells
     float32_t to_lbm_acceleration(Acceleration a) const { return scale_.acceleration(a); } ///< for gravity also the volume force rho*g (lattice density 1)
+    /// A body force per mass as the LBM's volume force (lattice density 1), e.g. for LBM::set_f()
+    float3 to_lbm_acceleration(const AccelerationVector& a) const {
+        return float3(scale_.acceleration(a.x), scale_.acceleration(a.y), scale_.acceleration(a.z));
+    }
     uint64_t to_lbm_timesteps(Duration t) const { return scale_.time_steps(t); }
     /// @}
 
@@ -184,6 +189,12 @@ public:
     /// An LBM of the planned grid with this fluid's viscosity.
     LBM create_lbm(const FluidProperties& fluid) {
         return create_lbm(fluid.kinematic_viscosity);
+    }
+
+    /// An LBM driven by a body force per mass (VOLUME_FORCE): gravity, or a pressure gradient over the density.
+    LBM create_lbm(KinematicViscosity viscosity, const AccelerationVector& body_force) {
+        const float3 f = to_lbm_acceleration(body_force);
+        return LBM(results.Nx, results.Ny, results.Nz, to_lbm_viscosity(viscosity), f.x, f.y, f.z);
     }
 
     /// An LBM with heat transport and buoyancy (TEMPERATURE and VOLUME_FORCE); gravity acts along -gravity_axis.
@@ -212,10 +223,14 @@ public:
                            Acceleration gravity = 9.81_mps2,
                            SurfaceTension surface_tension = {},
                            Axis gravity_axis = Axis::Z) {
-        const float32_t lbm_nu = to_lbm_viscosity(viscosity);
-        const float32_t lbm_sigma = scale_.surface_tension(surface_tension);
         const float3 f = lbm_gravity_force(gravity, gravity_axis);
-        return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, f.x, f.y, f.z, lbm_sigma);
+        return LBM(results.Nx, results.Ny, results.Nz, to_lbm_viscosity(viscosity), f.x, f.y, f.z, scale_.surface_tension(surface_tension));
+    }
+
+    /// A free surface LBM (SURFACE and VOLUME_FORCE) with any body force per mass, such as gravity on a slope.
+    LBM create_lbm_surface(KinematicViscosity viscosity, const AccelerationVector& body_force, SurfaceTension surface_tension) {
+        const float3 f = to_lbm_acceleration(body_force);
+        return LBM(results.Nx, results.Ny, results.Nz, to_lbm_viscosity(viscosity), f.x, f.y, f.z, scale_.surface_tension(surface_tension));
     }
 
     /// As create_lbm_surface() above, with this fluid's viscosity.
