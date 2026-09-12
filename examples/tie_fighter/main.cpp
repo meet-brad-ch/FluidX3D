@@ -11,16 +11,16 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const Length wingspan = 6.0_m;               // TIE Fighter wingspan
+	const Length height = 8.8_m;                 // TIE/LN (Wookieepedia): the wing panels' height (Z), the longest side
 	const Speed flow_velocity = 50.0_mps;        // Flow velocity
 	const Duration simulation_time = 5.0_s;      // 5 seconds of tumbling
 	const uint32_t update_interval = 28u;
 
-	// the wingspan (X) is 65 % of the domain width; the fighter's center is about 0.6 wingspans from the inlet
-	const Length domain_width = wingspan / 0.65f;
-	SimulationSetup sim(Domain::around(Model("DWG_Tie_Fighter_Assembled_02.stl").rotation(90_deg, 0_deg, 0_deg).length(wingspan, Axis::X))
+	// the height (Z) is 65 % of the domain width; the fighter's center is about 0.6 heights from the inlet
+	const Length domain_width = height / 0.65f;
+	SimulationSetup sim(Domain::around(Model("DWG_Tie_Fighter_Assembled_02.stl").rotation(90_deg, 0_deg, 0_deg).length(height, Axis::Z))
 		.size(domain_width, 2.0f * domain_width, domain_width)
-		.model_offset(0_m, -0.94f * wingspan, 0_m)
+		.model_offset(0_m, -0.94f * height, 0_m)
 		.vram(1760_mb));
 
 	sim.setup();

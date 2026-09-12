@@ -82,27 +82,41 @@ DomainPlan DomainPlanner::plan_aspect_ratio(const SimulationConfig& config, Latt
     plan.si_reference_size = config.reference_length_m_ > 0.0f ? config.reference_length_m_ : 1.0f;
     plan.rotation_matrix = rotation(config);
     plan.stl_path = get_resource_path(config.geometry_filename);
-    plan.voxel_size = plan.lbm_reference_size; // geometry_scale * domain reference axis
+    plan.voxel_size = plan.lbm_reference_size; // the core scales the model's longest side (after the whole rotation) to this
 
+    // Model::length(): the model's real extent along the reference axis, measured after its rotation but before the angle
+    // of attack. The core scales the longest side instead, so the voxel size is converted from one to the other.
+    const bool real_length = config.reference_length_m_ > 0.0f;
     float3 center;
-    if(config.has_pmin_offset_) {
+    if(config.has_pmin_offset_ || real_length) {
         if(!std::filesystem::exists(plan.stl_path)) throw SetupError("Geometry file not found: " + config.geometry_filename);
-        // the mesh's bounding box after rotation
-        Mesh* mesh = read_stl(plan.stl_path, 1.0f, plan.rotation_matrix);
+        Mesh* mesh = read_stl(plan.stl_path, 1.0f, plan.rotation_matrix); // bounding box after the whole rotation
         const float3 mesh_size = mesh->get_bounding_box_size();
-        const float32_t scale = plan.lbm_reference_size / reference_dimension(config, mesh_size); // cells per mesh unit
+        float32_t reference = reference_dimension(config, mesh_size);
+        if(real_length) {
+            Mesh* unpitched = read_stl(plan.stl_path, 1.0f, rotation(config, false));
+            reference = reference_dimension(config, unpitched->get_bounding_box_size());
+            delete unpitched;
+            plan.voxel_size = plan.lbm_reference_size * (mesh->get_max_size() / reference); // exact when the axis is the longest
+        }
+        delete mesh;
+        const float32_t scale = plan.lbm_reference_size / reference; // cells per mesh unit
         const float3 half_size = 0.5f * scale * mesh_size;
         plan.base_grid = uint3(
             (uint32_t)(scale * mesh_size.x + 0.5f),
             (uint32_t)(scale * mesh_size.y + 0.5f),
             (uint32_t)(scale * mesh_size.z + 0.5f)
         );
-        delete mesh;
 
-        // X centered in the domain, Y/Z from the pmin offset
-        center.x = 0.5f * (float32_t)lbm_N.x;
-        center.y = config.pmin_offset_ratio_.y * plan.lbm_reference_size + half_size.y;
-        center.z = config.pmin_offset_ratio_.z * plan.lbm_reference_size + half_size.z;
+        if(config.has_pmin_offset_) { // X centered in the domain, Y/Z from the pmin offset
+            center.x = 0.5f * (float32_t)lbm_N.x;
+            center.y = config.pmin_offset_ratio_.y * plan.lbm_reference_size + half_size.y;
+            center.z = config.pmin_offset_ratio_.z * plan.lbm_reference_size + half_size.z;
+        } else {
+            const float3 domain_center = 0.5f * float3((float32_t)lbm_N.x, (float32_t)lbm_N.y, (float32_t)lbm_N.z);
+            const float3 offset(config.center_offset_x_, config.center_offset_y_, config.center_offset_z_);
+            center = domain_center + offset * plan.lbm_reference_size;
+        }
     } else {
         const float3 domain_center = 0.5f * float3((float32_t)lbm_N.x, (float32_t)lbm_N.y, (float32_t)lbm_N.z);
         const float3 offset(config.center_offset_x_, config.center_offset_y_, config.center_offset_z_);
@@ -167,12 +181,12 @@ DomainPlan DomainPlanner::plan_geometry_based(const SimulationConfig& config, La
     return plan;
 }
 
-float3x3 DomainPlanner::rotation(const SimulationConfig& config) {
+float3x3 DomainPlanner::rotation(const SimulationConfig& config, bool with_angle_of_attack) {
     const float3x3 Rx = float3x3(float3(1, 0, 0), radians(config.rotation_x));
     const float3x3 Ry = float3x3(float3(0, 1, 0), radians(config.rotation_y));
     const float3x3 Rz = float3x3(float3(0, 0, 1), radians(config.rotation_z));
     const float3x3 base_rotation = Rz * Ry * Rx;
-    if(config.angle_of_attack_deg_ != 0.0f) { // angle of attack: additional pitch
+    if(with_angle_of_attack && config.angle_of_attack_deg_ != 0.0f) { // angle of attack: additional pitch
         const float3x3 R_aoa = float3x3(float3(1, 0, 0), radians(config.angle_of_attack_deg_));
         return R_aoa * base_rotation;
     }

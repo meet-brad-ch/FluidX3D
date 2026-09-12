@@ -16,9 +16,9 @@ void main_setup() {
 	const Length reference_height = 100.0_m;     // Reference height for wind profile
 	const Duration simulation_time = 1.0_min;
 
-	// the city (its size along X) is 1.7 domain widths: the domain's side walls cut through it
+	// the city (its size along Y) is 85 % of the domain length
 	const Length domain_width = city_size / 1.7f;
-	SimulationSetup sim(Domain::around(Model("city.stl").rotation(0_deg, 0_deg, 90_deg).length(city_size, Axis::X))
+	SimulationSetup sim(Domain::around(Model("city.stl").rotation(0_deg, 0_deg, 90_deg).length(city_size))
 		.size(domain_width, 2.0f * domain_width, 0.5f * domain_width)
 		.model_offset(0_m, -0.05f * city_size, -0.025f * city_size)
 		.vram(2152_mb));

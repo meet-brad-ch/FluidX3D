@@ -34,7 +34,7 @@ private:
     static DomainPlan plan_aspect_ratio(const SimulationConfig& config, LatticeMemory lattice);
     static DomainPlan plan_geometry_based(const SimulationConfig& config, LatticeMemory lattice);
 
-    static float3x3 rotation(const SimulationConfig& config);
+    static float3x3 rotation(const SimulationConfig& config, bool with_angle_of_attack = true);
     static float32_t reference_dimension(const SimulationConfig& config, const float3& size);
     static uint32_t reference_dimension(const SimulationConfig& config, const uint3& size);
     static uint3 grid_for_vram(const SimulationConfig& config, const float3& aspect, LatticeMemory lattice);

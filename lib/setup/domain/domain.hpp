@@ -24,7 +24,8 @@ public:
         return *this;
     }
 
-    // the model's real length along an axis (after the rotation), for a domain sized with Domain::size()
+    /// The model's real extent along an axis, measured after rotation() and before angle_of_attack() (for Domain::size()).
+    /// It scales the whole model and is the reference length of the units and the Reynolds number.
     Model& length(Length length, Axis axis = Axis::Y) {
         length_ = length;
         length_axis_ = axis;

@@ -149,7 +149,7 @@ SimulationSetup sim(Domain::around(Model("X-Wing.stl").length(13.4_m))  // real 
     .model_offset(0_m, -6_m, 0_m) // model center 6 m upstream of the domain center
     .vram(880_mb));
 ```
-`Model::length(L, axis)` gives the model's real size along an axis after its rotation; the STL's own units then do not matter. If the original only knew a ratio (the model is 65 % of the domain), write the size as `length / 0.65f`, which keeps the grid and the scale of the original.
+`Model::length(L, axis)` gives the model's real size along an axis after its rotation, before its angle of attack; it scales the whole model, the STL's own units then do not matter, and it is the reference length of the units and the Reynolds number. If the original only knew a ratio (the model is 65 % of the domain), write the size as `length / 0.65f`, which keeps the grid and the scale of the original.
 
 The resolution is either `vram()` (the largest grid that fits the budget, default 2000 MB) or, around a model with clearances, `cell_size()` with an optional `max_vram()`.
 
@@ -262,7 +262,7 @@ Earlier versions of the Setup API configured the domain with `SimulationConfig`.
 | `SimulationConfig(file).set_clearances_m(b, t, s)` | `Domain::around(Model(file)).clearances(b, t, s)` |
 | `.set_vram_mb(n)` | `.vram(n_mb)` |
 | `.set_voxel_size_m(v).set_max_vram_mb(n)` | `.cell_size(v).max_vram(n_mb)` |
-| `.set_domain_aspect_ratio(ax, ay, az).set_geometry_scale(s)` with reference axis A and `configure_units_with_length(L, ...)` | `Model(file).length(L, A)` and `.size(...)`, where the size along A is `L / s` and the other sides follow the ratio |
+| `.set_domain_aspect_ratio(ax, ay, az).set_geometry_scale(s)` with reference axis A and `configure_units_with_length(L, ...)` | `Model(file).length(L, A)` and `.size(...)`, where the size along A is `L / s` and the other sides follow the ratio. The old scale applied to the model's longest side after the whole rotation (the core's `voxelize_stl()` size); give `L` along that side to keep the geometry |
 | `.set_center_offset_ratio(x, y, z)` | `.model_offset(x * L, y * L, z * L)` |
 | `.set_pmin_offset_ratio(0, y, z)` | `.gap_to_inlet(y * L).gap_to_floor(z * L)` |
 | `.set_rotation_deg(x, y, z)` | `Model::rotation(x_deg, y_deg, z_deg)` |
