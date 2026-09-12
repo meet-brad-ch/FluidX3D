@@ -4,24 +4,9 @@ project(FluidX3D VERSION 3.5 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Build type (single-configuration generators): the configurations cmake/FluidX3DBuildOptions.cmake defines
-if(NOT CMAKE_CONFIGURATION_TYPES)
-    if(NOT CMAKE_BUILD_TYPE)
-        set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
-    endif()
-    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo)
-    if(NOT CMAKE_BUILD_TYPE MATCHES "^(Debug|Release|RelWithDebInfo)$")
-        message(FATAL_ERROR "CMAKE_BUILD_TYPE must be Debug, Release or RelWithDebInfo, not '${CMAKE_BUILD_TYPE}'")
-    endif()
-endif()
-
-option(FLUIDX3D_BUILD_TESTS "Build tests: a baseline build of every example, and unit tests" ON)
-option(FLUIDX3D_WERROR "Treat warnings in first-party code (examples, Setup API, tests) as errors" OFF)
-set(SDFGEN_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures for SDFGen (default: this machine's GPU)")
-
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(configs)               # options, build type, fluidx3d::build_options, fluidx3d::warnings
 include(FluidX3DDependencies)  # pinned third-party code: LodePNG, OpenCL headers, SDFGen
-include(FluidX3DBuildOptions)  # fluidx3d::build_options, fluidx3d::warnings
 include(FluidX3DPlatform)      # fluidx3d::platform: OpenCL ICD loader, system libraries, X11, threads
 
 add_subdirectory(src/sdf_cache)
@@ -32,6 +17,7 @@ include(FluidX3DExample)       # add_fluidx3d_example()
 
 if(FLUIDX3D_BUILD_TESTS)
     enable_testing() # before the examples: each one registers its baseline test
+    add_subdirectory(tests)
 endif()
 add_subdirectory(examples)
 

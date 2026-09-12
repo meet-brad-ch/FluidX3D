@@ -76,7 +76,7 @@ void main_setup() {
 			.set_free_position(2.5f, 0.0f, 0.0f)
 			.set_angles(0.0f, 0.0f)
 			.set_fov(50.0f))
-		.set_fps(30.0f)
+		.set_video_length_s(30.0f)
 		.record(lbm, simulation_time_s, units, [&]() { parts.update(); }, update_interval);
 #else
 	parts.run(simulation_time_s, units);

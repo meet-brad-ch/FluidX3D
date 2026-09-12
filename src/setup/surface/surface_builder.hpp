@@ -484,7 +484,7 @@ public:
             for (const auto& ob : open_boundaries_) {
                 if (boundary_utils::is_on_face(x, y, z, Nx, Ny, Nz, ob.face)) {
                     // Don't override corners that are already solid
-                    if (lbm_.flags[n] != TYPE_S) {
+                    if (!(lbm_.flags[n] & TYPE_S)) {
                         lbm_.flags[n] = TYPE_E;
                         // Set velocity based on face normal
                         if (ob.velocity != 0.0f) {

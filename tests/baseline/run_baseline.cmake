@@ -1,6 +1,7 @@
 # Runs one example's baseline build and compares its "BASELINE ..." lines with the stored expectation.
 # Called by CTest (see cmake/FluidX3DExample.cmake):
-#   cmake -DEXE=<exe> -DWORKDIR=<bin> -DEXPECTED=<tests/baselines/x.txt> -DACTUAL=<build file> -P run_baseline.cmake
+#   cmake -DEXE=<exe> -DWORKDIR=<bin> -DEXPECTED=<tests/baselines/x.txt> -DACTUAL=<build file> -DCOMPARE=<comparator> -P run_baseline.cmake
+# The comparator (baseline_compare.cpp) accepts numbers within a small tolerance.
 # To accept new output as the expectation (after an intended change), run CTest with FLUIDX3D_BLESS=1 set.
 
 # Examples wait for Enter on missing resources; an empty stdin makes that return immediately.
@@ -39,20 +40,13 @@ if(NOT EXISTS "${EXPECTED}")
 	message(FATAL_ERROR "No expected baseline ${EXPECTED}; run CTest with FLUIDX3D_BLESS=1 to create it")
 endif()
 
-file(READ "${EXPECTED}" expected)
-string(REPLACE "\r\n" "\n" expected "${expected}")
-if(NOT expected STREQUAL "${actual}\n")
-	string(REPLACE "\n" ";" expected_lines "${expected}")
-	foreach(line IN LISTS expected_lines)
-		if(line AND NOT line IN_LIST lines)
-			message("  expected: ${line}")
-		endif()
-	endforeach()
-	foreach(line IN LISTS lines)
-		if(NOT line IN_LIST expected_lines)
-			message("  actual:   ${line}")
-		endif()
-	endforeach()
+execute_process(
+	COMMAND "${COMPARE}" "${EXPECTED}" "${ACTUAL}"
+	OUTPUT_VARIABLE differences
+	RESULT_VARIABLE compare_result
+)
+if(NOT compare_result EQUAL 0)
+	message("${differences}")
 	message(FATAL_ERROR "Baseline mismatch: ${EXPECTED} (actual output: ${ACTUAL})")
 endif()
 message("Baseline matches: ${EXPECTED}")

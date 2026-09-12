@@ -88,6 +88,12 @@ private:
     float32_t lbm_u_ref_ = 0.1f;    ///< Default LBM reference velocity
     bool force_tracking_ = false;   ///< Whether to use TYPE_X flag for force tracking
 
+    /// Gravity as LBM volume force along -gravity_axis (rho*g with the LBM density 1)
+    float3 lbm_gravity_force(float32_t si_gravity, Axis gravity_axis) const {
+        const float32_t g = to_lbm_acceleration(si_gravity);
+        return float3(gravity_axis == Axis::X ? -g : 0.0f, gravity_axis == Axis::Y ? -g : 0.0f, gravity_axis == Axis::Z ? -g : 0.0f);
+    }
+
     // Reynolds number based simulation (dimensionless)
     bool reynolds_configured_ = false;  ///< Whether configure_reynolds() has been called
     float32_t reynolds_number_ = 0.0f;  ///< Reynolds number for Re-based simulation
@@ -654,6 +660,13 @@ public:
     float32_t to_lbm_gravity_force(float32_t si_density, float32_t si_gravity) const { return units.f(si_density, si_gravity); }
 
     /**
+     * @brief Convert an acceleration (e.g. gravity) in m/s² to LBM units
+     * @param si_acceleration Acceleration in m/s²
+     * @return Acceleration in LBM units; for gravity also the volume force rho*g on the fluid (LBM density 1)
+     */
+    float32_t to_lbm_acceleration(float32_t si_acceleration) const { return units.g(si_acceleration); }
+
+    /**
      * @brief Convert time in seconds to LBM timesteps
      * @param si_seconds Time in seconds
      * @return Number of LBM timesteps
@@ -771,21 +784,10 @@ public:
         const float32_t T_ref_lbm = 1.0f;   // Reference temperature in LBM units
         const float32_t lbm_beta = si_thermal_expansion * T_ref_si / T_ref_lbm;
 
-        // Gravity: convert m/s² to LBM force per unit mass
-        // g_lbm = g_si * (dt²/dx) = g_si * (t_si/t_lbm)² / (x_si/x_lbm)
-        const float32_t lbm_gravity = to_lbm_force_per_volume(si_gravity);
-
-        // Set gravity components based on axis
-        float32_t fx = 0.0f, fy = 0.0f, fz = 0.0f;
-        switch (gravity_axis) {
-            case Axis::X: fx = -lbm_gravity; break;
-            case Axis::Y: fy = -lbm_gravity; break;
-            case Axis::Z: fz = -lbm_gravity; break;
-        }
-
         // Create LBM with thermal parameters (single GPU)
+        const float3 f = lbm_gravity_force(si_gravity, gravity_axis);
         return LBM(results.Nx, results.Ny, results.Nz, 1u, 1u, 1u,
-                   lbm_nu, fx, fy, fz, 0.0f, lbm_alpha, lbm_beta);
+                   lbm_nu, f.x, f.y, f.z, 0.0f, lbm_alpha, lbm_beta);
     }
 
     /**
@@ -841,23 +843,9 @@ public:
                            float32_t si_surface_tension = 0.0f,
                            Axis gravity_axis = Axis::Z) {
         const float32_t lbm_nu = to_lbm_viscosity(si_kinematic_viscosity);
-        const float32_t lbm_gravity = to_lbm_force_per_volume(si_gravity);
-
-        // Convert surface tension: sigma_lbm = sigma_si / (rho * u² * L)
-        // For simplicity, use a typical small value if non-zero
-        float32_t lbm_sigma = 0.0f;
-        if (si_surface_tension > 0.0f) {
-            lbm_sigma = 0.0001f;  // Typical stable value for LBM
-        }
-
-        float32_t fx = 0.0f, fy = 0.0f, fz = 0.0f;
-        switch (gravity_axis) {
-            case Axis::X: fx = -lbm_gravity; break;
-            case Axis::Y: fy = -lbm_gravity; break;
-            case Axis::Z: fz = -lbm_gravity; break;
-        }
-
-        return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, fx, fy, fz, lbm_sigma);
+        const float32_t lbm_sigma = units.sigma(si_surface_tension);
+        const float3 f = lbm_gravity_force(si_gravity, gravity_axis);
+        return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, f.x, f.y, f.z, lbm_sigma);
     }
 
     /**
@@ -913,18 +901,8 @@ public:
                               float32_t si_gravity = 0.0f,
                               Axis gravity_axis = Axis::Z) {
         const float32_t lbm_nu = to_lbm_viscosity(si_kinematic_viscosity);
-
-        float32_t fx = 0.0f, fy = 0.0f, fz = 0.0f;
-        if (si_gravity > 0.0f) {
-            const float32_t lbm_gravity = to_lbm_force_per_volume(si_gravity);
-            switch (gravity_axis) {
-                case Axis::X: fx = -lbm_gravity; break;
-                case Axis::Y: fy = -lbm_gravity; break;
-                case Axis::Z: fz = -lbm_gravity; break;
-            }
-        }
-
-        return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, fx, fy, fz,
+        const float3 f = lbm_gravity_force(si_gravity, gravity_axis);
+        return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, f.x, f.y, f.z,
                    particle_count, particle_density);
     }
 
@@ -976,18 +954,8 @@ public:
                                        float32_t lbm_u = 0.1f) {
         const float32_t lbm_nu = units.nu_from_Re(reynolds, (float32_t)results.Nx, lbm_u);
         lbm_u_ref_ = lbm_u;
-
-        float32_t fx = 0.0f, fy = 0.0f, fz = 0.0f;
-        if (si_gravity > 0.0f) {
-            const float32_t lbm_gravity = to_lbm_force_per_volume(si_gravity);
-            switch (gravity_axis) {
-                case Axis::X: fx = -lbm_gravity; break;
-                case Axis::Y: fy = -lbm_gravity; break;
-                case Axis::Z: fz = -lbm_gravity; break;
-            }
-        }
-
-        return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, fx, fy, fz,
+        const float3 f = lbm_gravity_force(si_gravity, gravity_axis);
+        return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, f.x, f.y, f.z,
                    particle_count, particle_density);
     }
 

@@ -46,7 +46,7 @@ void main_setup() { // hydraulic jump; required extensions: FP16S, VOLUME_FORCE,
 	SurfaceBuilder(lbm)
 		// initial water level
 		.set_water_level_cells(water_z)
-		.set_gravity_lbm(sim.to_lbm_force_per_volume(9.81f))
+		.set_gravity_lbm(sim.to_lbm_acceleration(9.81f))
 		.initialize_hydrostatic()
 		// solid walls (sides and bottom, not top)
 		.set_solid_faces({Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Z_MIN})

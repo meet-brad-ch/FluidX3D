@@ -13,9 +13,10 @@ BASELINE cells_G 0
 BASELINE cells_X 0
 BASELINE cells_Y 0
 BASELINE object_cells 0
+BASELINE u_solid_mean 0.0167903 0 0
 BASELINE u_mean 0 0 0
 BASELINE rho_mean 1
-BASELINE force_per_volume 0 0 -3.69669e-10
+BASELINE force_per_volume 0 0 -9.9631e-06
 BASELINE particles 32768
 BASELINE particles_mean 135.712 135.484 135.519
 BASELINE vis_modes 10

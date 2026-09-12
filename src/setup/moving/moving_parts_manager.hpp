@@ -254,13 +254,13 @@ public:
      * @return Minimum update interval in timesteps
      */
     uint32_t get_min_update_interval() const {
-        uint32_t min_interval = 4u;  // Default
+        uint32_t min_interval = max_uint;
         for(const auto& rp : parts_) {
             if(rp.update_interval > 0 && rp.update_interval < min_interval) {
                 min_interval = rp.update_interval;
             }
         }
-        return min_interval;
+        return min_interval == max_uint ? 4u : min_interval;  // 4: default when no part sets an interval
     }
 
     /**

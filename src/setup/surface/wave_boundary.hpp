@@ -132,7 +132,10 @@ public:
         // Convert SI parameters to LBM units
         u_wave_lbm_ = units.u(peak_velocity_mps_);
         omega_ = 2.0f * pif * frequency_hz_;
-        dt_si_ = 1.0f / (float32_t)units.t(1.0f);  // SI seconds per LBM timestep
+        dt_si_ = units.si_t(1ull);  // SI seconds per LBM timestep (units.t() would round to whole time steps)
+        if (inlet_face_ == Face::Z_MIN || inlet_face_ == Face::Z_MAX) {
+            print_warning("WaveBoundary: Z inlet faces are not supported; the wave is not driven");
+        }
 
         // Set inlet cells as equilibrium boundary
         parallel_for(lbm_.get_N(), [&](uint64_t n) {
@@ -211,37 +214,23 @@ public:
         // Read velocity field from device
         lbm_.u.read_from_device();
 
-        // Update inlet velocities
+        // Update the inlet face's interior cells: primary velocity along the face normal, plus the vertical component
+        const bool is_min_face = inlet_face_ == Face::X_MIN || inlet_face_ == Face::Y_MIN;
+        const float32_t u_normal = is_min_face ? u_primary : -u_primary;
         for (uint32_t z = 1u; z < Nz - 1u; z++) {
-            for (uint32_t x = 1u; x < Nx - 1u; x++) {
-                uint64_t n = 0;
-                switch (inlet_face_) {
-                    case Face::Y_MIN:
-                        n = x + z * (uint64_t)Ny * Nx;
-                        lbm_.u.y[n] = u_primary;
-                        lbm_.u.z[n] = u_vertical;
-                        break;
-                    case Face::Y_MAX:
-                        n = x + ((Ny - 1u) + z * (uint64_t)Ny) * Nx;
-                        lbm_.u.y[n] = -u_primary;
-                        lbm_.u.z[n] = u_vertical;
-                        break;
-                    case Face::X_MIN:
-                        for (uint32_t y = 1u; y < Ny - 1u; y++) {
-                            n = (y + z * (uint64_t)Ny) * Nx;
-                            lbm_.u.x[n] = u_primary;
-                            lbm_.u.z[n] = u_vertical;
-                        }
-                        break;
-                    case Face::X_MAX:
-                        for (uint32_t y = 1u; y < Ny - 1u; y++) {
-                            n = (Nx - 1u) + (y + z * (uint64_t)Ny) * Nx;
-                            lbm_.u.x[n] = -u_primary;
-                            lbm_.u.z[n] = u_vertical;
-                        }
-                        break;
-                    default:
-                        break;
+            if (inlet_face_ == Face::Y_MIN || inlet_face_ == Face::Y_MAX) {
+                const uint32_t y = is_min_face ? 0u : Ny - 1u;
+                for (uint32_t x = 1u; x < Nx - 1u; x++) {
+                    const uint64_t n = lbm_.index(x, y, z);
+                    lbm_.u.y[n] = u_normal;
+                    lbm_.u.z[n] = u_vertical;
+                }
+            } else if (inlet_face_ == Face::X_MIN || inlet_face_ == Face::X_MAX) {
+                const uint32_t x = is_min_face ? 0u : Nx - 1u;
+                for (uint32_t y = 1u; y < Ny - 1u; y++) {
+                    const uint64_t n = lbm_.index(x, y, z);
+                    lbm_.u.x[n] = u_normal;
+                    lbm_.u.z[n] = u_vertical;
                 }
             }
         }

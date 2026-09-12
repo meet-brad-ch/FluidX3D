@@ -2,6 +2,8 @@
 // Linked only into the <example>_baseline targets, which compile the core with FLUIDX3D_BASELINE;
 // LBM::run() calls fluidx3d_baseline_dump() before the first initialization.
 #include "lbm.hpp"
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
@@ -32,12 +34,15 @@ void print_flags(LBM& lbm) { // non-const LBM&: Memory_Container has no usable c
 	ulong solid_count = 0ull, object_count = 0ull; // object: solid cells not on a domain face (excludes floors and walls)
 	uint object_min[3] = { max_uint, max_uint, max_uint }, object_max[3] = { 0u, 0u, 0u };
 	const uint N[3] = { lbm.get_Nx(), lbm.get_Ny(), lbm.get_Nz() };
-	double u_sum[3] = { 0.0, 0.0, 0.0 }, rho_sum = 0.0;
+	double u_sum[3] = { 0.0, 0.0, 0.0 }, rho_sum = 0.0, u_solid_sum[3] = { 0.0, 0.0, 0.0 };
 	for(ulong n=0ull; n<lbm.get_N(); n++) {
 		const uchar flag = lbm.flags[n];
 		for(uint i=0u; i<8u; i++) if(flag&types[i]) counts[i]++;
 		if(flag&TYPE_S) {
 			solid_count++;
+			u_solid_sum[0] += (double)lbm.u.x[n];
+			u_solid_sum[1] += (double)lbm.u.y[n];
+			u_solid_sum[2] += (double)lbm.u.z[n];
 			uint xyz[3];
 			lbm.coordinates(n, xyz[0], xyz[1], xyz[2]);
 			bool on_face = false;
@@ -61,6 +66,7 @@ void print_flags(LBM& lbm) { // non-const LBM&: Memory_Container has no usable c
 		print_count("object_min", object_min[0], object_min[1], object_min[2]);
 		print_count("object_max", object_max[0], object_max[1], object_max[2]);
 	}
+	if(solid_count>0ull) print_line("u_solid_mean", u_solid_sum[0]/(double)solid_count, u_solid_sum[1]/(double)solid_count, u_solid_sum[2]/(double)solid_count);
 	const double fluid_count = (double)(lbm.get_N()-solid_count);
 	if(fluid_count>0.0) {
 		print_line("u_mean", u_sum[0]/fluid_count, u_sum[1]/fluid_count, u_sum[2]/fluid_count);
@@ -112,9 +118,39 @@ void print_graphics(LBM& lbm) {
 	(void)lbm;
 }
 
-} // namespace
+// Stability report after the run: the largest velocity (where, and the flags there), the number of cells faster
+// than 0.3 (LBM units), and cells with non-finite velocity; only simulated cells count (not solid, not gas)
+void print_stability(LBM& lbm) {
+	lbm.u.read_from_device();
+	lbm.flags.read_from_device();
+	double u_max = 0.0;
+	ulong n_max = 0ull, fast = 0ull, nonfinite = 0ull;
+	for(ulong n=0ull; n<lbm.get_N(); n++) {
+		if(lbm.flags[n]&(TYPE_S|TYPE_G)) continue;
+		const double u = std::sqrt(sq((double)lbm.u.x[n])+sq((double)lbm.u.y[n])+sq((double)lbm.u.z[n]));
+		if(!std::isfinite(u)) { nonfinite++; continue; }
+		if(u>0.3) fast++;
+		if(u>u_max) { u_max = u; n_max = n; }
+	}
+	uint x=0u, y=0u, z=0u;
+	lbm.coordinates(n_max, x, y, z);
+	std::printf("STABILITY steps %llu u_max %.6g at %u %u %u flags %u fast %llu nonfinite %llu\n", (unsigned long long)lbm.get_t(), u_max,
+		x, y, z, (uint)lbm.flags[n_max], (unsigned long long)fast, (unsigned long long)nonfinite);
+}
 
-void fluidx3d_baseline_dump(LBM& lbm) {
+ulong stability_steps() {
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4996) // getenv: read once, not stored
+#endif
+	const char* value = std::getenv("FLUIDX3D_BASELINE_STEPS");
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+	return value ? std::strtoull(value, nullptr, 10) : 0ull;
+}
+
+void print_baseline(LBM& lbm) {
 	print_count("grid", lbm.get_Nx(), lbm.get_Ny(), lbm.get_Nz());
 	print_count("domains", lbm.get_Dx(), lbm.get_Dy(), lbm.get_Dz());
 	print_line("nu", lbm.get_nu());
@@ -126,4 +162,26 @@ void fluidx3d_baseline_dump(LBM& lbm) {
 	print_graphics(lbm);
 	std::fflush(stdout);
 	std::_Exit(0); // skip destructors: the baseline run ends before any simulation
+}
+
+} // namespace
+
+// Called by LBM::run() (FLUIDX3D_BASELINE builds). Default: print the setup state at the first run() and exit.
+// With FLUIDX3D_BASELINE_STEPS=N: let the example's own run loop (wave inlets, moving parts, ...) proceed until
+// time step N, then print the stability report and exit.
+void fluidx3d_baseline_hook(LBM& lbm, const ulong steps, const bool initialized) {
+	static bool finishing = false; // the stability check calls lbm.run() itself for the last steps
+	if(finishing) return;
+	const ulong target = stability_steps();
+	if(target==0ull) {
+		if(!initialized) print_baseline(lbm);
+		return;
+	}
+	const ulong t = lbm.get_t();
+	if(t<target && steps<target-t) return; // the example's run loop continues
+	finishing = true;
+	if(t<target) lbm.run(target-t);
+	print_stability(lbm);
+	std::fflush(stdout);
+	std::_Exit(0);
 }

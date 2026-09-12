@@ -371,7 +371,7 @@ public:
             }
 
             // Initialize random perturbation
-            if (init_random_ && lbm_.flags[n] != TYPE_S && lbm_.flags[n] != TYPE_T) {
+            if (init_random_ && !(lbm_.flags[n] & (TYPE_S|TYPE_T))) {
                 lbm_.u.x[n] = random_symmetric(seed[t], random_magnitude_);
                 lbm_.u.y[n] = random_symmetric(seed[t], random_magnitude_);
                 lbm_.u.z[n] = random_symmetric(seed[t], random_magnitude_);
