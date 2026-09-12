@@ -104,7 +104,6 @@ public:
 
     const string& get_stl_path() const { return results.stl_path; }
     const string& get_geometry_filename() const { return config.geometry_filename; }
-    float32_t get_mesh_scale_factor() const { return results.lbm_reference_size / results.si_reference_size; } // cells per m
 
     // voxelize() marks the geometry TYPE_S|TYPE_X so ForceAnalyzer can measure forces (needs FORCE_FIELD); call before voxelize()
     SimulationSetup& enable_force_tracking() {

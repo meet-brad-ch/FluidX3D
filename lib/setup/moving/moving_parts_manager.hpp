@@ -3,11 +3,14 @@
 #include "setup/core/types.hpp"
 #include "lbm.hpp"
 #include "setup/moving/moving_part.hpp"
+#include "setup/core/setup_error.hpp"
+#include "setup/domain/model_placement.hpp"
 #include "setup/simulation/simulation_setup.hpp"
 #include <vector>
 #include <memory>
+#include <optional>
 
-// Loads moving parts scaled and placed like the SimulationSetup geometry, and re-voxelizes them as they rotate.
+// Loads moving parts with the transform of the SimulationSetup model, and re-voxelizes them as they rotate.
 // Call initialize() after the static geometry is voxelized, then update() in the run loop (or use run()).
 class MovingPartsManager {
 public:
@@ -19,41 +22,36 @@ public:
         return *this;
     }
 
-    // load, scale and place all parts, and voxelize them with their angular velocity
+    /// Loads the parts with the model's transform (see MovingPart::centered_on_model()) and voxelizes them with their
+    /// angular velocity; call after configure_units().
     MovingPartsManager& initialize() {
-        if(configs_.empty()) {
-            initialized_ = true;
-            return *this;
+        initialized_ = true;
+        if(configs_.empty()) return *this;
+
+        // Before the LBM is initialized, voxelize_mesh_on_device() reads the flags and velocities back from the device,
+        // which would drop what the host set since (BoundaryBuilder's faces, the initial velocity): send them first.
+        // At t = 0 the host is up to date also after run(0), which has just copied it to the device.
+        if(lbm_.get_t() == 0ull) {
+            lbm_.flags.write_to_device();
+            lbm_.u.write_to_device();
         }
 
-        const float32_t scale = setup_.get_mesh_scale_factor();
-        const float3& center_lbm = setup_.get_results().center_lbm;
-
-        // translation from mesh coordinates to cells: the body's bounding box center goes to center_lbm
-        const string body_path = setup_.get_stl_path();
-        Mesh* body_mesh = read_stl(body_path);
-        const float3 body_center_mesh = body_mesh->get_bounding_box_center();
-        delete body_mesh;
-        translation_ = center_lbm - body_center_mesh * scale;
-
+        const ModelPlacement placement = model_placement();
         for(const auto& config : configs_) {
-            RuntimePart rp;
-            rp.config = config;
-
             const string part_path = get_resource_path(config.get_stl_filename());
             if(part_path.empty()) {
                 print_warning("MovingPart STL not found: " + config.get_stl_filename());
                 continue;
             }
 
-            rp.mesh.reset(read_stl(part_path));
-            rp.mesh->scale(scale);
-
-            float3 custom_offset(0.0f);
-            if(config.has_offset_ratio()) {
-                custom_offset = config.get_offset_ratio() * setup_.get_results().lbm_reference_size;
+            RuntimePart rp;
+            rp.config = config;
+            if(const auto& offset = config.get_centered_offset()) {
+                const float3 offset_lbm(setup_.to_lbm_length(offset->x), setup_.to_lbm_length(offset->y), setup_.to_lbm_length(offset->z));
+                rp.mesh = placement.load_centered(part_path, offset_lbm);
+            } else {
+                rp.mesh = placement.load(part_path);
             }
-            rp.mesh->translate(translation_ + custom_offset);
 
             rp.mesh->set_center(rp.mesh->get_center_of_mass()); // rotate around the center of mass
             rp.rotation_center = rp.mesh->get_center();
@@ -73,8 +71,6 @@ public:
 
             parts_.push_back(std::move(rp));
         }
-
-        initialized_ = true;
         return *this;
     }
 
@@ -137,8 +133,18 @@ private:
     SimulationSetup& setup_;
     LBM& lbm_;
     std::vector<MovingPart> configs_;
-    float3 translation_{0.0f}; // mesh coordinates to cells
     bool initialized_{false};
+
+    // the transform of the setup's model (exits with a message if the setup has none)
+    ModelPlacement model_placement() const {
+        std::optional<ModelPlacement> placement;
+        try {
+            placement.emplace(ModelPlacement::of(setup_.get_results()));
+        } catch(const SetupError& error) {
+            print_error(error.what()); // waits for Enter (Windows) and exits; nothing may follow it (C4702 with /GL)
+        }
+        return *placement;
+    }
 
     struct RuntimePart {
         MovingPart config{""};

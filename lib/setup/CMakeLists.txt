@@ -7,6 +7,7 @@ add_library(fluidx3d_setup STATIC
     domain/geometry_scaler.cpp
     domain/domain_plan.cpp
     domain/domain.cpp
+    domain/model_placement.cpp
     sdf/sdf_generator.cpp
 )
 add_library(fluidx3d::setup ALIAS fluidx3d_setup)

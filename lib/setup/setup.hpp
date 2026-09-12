@@ -21,6 +21,7 @@
 #include "setup/domain/geometry_scaler.hpp"
 #include "setup/domain/domain_plan.hpp"
 #include "setup/domain/domain.hpp"
+#include "setup/domain/model_placement.hpp"
 #include "setup/simulation/mesh_loader.hpp"
 #include "setup/simulation/simulation_setup.hpp"
 
