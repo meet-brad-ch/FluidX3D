@@ -29,6 +29,7 @@ target_include_directories(fluidx3d_core INTERFACE
 target_compile_definitions(fluidx3d_core INTERFACE FLUIDX3D_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
 target_link_libraries(fluidx3d_core INTERFACE
     fluidx3d::build_options
+    fluidx3d::setup     # the Setup API layers that do not need the LBM
     fluidx3d::platform
     fluidx3d::lodepng
     fluidx3d::sdf_cache

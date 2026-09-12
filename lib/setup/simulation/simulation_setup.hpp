@@ -1,5 +1,6 @@
 #pragma once
 #include "core/types.hpp"
+#include "core/unit_scale.hpp"
 #include "units.hpp"
 #include "core/fluids.hpp"
 #include "boundaries/boundary_flags.hpp"
@@ -30,6 +31,7 @@ private:
     Results results;
     string resolved_geometry_path;  // geometry file to voxelize (STL, or the cached SDF)
     string original_stl_path_;
+    UnitScale scale_;               // SI <-> lattice units, set by configure_units()
     float32_t lbm_u_ref_ = 0.1f;    // reference velocity in LBM units
     bool force_tracking_ = false;   // voxelize with TYPE_S|TYPE_X for ForceAnalyzer
 
@@ -302,12 +304,17 @@ public:
     // Units (call after setup())
     // ========================================================================
 
-    // reference velocity in m/s, fluid density in kg/m³; lbm_u is the reference velocity in LBM units
+    // reference velocity in m/s, fluid density in kg/m³; lbm_u is the reference velocity in LBM units.
+    // Also sets the core's global units (used by the builders, the graphics and the file output).
     SimulationSetup& configure_units(float32_t si_velocity, float32_t si_density = 1.225f, float32_t lbm_u = 0.1f) {
         lbm_u_ref_ = lbm_u;
-        units.set_m_kg_s(results.lbm_reference_size, lbm_u, 1.0f, results.si_reference_size, si_velocity, si_density);
+        scale_ = UnitScale::from_reference(Length::from_si(results.si_reference_size), results.lbm_reference_size,
+                                           Speed::from_si(si_velocity), lbm_u, Density::from_si(si_density));
+        units.set_m_kg_s(scale_.cell_size().si(), scale_.mass_unit().si(), scale_.time_step().si());
         return *this;
     }
+
+    const UnitScale& unit_scale() const { return scale_; }
 
     SimulationSetup& configure_units(float32_t si_velocity, const FluidProperties& fluid, float32_t lbm_u = 0.1f) {
         return configure_units(si_velocity, fluid.density, lbm_u);
@@ -325,11 +332,11 @@ public:
         return configure_units_with_length(si_reference_length, si_velocity, fluid.density, lbm_u);
     }
 
-    float32_t to_lbm_viscosity(float32_t si_viscosity) const { return units.nu(si_viscosity); }  // m²/s
-    float32_t to_lbm_velocity(float32_t si_velocity) const { return units.u(si_velocity); }      // m/s
-    float32_t to_lbm_length(float32_t si_length) const { return units.x(si_length); }            // m
-    float32_t to_lbm_acceleration(float32_t si_acceleration) const { return units.g(si_acceleration); } // m/s²; for gravity also the volume force rho*g (LBM density 1)
-    uint64_t to_lbm_timesteps(float32_t si_seconds) const { return units.t(si_seconds); }        // s
+    float32_t to_lbm_viscosity(float32_t si_viscosity) const { return scale_.viscosity(KinematicViscosity::from_si(si_viscosity)); } // m²/s
+    float32_t to_lbm_velocity(float32_t si_velocity) const { return scale_.velocity(Speed::from_si(si_velocity)); }              // m/s
+    float32_t to_lbm_length(float32_t si_length) const { return scale_.length(Length::from_si(si_length)); }                     // m
+    float32_t to_lbm_acceleration(float32_t si_acceleration) const { return scale_.acceleration(Acceleration::from_si(si_acceleration)); } // m/s²; for gravity also the volume force rho*g (LBM density 1)
+    uint64_t to_lbm_timesteps(float32_t si_seconds) const { return scale_.time_steps(Duration::from_si(si_seconds)); }          // s
 
     // ========================================================================
     // LBM creation (call after configure_units())
@@ -372,7 +379,7 @@ public:
                            float32_t si_surface_tension = 0.0f,
                            Axis gravity_axis = Axis::Z) {
         const float32_t lbm_nu = to_lbm_viscosity(si_kinematic_viscosity);
-        const float32_t lbm_sigma = units.sigma(si_surface_tension);
+        const float32_t lbm_sigma = scale_.surface_tension(SurfaceTension::from_si(si_surface_tension));
         const float3 f = lbm_gravity_force(si_gravity, gravity_axis);
         return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, f.x, f.y, f.z, lbm_sigma);
     }
@@ -421,7 +428,7 @@ public:
     // ========================================================================
 
     float32_t reynolds_number(float32_t si_kinematic_viscosity) const {
-        return units.si_Re(results.si_reference_size, units.si_u(lbm_u_ref_), si_kinematic_viscosity);
+        return results.si_reference_size * scale_.si_velocity(lbm_u_ref_).si() / si_kinematic_viscosity;
     }
 
     void print_reynolds_number(float32_t si_kinematic_viscosity) const {
