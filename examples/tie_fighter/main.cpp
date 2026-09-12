@@ -56,25 +56,14 @@ void main_setup() {
 	print_info(to_string(simulation_time.si(), 1u) + " seconds = " + to_string(total_timesteps) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
+	const Length W = domain_width; // camera positions from the domain's origin corner
 	VideoRecorder()
-		.add("t", CameraConfig()
-			.set_free_position(1.0f, -0.4f, 0.63f)
-			.set_angles(-33.0f, 33.0f)
-			.set_fov(80.0f))
-		.add("b", CameraConfig()
-			.set_free_position(0.3f, -1.5f, -0.45f)
-			.set_angles(-83.0f, -10.0f)
-			.set_fov(40.0f))
-		.add("f", CameraConfig()
-			.set_free_position(0.0f, 0.57f, 0.7f)
-			.set_angles(90.0f, 29.5f)
-			.set_fov(80.0f))
-		.add("s", CameraConfig()
-			.set_free_position(2.5f, 0.0f, 0.0f)
-			.set_angles(0.0f, 0.0f)
-			.set_fov(50.0f))
+		.add("t", CameraView::at({ 1.5f * W, 0.2f * W, 1.13f * W }, -33_deg, 33_deg).field_of_view(80_deg))
+		.add("b", CameraView::at({ 0.8f * W, -2.0f * W, 0.05f * W }, -83_deg, -10_deg).field_of_view(40_deg))
+		.add("f", CameraView::at({ 0.5f * W, 2.14f * W, 1.2f * W }, 90_deg, 29.5_deg).field_of_view(80_deg))
+		.add("s", CameraView::at({ 3.0f * W, 1.0f * W, 0.5f * W }).field_of_view(50_deg))
 		.set_video_length(30.0_s)
-		.record(lbm, simulation_time, [&]() { parts.update(); }, update_interval);
+		.record(lbm, simulation_time, parts);
 #else
 	parts.run(simulation_time);
 #endif

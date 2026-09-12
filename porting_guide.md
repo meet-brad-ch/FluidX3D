@@ -239,14 +239,25 @@ parts.initialize();
 GraphicsConfig(lbm)
     .show_surface()
     .show_vortices()
+    .set_camera(CameraView::orbit(-40_deg, 25_deg).field_of_view(70_deg)) // also the interactive graphics' first view
     .apply();
 
 // headless video (GRAPHICS without INTERACTIVE_GRAPHICS)
 VideoRecorder()
-    .add(CameraConfig().set_angles(-40.0f, 20.0f).set_fov(78.0f).set_zoom(1.25f))
+    .add(CameraView::orbit(-40_deg, 20_deg).field_of_view(78_deg).view_height(domain_length / 1.25f)) // export/
+    .add("front", CameraView::at({ 20_m, 2.7_m, 15_m }, -33_deg, 42_deg))                           // export/front/
+    .add("pan", [](float progress) { return CameraView::orbit(-70_deg + progress * 100_deg, 2_deg); }) // moving
     .set_video_length(10.0_s)
-    .record(lbm, 10.0_s); // 10 simulated seconds
+    .record(lbm, 10.0_s); // 10 simulated seconds; record(lbm, time, parts) also turns MovingPartsManager's parts
 ```
+A camera's azimuth (about Z, from +X toward +Y) and elevation (above the horizontal) give the direction from what it sees to the camera, as the core's angles; `CameraView::at(position).look_at(target)` computes them. The old calls map to:
+
+| Old | New |
+|-----|-----|
+| `set_camera_centered(rx, ry, fov, zoom)` | `CameraView::orbit(rx_deg, ry_deg).field_of_view(fov_deg).view_height(L / zoom)`, with `L` the domain's longest side: the frame's smaller side spans `view_height` at the domain's center |
+| `set_camera_free(float3(fx*Nx, fy*Ny, fz*Nz), rx, ry, fov)` | `CameraView::at({(fx + 0.5) * X, (fy + 0.5) * Y, (fz + 0.5) * Z}, rx_deg, ry_deg).field_of_view(fov_deg)` for a domain of `X` x `Y` x `Z` metres: positions are from the domain's origin corner, the core's from its center |
+| `next_frame(lbm_T, 30.0f)` in the run loop | `VideoRecorder().set_video_length(30.0_s).record(lbm, time)` |
+| a camera computed from `lbm.get_t()/lbm_T` | `.add(name, [](float progress) { return CameraView::...; })` |
 
 ---
 

@@ -49,6 +49,7 @@ fluidx3d_add_test(fluidx3d_setup_tests
         unit/domain_plan_test.cpp
         unit/domain_test.cpp
         unit/model_placement_test.cpp
+        unit/camera_view_test.cpp
     LINK
         fluidx3d::setup
 )

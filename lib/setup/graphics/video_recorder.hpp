@@ -2,28 +2,38 @@
 
 #include "setup/core/types.hpp"
 #include "setup/core/quantity.hpp"
-#include "setup/config/camera_config.hpp"
+#include "setup/graphics/camera_view.hpp"
+#include "setup/graphics/graphics_config.hpp"
+#include "setup/moving/moving_parts_manager.hpp"
 #include "lbm.hpp"
 #include "units.hpp"
-#include <vector>
+#include <functional>
 #include <string>
+#include <vector>
 
 extern Units units; // global units object from lbm.cpp
 
-// Runs the simulation and renders every frame from each camera; named cameras write to export/<name>/.
-// Frames are rendered for 60 fps playback of a video set_video_length() long.
+/// @brief Runs the simulation and renders it from each camera: 60 frames per second of a video set_video_length() long,
+/// spread over the simulated time. Named cameras write to export/<name>/, an unnamed one to export/.
+/// @code
+/// VideoRecorder()
+///     .add("side", CameraView::orbit(0_deg, 0_deg).field_of_view(25_deg))
+///     .add("pan", [](float progress) { return CameraView::orbit(-70_deg + progress * 100_deg, 2_deg); })
+///     .set_video_length(10_s)
+///     .record(lbm, 2_s);
+/// @endcode
 class VideoRecorder {
 public:
-    VideoRecorder() = default;
+    /// A moving camera: its view at the progress of the recording, from 0 to 1.
+    using CameraPath = std::function<CameraView(float progress)>;
 
-    VideoRecorder& add(const CameraConfig& view) {
-        views_.push_back(view);
-        return *this;
+    VideoRecorder& add(const CameraView& view) { return add("", view); }
+    VideoRecorder& add(CameraPath path) { return add("", std::move(path)); }
+    VideoRecorder& add(const std::string& name, const CameraView& view) {
+        return add(name, CameraPath([view](float) { return view; }));
     }
-
-    VideoRecorder& add(const std::string& name, CameraConfig view) {
-        view.set_name(name);
-        views_.push_back(view);
+    VideoRecorder& add(const std::string& name, CameraPath path) {
+        views_.push_back({ name, std::move(path) });
         return *this;
     }
 
@@ -33,59 +43,45 @@ public:
         return *this;
     }
 
-    void record(LBM& lbm, uint64_t total_steps) {
-        if (views_.empty()) {
-            lbm.run(total_steps);
-            return;
-        }
-        record_with_callback(lbm, total_steps, []() {}, 1u);
-    }
-
     /// Runs this much simulated time (converted with the global units) and records it.
     void record(LBM& lbm, Duration time) {
-        record(lbm, units.t(time.si()));
+        run_and_record(lbm, units.t(time.si()), nullptr);
     }
 
-    /// As record(LBM&, Duration); update_callback() runs every update_interval time steps (e.g. MovingPartsManager::update).
-    template<typename Callback>
-    void record(LBM& lbm, Duration time, Callback update_callback, uint32_t update_interval) {
-        record_with_callback(lbm, units.t(time.si()), update_callback, update_interval);
+    /// As record(LBM&, Duration), turning the moving parts every MovingPartsManager::get_min_update_interval() steps.
+    void record(LBM& lbm, Duration time, MovingPartsManager& parts) {
+        run_and_record(lbm, units.t(time.si()), &parts);
     }
 
 private:
-    std::vector<CameraConfig> views_;
+    struct View {
+        std::string name;
+        CameraPath path;
+    };
+
+    std::vector<View> views_;
     float32_t video_length_s_ = 10.0f;
 
-    template<typename Callback>
-    void record_with_callback(LBM& lbm, uint64_t total_steps,
-                              Callback update_callback, uint32_t update_interval) {
+    void run_and_record(LBM& lbm, uint64_t total_steps, MovingPartsManager* parts) {
+        if(views_.empty()) {
+            if(parts) parts->run(total_steps);
+            else lbm.run(total_steps);
+            return;
+        }
+        const uint32_t interval = parts ? parts->get_min_update_interval() : 1u;
+        GraphicsConfig::apply_camera(lbm, views_.front().path(0.0f)); // the first view from the start
         lbm.run(0u, total_steps);
-        while (lbm.get_t() <= total_steps) {
-            update_callback();
-            if (!views_.empty() && lbm.graphics.next_frame(total_steps, video_length_s_)) {
-                for (const auto& view : views_) {
-                    apply_view(lbm, view);
-                    if (view.has_name()) {
-                        lbm.graphics.write_frame(get_exe_path() + "export/" + view.name() + "/");
-                    } else {
-                        lbm.graphics.write_frame();
-                    }
+        while(lbm.get_t() <= total_steps) {
+            if(parts) parts->update();
+            if(lbm.graphics.next_frame(total_steps, video_length_s_)) {
+                const float progress = (float)lbm.get_t() / (float)total_steps;
+                for(const View& view : views_) {
+                    GraphicsConfig::apply_camera(lbm, view.path(progress));
+                    if(view.name.empty()) lbm.graphics.write_frame();
+                    else lbm.graphics.write_frame(get_exe_path() + "export/" + view.name + "/");
                 }
             }
-            lbm.run(update_interval, total_steps);
-        }
-    }
-
-    static void apply_view(LBM& lbm, const CameraConfig& view) {
-        if (view.is_free_mode()) {
-            const float3 pos(
-                view.pos_x() * (float)lbm.get_Nx(),
-                view.pos_y() * (float)lbm.get_Ny(),
-                view.pos_z() * (float)lbm.get_Nz()
-            );
-            lbm.graphics.set_camera_free(pos, view.pitch(), view.yaw(), view.fov());
-        } else {
-            lbm.graphics.set_camera_centered(view.pitch(), view.yaw(), view.fov(), view.zoom());
+            lbm.run(interval, total_steps);
         }
     }
 };

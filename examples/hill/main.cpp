@@ -33,8 +33,8 @@ void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGR
 	GraphicsConfig(lbm)
 		.show_surface()
 		.show_vortices()
+		.set_camera(CameraView::orbit(-40_deg, 25_deg).field_of_view(70_deg)) // orbits the domain center (above the terrain center)
 		.apply();
-	lbm.graphics.set_camera_centered(-40.0f, 25.0f, 70.0f, 1.0f); // orbits the domain center (above the terrain center)
 
 	lbm.run();
 }

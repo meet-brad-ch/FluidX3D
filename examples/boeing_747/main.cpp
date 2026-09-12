@@ -35,11 +35,9 @@ void main_setup() {
 		.apply();
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
+	const Length L = fuselage_length; // camera position from the domain's origin corner
 	VideoRecorder()
-		.add(CameraConfig()
-			.set_free_position(1.0f, -0.4f, 2.0f)
-			.set_angles(-33.0f, 42.0f)
-			.set_fov(68.0f))
+		.add(CameraView::at({ 1.5f * L, 0.2f * L, 1.25f * L }, -33_deg, 42_deg).field_of_view(68_deg))
 		.set_video_length(10.0_s)
 		.record(lbm, 10.0_s);
 #else

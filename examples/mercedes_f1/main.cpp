@@ -103,19 +103,14 @@ void main_setup() {
 	print_info(to_string(simulation_time.si(), 2u) + " seconds = " + to_string(lbm_T) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
+	const Length D = domain_length; // camera positions from the domain's origin corner
 	VideoRecorder()
-		.add("a", CameraConfig()
-			.set_free_position(0.779346f, -0.315650f, 0.329444f)
-			.set_angles(-27.0f, 19.0f)
-			.set_fov(100.0f))
-		.add("b", CameraConfig()
-			.set_free_position(0.556877f, 0.228191f, 1.159613f)
-			.set_angles(19.0f, 53.0f)
-			.set_fov(100.0f))
-		.add("c", CameraConfig()
-			.set_free_position(0.220650f, -0.589529f, 0.085407f)
-			.set_angles(-72.0f, 16.0f)
-			.set_fov(86.0f))
+		.add("a", CameraView::at({ 0.639673f * D, 0.18435f * D, 0.207361f * D }, -27_deg, 19_deg))
+		.add("b", CameraView::at({ 0.528439f * D, 0.728191f * D, 0.414903f * D }, 19_deg, 53_deg))
+		.add("c", CameraView::at({ 0.360325f * D, -0.089529f * D, 0.146352f * D }, -72_deg, 16_deg).field_of_view(86_deg))
+		.add("d", [D](float progress) { // circles the car from its front to its rear during the video, as the original
+			return CameraView::orbit(75_deg - progress * 235_deg, -5_deg).view_height(D / 1.648721f);
+		})
 		.set_video_length(30.0_s)
 		.record(lbm, simulation_time);
 #else

@@ -39,15 +39,10 @@ void main_setup() {
 		.apply();
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
+	const Length D = domain_length; // camera positions from the domain's origin corner
 	VideoRecorder()
-		.add("top", CameraConfig()
-			.set_free_position(-1.435962f, 0.364331f, 1.344426f)
-			.set_angles(-205.0f, 36.0f)
-			.set_fov(74.0f))
-		.add("bottom", CameraConfig()
-			.set_free_position(-1.021207f, -0.518006f, 0.0f)
-			.set_angles(-137.0f, 0.0f)
-			.set_fov(74.0f))
+		.add("top", CameraView::at({ -0.23399f * D, 0.864331f * D, 0.368885f * D }, -205_deg, 36_deg).field_of_view(74_deg))
+		.add("bottom", CameraView::at({ -0.130302f * D, -0.018006f * D, 0.1f * D }, -137_deg, 0_deg).field_of_view(74_deg))
 		.set_video_length(30.0_s)
 		.record(lbm, 10.0_s);
 #else

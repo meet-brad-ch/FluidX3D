@@ -60,18 +60,12 @@ void main_setup() {
 	print_info(to_string(simulation_time.si(), 2u) + " seconds = " + to_string(total_timesteps) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
-	lbm.run(0u, total_timesteps);
-	while(lbm.get_t() < total_timesteps) {
-		parts.update();
-		lbm.run(update_interval, total_timesteps);
-
-		if(lbm.graphics.next_frame(total_timesteps, 30.0f)) {
-			// Dynamic camera that pans during simulation
-			const float32_t progress = (float32_t)lbm.get_t() / (float32_t)total_timesteps;
-			lbm.graphics.set_camera_centered(-70.0f + 100.0f * progress, 2.0f, 60.0f, 1.284025f);
-			lbm.graphics.write_frame();
-		}
-	}
+	VideoRecorder()
+		.add([domain_width](float progress) { // pans around the fan during the video
+			return CameraView::orbit(-70_deg + progress * 100_deg, 2_deg).field_of_view(60_deg).view_height(1.5f * domain_width / 1.284025f);
+		})
+		.set_video_length(30.0_s)
+		.record(lbm, simulation_time, parts);
 #else
 	parts.run(simulation_time);
 #endif
