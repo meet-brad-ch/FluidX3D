@@ -2,7 +2,7 @@
 
 #include <compare>
 #include <concepts>
-#include <numbers>
+// no <numbers>: the core's utilities.hpp defines a macro named pi, which breaks std::numbers::pi
 
 // Physical quantities with their dimension checked at compile time. Values are stored in SI units as float.
 // The template arguments are the exponents of length (m), mass (kg), time (s) and temperature (K):
@@ -80,9 +80,9 @@ class Angle {
 public:
     constexpr Angle() = default;
     static constexpr Angle from_rad(float rad) { Angle a; a.rad_ = rad; return a; }
-    static constexpr Angle from_deg(float deg) { return from_rad(deg * (std::numbers::pi_v<float> / 180.0f)); }
+    static constexpr Angle from_deg(float deg) { return from_rad(deg * (half_turn_rad / 180.0f)); }
     constexpr float rad() const { return rad_; }
-    constexpr float deg() const { return rad_ * (180.0f / std::numbers::pi_v<float>); }
+    constexpr float deg() const { return rad_ * (180.0f / half_turn_rad); }
 
     constexpr auto operator<=>(const Angle&) const = default;
 
@@ -93,6 +93,7 @@ public:
     friend constexpr Angle operator*(float factor, Angle a) { return from_rad(a.rad_ * factor); }
 
 private:
+    static constexpr float half_turn_rad = 3.14159265358979f; // π
     float rad_ = 0.0f;
 };
 
