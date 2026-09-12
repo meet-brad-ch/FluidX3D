@@ -28,6 +28,8 @@ are compiled with the example.
   core's cell coordinates put cell i's center at i, so its `lbm.center()` is the domain's center. Shapes, fields and
   the wind profile are evaluated at cell centers.
 - The builders convert with the global `units` that `configure_units()` sets.
+- Every header includes what it uses and compiles on its own (checked by `tests/headers/`); a header that needs an
+  extension (`SURFACE`, `TEMPERATURE`, `FORCE_FIELD`, `PARTICLES`, `GRAPHICS`) stops with an `#error` that names it.
 - Conflicting or impossible settings throw `SetupError` in the library; `SimulationSetup` reports them with the core's
   `print_error()`, which stops the program.
 

@@ -2,6 +2,7 @@
 #include "setup/core/types.hpp"
 #include "setup/core/unit_scale.hpp"
 #include "setup/core/temperature_scale.hpp"
+#include "lbm.hpp"
 #include "units.hpp"
 #include "setup/core/fluids.hpp"
 #include "setup/boundaries/boundary_flags.hpp"

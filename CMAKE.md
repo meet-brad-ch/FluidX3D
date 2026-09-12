@@ -34,6 +34,7 @@ FluidX3D/
 │   ├── unit/                  # CPU unit tests (ctest -L unit)
 │   ├── baseline/              # Baseline dump, comparison and runner
 │   ├── baselines/             # Expected baseline output per example
+│   ├── headers/               # Every Setup API header compiles on its own (build check)
 │   └── physics/               # Simulations against analytic solutions (ctest -L physics)
 ├── third_party/               # Bundled third-party binaries
 │   ├── OpenCL/lib/           # OpenCL ICD loaders
@@ -258,6 +259,8 @@ FLUIDX3D_BASELINE_STEPS=3000 ./bin/dam_break_baseline     # stability check: run
 ```
 
 Examples whose STL files are missing report their baseline test as skipped.
+
+The build also checks that every Setup API header compiles on its own (`tests/headers/`): each header gets a source file that includes only it, compiled with every extension and with none. A header that needs an extension stops with an `#error` that names it (for example `surface_builder.hpp` without `SURFACE`) and is left out of the configuration without it.
 
 Unit tests are added with `fluidx3d_add_test(<name> SOURCES <files...> LINK <targets...>)` in `tests/CMakeLists.txt`. A physics test is a `main_setup()` in `tests/physics/<name>.cpp` that ends with `PhysicsCheck::report()`, added with `fluidx3d_add_physics_test(<name> EXTENSIONS <defines...>)` in `tests/physics/CMakeLists.txt`; its `defines.hpp` is generated from `tests/physics/defines.hpp.in` with those extensions.
 

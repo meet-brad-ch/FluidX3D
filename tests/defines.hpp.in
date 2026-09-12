@@ -28,8 +28,8 @@
 //#define INTERACTIVE_GRAPHICS_ASCII // enable interactive graphics in ASCII mode the console; start/pause the simulation by pressing P
 //#define GRAPHICS // run FluidX3D in the console, but still enable graphics functionality for writing rendered frames to the hard drive
 
-// the extensions of this test (tests/physics/CMakeLists.txt)
-@FLUIDX3D_PHYSICS_EXTENSIONS@
+// the extensions of this build (fluidx3d_configure_defines() in tests/CMakeLists.txt)
+@FLUIDX3D_EXTENSIONS@
 
 #define GRAPHICS_FRAME_WIDTH 1920 // set frame width if only GRAPHICS is enabled
 #define GRAPHICS_FRAME_HEIGHT 1080 // set frame height if only GRAPHICS is enabled
