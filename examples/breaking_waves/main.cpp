@@ -36,7 +36,6 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 	LBM lbm = sim.create_lbm_surface(kinematic_viscosity_m2ps, 9.81f);
 
 	// get domain dimensions for beach geometry
-	const uint Nx = lbm.get_Nx();
 	const float beach_y = sim.to_lbm_length(beach_position_m);
 
 	// configure free surface with beach geometry
@@ -47,11 +46,6 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 		.initialize_hydrostatic()
 		// solid walls on all sides (wave inlet will override Y_MIN)
 		.set_solid_walls()
-		// sloped beach geometry (using fluid region predicate to exclude)
-		.set_fluid_region([=](uint x, uint y, uint z) {
-			// Exclude cells that are part of the sloped beach
-			return !plane(x, y, z, float3((float)Nx / 2.0f, beach_y, 0.0f), float3(0.0f, -1.0f, 8.0f));
-		})
 		.apply();
 
 	// add sloped beach as solid
