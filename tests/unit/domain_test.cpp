@@ -62,4 +62,50 @@ TEST(Domain, ConflictingSettingsThrow) {
     EXPECT_NO_THROW(Domain::box(1_m, 1_m, 1_m).vram(1_gb).config());
 }
 
+// A size in metres around a model of known length plans like the aspect ratio and geometry scale it stands for.
+TEST(Domain, SizeInMetresPlansLikeTheAspectRatio) {
+    const BoxStl box(test_file("fluidx3d_test_domain_size.stl"), 4.0f, 2.0f, 1.0f); // STL units do not matter here
+    const std::string file = resource_name(box.path());
+    // model 1.2 m long along Y in a 1.2 m x 2.4 m x 1.2 m domain: aspect 1:2:1, geometry scale 0.5
+    const DomainPlan from_domain = DomainPlanner::plan(
+        Domain::around(Model(file).length(1.2_m)).size(1.2_m, 2.4_m, 1.2_m).model_offset(0_m, -0.12_m, 0_m).vram(100_mb).config(),
+        d3q19_fp16);
+    const DomainPlan from_config = DomainPlanner::plan(
+        SimulationConfig(file).set_domain_aspect_ratio(1.0f, 2.0f, 1.0f).set_geometry_scale(0.5f).set_center_offset_ratio(0.0f, -0.1f, 0.0f).set_vram_mb(100u),
+        d3q19_fp16);
+    EXPECT_EQ(from_domain.Nx, from_config.Nx);
+    EXPECT_EQ(from_domain.Ny, from_config.Ny);
+    EXPECT_EQ(from_domain.Nz, from_config.Nz);
+    EXPECT_FLOAT_EQ(from_domain.lbm_reference_size, from_config.lbm_reference_size);
+    EXPECT_NEAR(from_domain.center_lbm.y, from_config.center_lbm.y, 1e-3f);
+    EXPECT_FLOAT_EQ(from_domain.si_reference_size, 1.2f); // the model's real length, not the hidden 1 m (review A11)
+    EXPECT_FLOAT_EQ(from_config.si_reference_size, 1.0f);
+}
+
+TEST(Domain, GapsPlaceTheModelsFrontAndBottom) {
+    const BoxStl box(test_file("fluidx3d_test_domain_gaps.stl"), 4.0f, 2.0f, 1.0f);
+    const std::string file = resource_name(box.path());
+    const DomainPlan from_domain = DomainPlanner::plan(
+        Domain::around(Model(file).length(1.2_m)).size(1.2_m, 2.4_m, 1.2_m).gap_to_inlet(0.12_m).gap_to_floor(0.012_m).vram(100_mb).config(),
+        d3q19_fp16);
+    const DomainPlan from_config = DomainPlanner::plan(
+        SimulationConfig(file).set_domain_aspect_ratio(1.0f, 2.0f, 1.0f).set_geometry_scale(0.5f).set_pmin_offset_ratio(0.0f, 0.1f, 0.01f).set_vram_mb(100u),
+        d3q19_fp16);
+    EXPECT_NEAR(from_domain.center_lbm.x, from_config.center_lbm.x, 1e-3f);
+    EXPECT_NEAR(from_domain.center_lbm.y, from_config.center_lbm.y, 1e-3f);
+    EXPECT_NEAR(from_domain.center_lbm.z, from_config.center_lbm.z, 1e-3f);
+    EXPECT_EQ(from_domain.base_grid.y, from_config.base_grid.y);
+}
+
+TEST(Domain, SizeAndPlacementNeedTheirCounterparts) {
+    EXPECT_THROW(Domain::around(Model("any.stl")).size(1_m, 2_m, 1_m).config(), SetupError); // no Model::length()
+    EXPECT_THROW(Domain::around(Model("any.stl").length(1_m)).size(1_m, 2_m, 1_m).clearances(0_m, 0_m, 0_m).config(), SetupError);
+    EXPECT_THROW(Domain::around(Model("any.stl").length(1_m)).size(1_m, 2_m, 1_m).cell_size(1_cm).config(), SetupError);
+    EXPECT_THROW(Domain::around(Model("any.stl").length(1_m)).size(1_m, 2_m, 1_m).model_offset(0_m, 0_m, 0_m).gap_to_inlet(1_m).config(), SetupError);
+    EXPECT_THROW(Domain::around(Model("any.stl").length(1_m)).clearances(0_m, 0_m, 0_m).config(), SetupError); // length() is for size()
+    EXPECT_THROW(Domain::around(Model("any.stl")).clearances(0_m, 0_m, 0_m).gap_to_inlet(1_m).config(), SetupError); // placement needs size()
+    EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).model_offset(0_m, 0_m, 0_m).config(), SetupError); // no model to place
+    EXPECT_NO_THROW(Domain::around(Model("any.stl").length(1_m)).size(1_m, 2_m, 1_m).gap_to_inlet(0.1_m).config());
+}
+
 } // namespace

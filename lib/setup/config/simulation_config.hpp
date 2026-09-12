@@ -39,6 +39,7 @@ private:
     float32_t aspect_y_ { 1.0f };
     float32_t aspect_z_ { 1.0f };
     float32_t geometry_scale_ { 1.0f };   // ASPECT_RATIO mode: geometry size as fraction of the reference axis
+    float32_t reference_length_m_ { 0.0f }; // ASPECT_RATIO mode: the geometry's real length along the reference axis (0: unknown, 1 m)
 
     float32_t domain_size_x_m_ { 1.0f };  // DOMAIN_ONLY mode
     float32_t domain_size_y_m_ { 1.0f };
@@ -143,6 +144,12 @@ public:
     // geometry length as fraction of the domain's reference axis (ASPECT_RATIO mode)
     SimulationConfig& set_geometry_scale(float32_t scale) {
         geometry_scale_ = scale;
+        return *this;
+    }
+
+    // the geometry's real length along the reference axis (ASPECT_RATIO mode), so the units need no configure_units_with_length()
+    SimulationConfig& set_reference_length_m(float32_t length_m) {
+        reference_length_m_ = length_m;
         return *this;
     }
 
