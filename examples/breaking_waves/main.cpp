@@ -13,16 +13,14 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 
 	const Length water_depth = 0.5f*domain_z; // initial water level at 50% height
 	const Speed shallow_wave_speed = sqrt(9.81_mps2*water_depth); // shallow-water wave speed sqrt(g*h), the fastest velocity in the flow
-	const float water_depth_m = water_depth.si();
-	const float shallow_wave_speed_mps = shallow_wave_speed.si();
 
 	// wave maker as in the original lattice setup (peak velocity 0.12, frequency 0.0007 per step, water depth 48 cells,
 	// gravity 0.001), scaled to this water depth with the same Froude number
-	const float wave_velocity_mps = 0.12f/sqrt(0.001f*48.0f)*shallow_wave_speed_mps; // about 1.05 m/s
-	const float wave_frequency_hz = 0.0007f*sqrt(48.0f/0.001f)*sqrt(9.81f/water_depth_m); // about 0.78 Hz
-	const float wave_amplitude_m = wave_velocity_mps/(2.0f*pif*wave_frequency_hz); // about 0.21 m
+	const Speed wave_velocity = 0.12f/sqrt(0.001f*48.0f)*shallow_wave_speed; // about 1.05 m/s
+	const Frequency wave_frequency = 0.0007f*sqrt(48.0f/0.001f)*sqrt(9.81_mps2/water_depth); // about 0.78 Hz
+	const Length wave_amplitude = wave_velocity/(2.0f*pif*wave_frequency); // about 0.21 m
 
-	const float beach_position_m = 1.0f;  // beach starts at 1m from inlet
+	const Length beach_position = 1.0_m; // the beach starts 1 m from the inlet
 
 	// simulation setup
 	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).vram(2000_mb));
@@ -34,11 +32,11 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 	// Reynolds number of the original lattice setup (wave speed, water depth 48 cells, viscosity 0.01);
 	// water's own viscosity would need a much finer grid
 	const float reynolds = sqrt(0.001f*48.0f)*48.0f/0.01f; // about 1050
-	const float kinematic_viscosity_m2ps = shallow_wave_speed_mps*water_depth_m/reynolds;
-	LBM lbm = sim.create_lbm_surface(kinematic_viscosity_m2ps, 9.81f);
+	const KinematicViscosity kinematic_viscosity = shallow_wave_speed*water_depth/reynolds;
+	LBM lbm = sim.create_lbm_surface(kinematic_viscosity, 9.81_mps2);
 
 	// get domain dimensions for beach geometry
-	const float beach_y = sim.to_lbm_length(beach_position_m);
+	const float beach_y = sim.to_lbm_length(beach_position);
 
 	// configure free surface with beach geometry
 	SurfaceBuilder(lbm)
@@ -60,7 +58,7 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 	// configure wave boundary at inlet (Y_MIN face)
 	WaveBoundary wave(lbm);
 	wave
-		.set_wave_parameters_si(wave_amplitude_m, wave_frequency_hz)
+		.set_wave(wave_amplitude, wave_frequency)
 		.set_inlet_face(Face::Y_MIN)
 		.set_vertical_factor(0.5f)
 		.initialize();

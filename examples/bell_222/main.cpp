@@ -12,7 +12,7 @@ void main_setup() {
 	const Length rotor_diameter = 12.12_m;
 	const Frequency rotor_speed = 348.0f / 60.0_s; // 348 rpm
 	const Speed tip_speed = rotor_speed * rotor_diameter * pif;
-	const float32_t simulation_time_s = 0.34483f;  // 2 revolutions of main rotor
+	const Duration simulation_time = 2.0f / rotor_speed; // 2 revolutions of the main rotor
 	const uint32_t update_interval = 4u;
 
 	// Check for required STL files
@@ -80,8 +80,8 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time_s);
-	print_info(to_string(simulation_time_s, 5u) + " seconds = " + to_string(lbm_T) + " time steps");
+	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time);
+	print_info(to_string(simulation_time.si(), 5u) + " seconds = " + to_string(lbm_T) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	VideoRecorder()
@@ -109,9 +109,9 @@ void main_setup() {
 			.set_free_position(0.001612f, 0.523852f, 0.992613f)
 			.set_angles(90.0f, 37.0f)
 			.set_fov(94.0f))
-		.set_video_length_s(10.0f)
-		.record(lbm, simulation_time_s, units, [&]() { parts.update(); }, update_interval);
+		.set_video_length(10.0_s)
+		.record(lbm, simulation_time, [&]() { parts.update(); }, update_interval);
 #else
-	parts.run(simulation_time_s, units);
+	parts.run(simulation_time);
 #endif
 }

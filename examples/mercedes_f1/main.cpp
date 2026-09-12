@@ -15,7 +15,7 @@ void main_setup() {
 	const Length car_length = 5.5_m;
 	const float32_t car_width_m = 2.0f;
 	const Speed car_speed = 100.0_kmh;
-	const float32_t simulation_time_s = 0.25f;
+	const Duration simulation_time = 0.25_s;
 
 	// Check for required STL files
 	const string body_path = get_resource_path("mercedesf1-body.stl");
@@ -45,7 +45,7 @@ void main_setup() {
 	sim.configure_units(car_speed, Fluid::AIR);
 
 	// Print Reynolds number based on car width
-	const float32_t Re = units.si_Re(car_width_m, car_speed.si(), Fluid::AIR.kinematic_viscosity);
+	const float32_t Re = units.si_Re(car_width_m, car_speed.si(), Fluid::AIR.kinematic_viscosity.si());
 	print_info("Re = " + to_string(to_uint(Re)));
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -76,7 +76,7 @@ void main_setup() {
 	back_wheels->set_center(back_wheels->get_center_of_mass());
 
 	// Calculate wheel angular velocity (omega = v / r)
-	const float32_t lbm_u = sim.to_lbm_velocity(car_speed.si());
+	const float32_t lbm_u = sim.to_lbm_velocity(car_speed);
 	const float32_t lbm_radius = 0.5f * back_wheels->get_min_size();
 	const float32_t omega = lbm_u / lbm_radius;
 
@@ -99,8 +99,8 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time_s);
-	print_info(to_string(simulation_time_s, 2u) + " seconds = " + to_string(lbm_T) + " time steps");
+	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time);
+	print_info(to_string(simulation_time.si(), 2u) + " seconds = " + to_string(lbm_T) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	VideoRecorder()
@@ -116,8 +116,8 @@ void main_setup() {
 			.set_free_position(0.220650f, -0.589529f, 0.085407f)
 			.set_angles(-72.0f, 16.0f)
 			.set_fov(86.0f))
-		.set_video_length_s(30.0f)
-		.record(lbm, simulation_time_s, units);
+		.set_video_length(30.0_s)
+		.record(lbm, simulation_time);
 #else
 	lbm.run();
 #endif

@@ -12,7 +12,7 @@
 void main_setup() {
 	const Length fan_diameter = 0.3_m;           // 30 cm fan
 	const Speed tip_speed = 30.0_mps;            // Blade tip speed
-	const float32_t simulation_time_s = 1.0f;    // 1 second of rotation
+	const Duration simulation_time = 1.0_s;      // 1 second of rotation
 	const uint32_t update_interval = 10u;
 
 	// the fan fills half of the enclosure's width, near the floor
@@ -50,8 +50,8 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time_s);
-	print_info(to_string(simulation_time_s, 1u) + " seconds = " + to_string(total_timesteps) + " time steps");
+	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time);
+	print_info(to_string(simulation_time.si(), 1u) + " seconds = " + to_string(total_timesteps) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	VideoRecorder()
@@ -59,9 +59,9 @@ void main_setup() {
 			.set_free_position(0.353512f, -0.150326f, 1.643939f)
 			.set_angles(-25.0f, 61.0f)
 			.set_fov(100.0f))
-		.set_video_length_s(30.0f)
-		.record(lbm, simulation_time_s, units, [&]() { parts.update(); }, update_interval);
+		.set_video_length(30.0_s)
+		.record(lbm, simulation_time, [&]() { parts.update(); }, update_interval);
 #else
-	parts.run(simulation_time_s, units);
+	parts.run(simulation_time);
 #endif
 }

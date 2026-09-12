@@ -1,4 +1,5 @@
 #include "setup/core/quantity.hpp"
+#include "setup/core/fluids.hpp"
 
 #include <gtest/gtest.h>
 #include <cmath>
@@ -82,6 +83,13 @@ TEST(Quantity, SquareRootHalvesTheDimension) {
 TEST(Quantity, KilometresPerHourAreDividedBy3point6) {
     EXPECT_EQ((300.0_kmh).si(), 300.0f / 3.6f);
     EXPECT_EQ((226_kmh).si(), 226.0f / 3.6f);
+}
+
+TEST(Fluid, PropertiesAreQuantities) {
+    const float reynolds = 2.0_m * 10.0_mps / Fluid::AIR.kinematic_viscosity; // dimensionless
+    EXPECT_FLOAT_EQ(reynolds, 2.0f * 10.0f / 1.48e-5f);
+    EXPECT_EQ(Fluid::WATER.density, Density::from_si(998.2f));
+    static_assert(std::is_same_v<decltype(sqrt(9.81_mps2 * Fluid::AIR.thermal_expansion * 30.0_K * 1.0_m)), Speed>); // buoyancy speed
 }
 
 TEST(Angle, ConvertsBetweenDegreesAndRadians) {

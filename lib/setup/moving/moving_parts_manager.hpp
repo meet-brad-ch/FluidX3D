@@ -128,8 +128,9 @@ public:
         }
     }
 
-    void run(float32_t seconds, const Units& unit_conversion) {
-        run(unit_conversion.t(seconds));
+    /// Runs this long, updating the parts every get_min_update_interval() steps.
+    void run(Duration time) {
+        run(setup_.to_lbm_timesteps(time));
     }
 
 private:
@@ -157,6 +158,6 @@ private:
     // angular velocity in rad per time step: the tip speed at half the part's largest dimension
     float32_t calculate_lbm_omega(const MovingPart& config, const Mesh* mesh) const {
         const float32_t radius_lbm = 0.5f * mesh->get_max_size();
-        return setup_.to_lbm_velocity(config.get_tip_speed().si()) / radius_lbm;
+        return setup_.to_lbm_velocity(config.get_tip_speed()) / radius_lbm;
     }
 };

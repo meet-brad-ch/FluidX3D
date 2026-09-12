@@ -12,7 +12,7 @@
 
 void main_setup() {
 	const Speed flow_velocity = 60.0_mps;
-	const float32_t simulation_time_s = 0.25f;
+	const Duration simulation_time = 0.25_s;
 	const Area frontal_area = 0.389_m * 0.288_m + 2.0f * 0.05_m * 0.03_m;
 
 	SimulationSetup sim(Domain::around(Model("ahmed_25deg_m.stl").rotation(0_deg, 0_deg, 90_deg))
@@ -52,7 +52,7 @@ void main_setup() {
 	           to_string(forces.get_center_of_mass_lbm().z, 2u));
 #endif
 
-	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time_s);
+	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time);
 	lbm.run(0u, lbm_T);
 
 	while(lbm.get_t() <= lbm_T) {

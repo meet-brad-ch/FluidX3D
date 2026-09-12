@@ -13,7 +13,7 @@
 void main_setup() {
 	const Length wingspan = 6.0_m;               // TIE Fighter wingspan
 	const Speed flow_velocity = 50.0_mps;        // Flow velocity
-	const float32_t simulation_time_s = 5.0f;    // 5 seconds of tumbling
+	const Duration simulation_time = 5.0_s;      // 5 seconds of tumbling
 	const uint32_t update_interval = 28u;
 
 	// the wingspan (X) is 65 % of the domain width; the fighter's center is about 0.6 wingspans from the inlet
@@ -52,8 +52,8 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time_s);
-	print_info(to_string(simulation_time_s, 1u) + " seconds = " + to_string(total_timesteps) + " time steps");
+	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time);
+	print_info(to_string(simulation_time.si(), 1u) + " seconds = " + to_string(total_timesteps) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	VideoRecorder()
@@ -73,9 +73,9 @@ void main_setup() {
 			.set_free_position(2.5f, 0.0f, 0.0f)
 			.set_angles(0.0f, 0.0f)
 			.set_fov(50.0f))
-		.set_video_length_s(30.0f)
-		.record(lbm, simulation_time_s, units, [&]() { parts.update(); }, update_interval);
+		.set_video_length(30.0_s)
+		.record(lbm, simulation_time, [&]() { parts.update(); }, update_interval);
 #else
-	parts.run(simulation_time_s, units);
+	parts.run(simulation_time);
 #endif
 }

@@ -14,7 +14,7 @@ void main_setup() {
 	const Length fan_diameter = 0.09_m;          // 90 mm EDF
 	const Speed tip_speed = 100.0_mps;           // Blade tip speed
 	const Speed inlet_velocity = 30.0_mps;       // 30% of tip speed
-	const float32_t simulation_time_s = 0.5f;
+	const Duration simulation_time = 0.5_s;
 	const uint32_t update_interval = 4u;
 
 	// the stator (its size along Y) is 98 % of the domain length
@@ -56,8 +56,8 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time_s);
-	print_info(to_string(simulation_time_s, 2u) + " seconds = " + to_string(total_timesteps) + " time steps");
+	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time);
+	print_info(to_string(simulation_time.si(), 2u) + " seconds = " + to_string(total_timesteps) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	lbm.run(0u, total_timesteps);
@@ -73,6 +73,6 @@ void main_setup() {
 		}
 	}
 #else
-	parts.run(simulation_time_s, units);
+	parts.run(simulation_time);
 #endif
 }
