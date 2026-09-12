@@ -15,7 +15,7 @@ void main_setup() {
 		.set_vram_mb(880u)
 		.set_geometry_scale(1.0f)
 		.set_rotation_deg(0.0f, 0.0f, 180.0f)
-		.set_center_offset_ratio(0.0f, 0.05f, 0.0f)
+		.set_center_offset_ratio(0.0f, -0.45f, 0.0f)
 		.set_reference_axis(SimulationConfig::ReferenceAxis::X));
 
 	sim.setup();

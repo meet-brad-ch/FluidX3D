@@ -16,7 +16,7 @@ void main_setup() {
 		.set_geometry_scale(1.25f)
 		.set_rotation_deg(0.0f, 0.0f, 270.0f)
 		.set_angle_of_attack_deg(-20.0f)
-		.set_center_offset_ratio(0.0f, 0.05f, 0.05f)
+		.set_center_offset_ratio(0.0f, -1.05f, 0.05f)
 		.set_reference_axis(SimulationConfig::ReferenceAxis::X));
 
 	sim.setup();

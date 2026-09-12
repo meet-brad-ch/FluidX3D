@@ -16,7 +16,7 @@ void main_setup() {
 		.set_vram_mb(880u)
 		.set_geometry_scale(1.0f)
 		.set_angle_of_attack_deg(-15.0f)
-		.set_center_offset_ratio(0.0f, 0.05f, 0.0f)
+		.set_center_offset_ratio(0.0f, -0.45f, 0.0f)
 		.set_reference_axis(SimulationConfig::ReferenceAxis::X)
 		.set_fix_mesh(true));
 
