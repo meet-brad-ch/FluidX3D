@@ -58,7 +58,8 @@ private:
 // The simulation box in physical units:
 //   Domain::box(1.0_m, 5.0_m, 0.75_m).vram(2000_mb)
 //   Domain::around(Model("hill.stl")).clearances(2_m, 500_m, 100_m).cell_size(8_m).max_vram(20_gb)
-//   Domain::around(Model("Cow_t.stl").length(2.4_m)).size(1.85_m, 3.7_m, 1.85_m).gap_to_inlet(0.24_m).vram(1000_mb)
+//   Domain::around(Model("Cow_t.stl").length(2.4_m)).size(1.85_m, 3.7_m, 1.85_m).gap_to_inlet(0.24_m).on_floor().vram(1000_mb)
+//   Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(1.0_m / 256.0f)   // 128 x 256 x 256 cells
 // Conflicting or unused settings are reported with a SetupError when the domain is used.
 class Domain {
 public:
@@ -103,12 +104,18 @@ public:
         return *this;
     }
 
+    // size(): the model's bottom one cell above z = 0, resting on a solid floor there, at any resolution
+    Domain& on_floor() {
+        on_floor_ = true;
+        return *this;
+    }
+
     Domain& vram(MemorySize budget) { // resolution: the largest grid that fits (default 2000 MB)
         vram_ = budget;
         return *this;
     }
 
-    Domain& cell_size(Length size) { // around() with clearances(): resolution from the cell size ...
+    Domain& cell_size(Length size) { // resolution from the cell size (box() and size(): whole cells, rounded) ...
         cell_size_ = size;
         return *this;
     }
@@ -125,12 +132,15 @@ private:
     struct Box { Length x, y, z; };
     struct Clearances { Length bottom, top, sides; };
 
+    void set_resolution(SimulationConfig& config) const; // cell_size() and max_vram(), or vram()
+
     std::optional<Model> model_;
     std::optional<Box> size_;
     std::optional<Clearances> clearances_;
     std::optional<Box> model_offset_;
     std::optional<Length> gap_to_inlet_;
     std::optional<Length> gap_to_floor_;
+    bool on_floor_ = false;
     std::optional<MemorySize> vram_;
     std::optional<Length> cell_size_;
     std::optional<MemorySize> max_vram_;

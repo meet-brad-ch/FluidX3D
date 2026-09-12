@@ -43,15 +43,9 @@ public:
         return *this;
     }
 
-    /// All faces except the floor open (wind tunnel).
+    /// Every face not set solid open (TYPE_E): alone all six faces (free flow), with set_solid_floor() a wind tunnel.
     BoundaryBuilder& set_open_boundaries() {
-        open_x_ = open_y_ = open_z_max_ = true;
-        return *this;
-    }
-
-    /// All six faces open.
-    BoundaryBuilder& set_all_open() {
-        open_x_ = open_y_ = open_z_min_ = open_z_max_ = true;
+        open_ = true;
         return *this;
     }
 
@@ -124,10 +118,10 @@ public:
             if (apply_ceiling_ && z == Nz - 1u) lbm_.flags[n] = ceiling_flag_;
             if (apply_walls_ && (x == 0u || x == Nx - 1u || y == 0u || y == Ny - 1u)) lbm_.flags[n] = walls_flag_;
 
-            const bool is_open_boundary = (open_x_ && (x == 0u || x == Nx - 1u)) ||
-                                          (open_y_ && (y == 0u || y == Ny - 1u)) ||
-                                          (open_z_min_ && z == 0u) ||
-                                          (open_z_max_ && z == Nz - 1u);
+            // the side faces are open unless walls are set; at the floor's and ceiling's edges they win
+            const bool is_open_boundary = open_ && ((!apply_walls_ && (x == 0u || x == Nx - 1u || y == 0u || y == Ny - 1u)) ||
+                                                    (!apply_floor_ && z == 0u) ||
+                                                    (!apply_ceiling_ && z == Nz - 1u));
             if (is_open_boundary) lbm_.flags[n] = TYPE_E;
 
             if (!(lbm_.flags[n] & TYPE_S)) {
@@ -172,10 +166,7 @@ private:
     bool apply_ceiling_ = false;
     bool apply_walls_ = false;
 
-    bool open_x_ = false; ///< both x faces
-    bool open_y_ = false; ///< both y faces
-    bool open_z_min_ = false;
-    bool open_z_max_ = false;
+    bool open_ = false; ///< the faces not set solid
 
     std::optional<Speed> init_u_x_, init_u_y_, init_u_z_;
     std::optional<Lid> lid_;

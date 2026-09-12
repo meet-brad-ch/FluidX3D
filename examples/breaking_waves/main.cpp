@@ -23,10 +23,10 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 	const Length beach_position = 1.0_m; // the beach starts 1 m from the inlet
 
 	// simulation setup
-	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).vram(2000_mb));
+	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).cell_size(domain_x / 128.0f)); // 128 x 640 x 96 cells, as the original
 
 	sim.setup();
-	sim.configure_units(shallow_wave_speed, Fluid::WATER, 0.22f); // wave speed in LBM units as in the original lattice setup: sqrt(0.001*48)
+	sim.configure_units(shallow_wave_speed, Fluid::WATER, sqrt(0.001f*48.0f)); // wave speed in LBM units as in the original lattice setup (0.22)
 
 	// create LBM for free surface simulation
 	// Reynolds number of the original lattice setup (wave speed, water depth 48 cells, viscosity 0.01);

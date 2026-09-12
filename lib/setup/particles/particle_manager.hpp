@@ -7,25 +7,32 @@
 
 extern Units units; // global units object from lbm.cpp
 
-// Seeding patterns in SI units for ParticleManager.
+// Seeding patterns in SI units for ParticleManager; positions in m from the domain's corner at the origin.
 class ParticleSeeder {
 public:
-    struct Sphere {
+    struct Pattern {
+        enum class Shape { SPHERE, CUBE } shape;
         float3 center_m;
-        float32_t radius_m;
+        float32_t size_m; // the sphere's radius, the cube's half side
         uint32_t count;
     };
 
     // count particles at random positions inside a sphere (center and radius in m)
     ParticleSeeder& sphere(float3 center_m, float32_t radius_m, uint32_t count) {
-        spheres_.push_back({center_m, radius_m, count});
+        patterns_.push_back({ Pattern::Shape::SPHERE, center_m, radius_m, count });
         return *this;
     }
 
-    const std::vector<Sphere>& spheres() const { return spheres_; }
+    // count particles at random positions inside an axis-aligned cube (center and half side in m)
+    ParticleSeeder& cube(float3 center_m, float32_t half_side_m, uint32_t count) {
+        patterns_.push_back({ Pattern::Shape::CUBE, center_m, half_side_m, count });
+        return *this;
+    }
+
+    const std::vector<Pattern>& patterns() const { return patterns_; }
 
 private:
-    std::vector<Sphere> spheres_;
+    std::vector<Pattern> patterns_;
 };
 
 // Places the LBM's particles (PARTICLES extension, LBM created with particles) from seeding patterns in SI units.
@@ -54,36 +61,24 @@ public:
             return;
         }
 
-        const float32_t center_x = 0.5f * (float32_t)lbm_.get_Nx();
-        const float32_t center_y = 0.5f * (float32_t)lbm_.get_Ny();
-        const float32_t center_z = 0.5f * (float32_t)lbm_.get_Nz();
-
         uint64_t particle_idx = 0;
-        uint32_t current_seed = 42u;
-
-        for (const auto& s : seeder_.spheres()) {
-            for (uint32_t i = 0; i < s.count && particle_idx < particle_count; i++) {
-                float3 offset; // random point in the unit sphere (rejection sampling)
+        uint seed = 42u; // the core's random generator, seeded as the original examples
+        for (const ParticleSeeder::Pattern& pattern : seeder_.patterns()) {
+            const float3 center = position_to_lbm(pattern.center_m);
+            for (uint32_t i = 0; i < pattern.count && particle_idx < particle_count; i++) {
+                float3 offset; // random point in the unit cube, or (rejection sampling) in the unit sphere
                 do {
-                    offset.x = random_symmetric(current_seed, 1.0f);
-                    offset.y = random_symmetric(current_seed, 1.0f);
-                    offset.z = random_symmetric(current_seed, 1.0f);
-                } while (offset.x*offset.x + offset.y*offset.y + offset.z*offset.z > 1.0f);
-
-                float3 pos_m = s.center_m;
-                pos_m.x += offset.x * s.radius_m;
-                pos_m.y += offset.y * s.radius_m;
-                pos_m.z += offset.z * s.radius_m;
-                set_particle_position(particle_idx++, position_to_lbm(pos_m));
+                    offset.x = random_symmetric(seed, 1.0f);
+                    offset.y = random_symmetric(seed, 1.0f);
+                    offset.z = random_symmetric(seed, 1.0f);
+                } while (pattern.shape == ParticleSeeder::Pattern::Shape::SPHERE &&
+                         offset.x*offset.x + offset.y*offset.y + offset.z*offset.z > 1.0f);
+                set_particle_position(particle_idx++, center + float3(units.x(pattern.size_m * offset.x),
+                                                                      units.x(pattern.size_m * offset.y),
+                                                                      units.x(pattern.size_m * offset.z)));
             }
         }
-
-        while (particle_idx < particle_count) {
-            lbm_.particles->x[particle_idx] = center_x;
-            lbm_.particles->y[particle_idx] = center_y;
-            lbm_.particles->z[particle_idx] = center_z;
-            particle_idx++;
-        }
+        while (particle_idx < particle_count) set_particle_position(particle_idx++, float3(0.0f)); // the domain center
 
         if (enable_visualization_) {
             lbm_.graphics.visualization_modes |= VIS_PARTICLES;
@@ -103,13 +98,10 @@ private:
         }
     }
 
+    // the core's particle positions are in cells from the domain center
     float3 position_to_lbm(float3 pos_si) const {
-        return float3(units.x(pos_si.x), units.x(pos_si.y), units.x(pos_si.z));
-    }
-
-    static float32_t random_symmetric(uint32_t& seed, float32_t magnitude) { // LCG
-        seed = seed * 1103515245u + 12345u;
-        float32_t r = (float32_t)(seed & 0x7FFFFFFFu) / (float32_t)0x7FFFFFFFu;
-        return magnitude * (2.0f * r - 1.0f);
+        return float3(units.x(pos_si.x) - 0.5f * (float32_t)lbm_.get_Nx(),
+                      units.x(pos_si.y) - 0.5f * (float32_t)lbm_.get_Ny(),
+                      units.x(pos_si.z) - 0.5f * (float32_t)lbm_.get_Nz());
     }
 };

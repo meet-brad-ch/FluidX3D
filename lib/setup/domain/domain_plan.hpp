@@ -37,5 +37,7 @@ private:
     static float3x3 rotation(const SimulationConfig& config, bool with_angle_of_attack = true);
     static float32_t reference_dimension(const SimulationConfig& config, const float3& size);
     static uint32_t reference_dimension(const SimulationConfig& config, const uint3& size);
-    static uint3 grid_for_vram(const SimulationConfig& config, const float3& aspect, LatticeMemory lattice);
+    // VRAM_BUDGET: the largest grid with the aspect ratio that fits; VOXEL_SIZE: whole cells of the cell size along each
+    // side of size_m (rounded), which must fit the memory limit (throws SetupError)
+    static uint3 grid_for_resolution(const SimulationConfig& config, const float3& aspect, const float3& size_m, LatticeMemory lattice);
 };

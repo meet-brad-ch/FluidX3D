@@ -7,8 +7,9 @@ GeometryScaler::GeometryScaler(
     uint32_t vram_mb,
     const Clearances& clearances,
     LatticeMemory lattice,
-    ReferenceAxis reference_axis
-) : stl_path_(stl_path), vram_mb_(vram_mb), reference_axis_(reference_axis), clearances_(clearances), lattice_(lattice) {
+    ReferenceAxis reference_axis,
+    const float3x3& rotation
+) : stl_path_(stl_path), vram_mb_(vram_mb), reference_axis_(reference_axis), clearances_(clearances), lattice_(lattice), rotation_(rotation) {
     load_stl_and_calculate_scaling();
 }
 
@@ -18,8 +19,9 @@ GeometryScaler::GeometryScaler(
     uint32_t max_vram_mb,
     const Clearances& clearances,
     LatticeMemory lattice,
-    ReferenceAxis reference_axis
-) : stl_path_(stl_path), vram_mb_(0u), reference_axis_(reference_axis), clearances_(clearances), lattice_(lattice) {
+    ReferenceAxis reference_axis,
+    const float3x3& rotation
+) : stl_path_(stl_path), vram_mb_(0u), reference_axis_(reference_axis), clearances_(clearances), lattice_(lattice), rotation_(rotation) {
     read_stl_size();
     si_reference_size_ = get_reference_dimension(stl_size_si_);
     calculate_from_voxel_size(voxel_size_meters, max_vram_mb);
@@ -30,7 +32,7 @@ void GeometryScaler::read_stl_size() {
     if(!std::filesystem::exists(stl_path_)) {
         throw SetupError("GeometryScaler: STL file not found: " + stl_path_);
     }
-    Mesh* mesh = read_stl(stl_path_, 1.0f);
+    Mesh* mesh = read_stl(stl_path_, 1.0f, rotation_); // measured as the core voxelizes it (review: ahmed_body's X and Y were swapped)
     if(mesh == nullptr) {
         throw SetupError("GeometryScaler: failed to load STL file: " + stl_path_);
     }

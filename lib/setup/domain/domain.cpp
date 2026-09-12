@@ -14,16 +14,16 @@ SimulationConfig::ReferenceAxis reference_axis(Axis axis) {
 SimulationConfig Domain::config() const {
     if(vram_ && cell_size_) throw SetupError("Domain: set the resolution with vram() or with cell_size(), not both");
     if(max_vram_ && !cell_size_) throw SetupError("Domain: max_vram() limits cell_size(); with vram() the budget is the limit");
-    const bool gaps = gap_to_inlet_ || gap_to_floor_;
+    if(on_floor_ && gap_to_floor_) throw SetupError("Domain: place the model on_floor() or at a gap_to_floor(), not both");
+    const bool gaps = gap_to_inlet_ || gap_to_floor_ || on_floor_;
     if(model_offset_ && gaps) throw SetupError("Domain: place the model with model_offset() or with the gaps, not both");
 
     if(!model_) {
         if(clearances_) throw SetupError("Domain::box() has no model to keep clearances around");
-        if(cell_size_) throw SetupError("Domain::box() is sized by vram(), not cell_size()");
         if(model_offset_ || gaps) throw SetupError("Domain::box() has no model to place");
         SimulationConfig config;
         config.set_domain_size_m(size_->x.si(), size_->y.si(), size_->z.si());
-        if(vram_) config.set_vram_mb(vram_->mb());
+        set_resolution(config);
         return config;
     }
 
@@ -39,7 +39,6 @@ SimulationConfig Domain::config() const {
     if(size_) { // a size in metres around the model, scaled to its real length
         if(!model_->length_) throw SetupError("Domain::size() around a model needs the model's real size: Model::length()");
         if(clearances_) throw SetupError("Domain: give the size() or the clearances(), not both");
-        if(cell_size_) throw SetupError("Domain::size() is resolved with vram(), not cell_size()");
         const float length = model_->length_->si();
         const Axis axis = model_->length_axis_;
         const float size_along_axis = axis == Axis::X ? size_->x.si() : axis == Axis::Y ? size_->y.si() : size_->z.si();
@@ -53,8 +52,9 @@ SimulationConfig Domain::config() const {
         if(gaps) {
             config.set_pmin_offset_ratio(0.0f, (gap_to_inlet_ ? gap_to_inlet_->si() : 0.0f) / length,
                                                (gap_to_floor_ ? gap_to_floor_->si() : 0.0f) / length);
+            if(on_floor_) config.set_on_floor();
         }
-        if(vram_) config.set_vram_mb(vram_->mb());
+        set_resolution(config);
         return config;
     }
 
@@ -62,11 +62,15 @@ SimulationConfig Domain::config() const {
     if(model_->length_) throw SetupError("Model::length() is for Domain::size(); with clearances() the STL is in metres");
     if(model_offset_ || gaps) throw SetupError("Domain: placing the model needs size(); with clearances() it sits centered on the bottom clearance");
     if(clearances_) config.set_clearances_m(clearances_->bottom.si(), clearances_->top.si(), clearances_->sides.si());
+    set_resolution(config);
+    return config;
+}
+
+void Domain::set_resolution(SimulationConfig& config) const {
     if(cell_size_) {
         config.set_voxel_size_m(cell_size_->si());
         if(max_vram_) config.set_max_vram_mb(max_vram_->mb());
     } else if(vram_) {
         config.set_vram_mb(vram_->mb());
     }
-    return config;
 }

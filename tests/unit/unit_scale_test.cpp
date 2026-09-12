@@ -38,6 +38,7 @@ TEST(UnitScale, ViscosityAndSurfaceTension) {
     EXPECT_FLOAT_EQ(scale.viscosity(1.0e-3_m2ps), 1.0e-3f * 0.0002f / (0.02f * 0.02f));
     const float unit_kg = 1000.0f * 0.02f * 0.02f * 0.02f;
     EXPECT_FLOAT_EQ(scale.surface_tension(0.072_Npm), 0.072f * 0.0002f * 0.0002f / unit_kg);
+    EXPECT_NEAR(scale.si_surface_tension(scale.surface_tension(0.072_Npm)).si(), 0.072f, 1e-7f);
 }
 
 TEST(UnitScale, TimeStepsRoundToTheNearestStep) {

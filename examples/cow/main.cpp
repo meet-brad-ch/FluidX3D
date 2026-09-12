@@ -11,8 +11,8 @@ void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGR
 
 	SimulationSetup sim(Domain::around(Model("Cow_t.stl").rotation(180_deg, 0_deg, 180_deg).length(cow_length))
 		.size(0.5f * domain_length, domain_length, 0.5f * domain_length)
-		.gap_to_inlet(0.1f * cow_length)   // the cow's nose
-		.gap_to_floor(0.006f * cow_length) // about one cell
+		.gap_to_inlet(0.1f * cow_length) // the cow's nose
+		.on_floor()
 		.vram(1000_mb));
 
 	sim.setup();

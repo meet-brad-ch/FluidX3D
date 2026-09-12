@@ -4,6 +4,10 @@
 add_executable(fluidx3d_baseline_compare baseline/baseline_compare.cpp)
 target_link_libraries(fluidx3d_baseline_compare PRIVATE fluidx3d::build_options fluidx3d::warnings)
 
+if(FLUIDX3D_BUILD_ORIGINALS)
+    add_subdirectory(originals)
+endif()
+
 # --- Unit tests (GoogleTest, CPU only: ctest -L unit) ---------------------------------
 
 include(FetchContent)

@@ -20,7 +20,7 @@ BASELINE force_per_volume 0 0 -0.00021912
 BASELINE alpha 0.004813
 BASELINE beta 0.1705
 BASELINE T_mean 1
-BASELINE vis_modes 10
+BASELINE vis_modes 9
 BASELINE field_mode 0
 BASELINE slice_mode 0
 BASELINE camera_angles 1.5708 3.14159 100

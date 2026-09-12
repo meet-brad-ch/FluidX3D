@@ -22,6 +22,16 @@ TEST(GeometryScaler, ReadsTheGeometrySizeInMetres) {
     EXPECT_NEAR(scaler.get_reference_size_meters(), 2.0f, 1e-5f); // reference axis Y
 }
 
+// Measured as the core voxelizes it, after the rotation (ahmed_body's domain had its X and Y swapped).
+TEST(GeometryScaler, MeasuresTheRotatedGeometry) {
+    const BoxStl box("fluidx3d_test_box_rotated.stl", 4.0f, 2.0f, 1.0f);
+    const GeometryScaler scaler(box.path(), 0.1f, 20000u, no_clearances, d3q19_fp16, GeometryScaler::ReferenceAxis::Y,
+                                float3x3(float3(0, 0, 1), radians(90.0f)));
+    EXPECT_NEAR(scaler.get_stl_size_meters().x, 2.0f, 1e-5f);
+    EXPECT_NEAR(scaler.get_stl_size_meters().y, 4.0f, 1e-5f);
+    EXPECT_NEAR(scaler.get_stl_size_meters().z, 1.0f, 1e-5f);
+}
+
 TEST(GeometryScaler, CellSizeModeCountsCellsFromTheCellSize) {
     const BoxStl box("fluidx3d_test_box_cells.stl", 4.0f, 2.0f, 1.0f);
     const GeometryScaler scaler(box.path(), 0.1f, 20000u, no_clearances, d3q19_fp16);

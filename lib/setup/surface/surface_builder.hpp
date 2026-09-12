@@ -93,11 +93,13 @@ public:
     void apply() {
         const uint32_t Nz = lbm_.get_Nz();
         const uint32_t water_height = water_level_ ? CellSpan::of(0.0f, units.x(water_level_->si()), Nz).end : 0u;
-        const uint32_t reference_height = water_height != 0u ? water_height : Nz / 2u; // of the hydrostatic pressure
         const float32_t gravity = -lbm_.get_fz(); // the LBM's gravity along -z, in lattice units
 
         std::vector<CellBox> water, solid;
         for(const Box& box : water_boxes_) water.push_back(cells_of(box));
+        uint32_t reference_height = water_height; // the surface of the hydrostatic pressure: the water level, ...
+        for(const CellBox& box : water) reference_height = max(reference_height, box.z.end); // ... the highest water box
+        if(reference_height == 0u) reference_height = Nz / 2u;                                     // ... or half the height
         for(const Box& box : solid_blocks_) solid.push_back(cells_of(box));
         std::vector<CellFlow> inflows, outflows;
         for(const Inflow& inflow : inflows_) {
@@ -134,15 +136,6 @@ public:
                 }
             }
         });
-    }
-
-    /// Raytraced free surface on one GPU, rasterized on several.
-    void configure_visualization() {
-        if(lbm_.get_D() == 1u) {
-            lbm_.graphics.visualization_modes = VIS_PHI_RAYTRACE;
-        } else {
-            lbm_.graphics.visualization_modes = VIS_PHI_RASTERIZE;
-        }
     }
 
 private:

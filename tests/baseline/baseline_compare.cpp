@@ -2,6 +2,8 @@
 // tolerance. Mesh voxelization may differ by a few cells between builds (/fp:fast code generation of the inline
 // STL transform), so exact text comparison would fail for no real change.
 // Usage: fluidx3d_baseline_compare <expected> <actual>; exit code 0 when they match, 1 otherwise.
+//        fluidx3d_baseline_compare --report <a> <b>: every key of both side by side, "!=" where they differ (for an
+//        original example against its port, see tests/originals); exit code 0.
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -50,11 +52,41 @@ bool matches(const Line& expected, const Line& actual) {
 	return true;
 }
 
+std::string values_text(const Line* line) {
+	if(line==nullptr) return "-";
+	std::ostringstream text;
+	for(size_t i=0; i<line->values.size(); i++) text << (i>0 ? " " : "") << line->values[i];
+	return text.str();
+}
+
+// matched by key: the two files may come from different programs, with lines missing on either side
+void report(const std::vector<Line>& a, const std::vector<Line>& b) {
+	std::vector<std::string> keys;
+	for(const std::vector<Line>* lines : { &a, &b }) {
+		for(const Line& line : *lines) if(std::find(keys.begin(), keys.end(), line.key)==keys.end()) keys.push_back(line.key);
+	}
+	const auto find = [](const std::vector<Line>& lines, const std::string& key) -> const Line* {
+		const auto found = std::find_if(lines.begin(), lines.end(), [&](const Line& line) { return line.key==key; });
+		return found!=lines.end() ? &*found : nullptr;
+	};
+	for(const std::string& key : keys) {
+		const Line* line_a = find(a, key);
+		const Line* line_b = find(b, key);
+		const bool same = line_a!=nullptr && line_b!=nullptr && matches(*line_a, *line_b);
+		std::cout << (same ? "   " : "!= ") << key << std::string(key.size()<16 ? 16-key.size() : 1, ' ')
+			<< values_text(line_a) << "  |  " << values_text(line_b) << "\n";
+	}
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
+	if(argc==4 && std::string(argv[1])=="--report") {
+		report(read_lines(argv[2]), read_lines(argv[3]));
+		return 0;
+	}
 	if(argc!=3) {
-		std::cerr << "usage: fluidx3d_baseline_compare <expected> <actual>\n";
+		std::cerr << "usage: fluidx3d_baseline_compare [--report] <expected> <actual>\n";
 		return 2;
 	}
 	const std::vector<Line> expected = read_lines(argv[1]), actual = read_lines(argv[2]);

@@ -45,6 +45,8 @@ TEST(Domain, AroundAModelKeepsTheClearances) {
         SimulationConfig(file).set_rotation_deg(0.0f, 0.0f, 90.0f).set_clearances_m(0.5f, 1.0f, 0.3f).set_voxel_size_m(0.1f).set_max_vram_mb(20480u),
         d3q19_fp16);
     expect_same_plan(from_domain, from_config);
+    EXPECT_EQ(from_domain.Nx, 20u + 6u); // measured after the rotation: 2 m along X, 4 m along Y
+    EXPECT_EQ(from_domain.Ny, 40u + 6u);
     EXPECT_EQ(from_domain.Nz, 10u + 5u + 10u);
 }
 
@@ -58,10 +60,42 @@ TEST(Domain, VramBudgetAroundAModel) {
 
 TEST(Domain, ConflictingSettingsThrow) {
     EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).clearances(0_m, 0_m, 0_m).config(), SetupError);
-    EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).cell_size(1_cm).config(), SetupError);
     EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).vram(1_gb).max_vram(2_gb).config(), SetupError);
     EXPECT_THROW(Domain::around(Model("any.stl")).vram(1_gb).cell_size(1_cm).config(), SetupError);
     EXPECT_NO_THROW(Domain::box(1_m, 1_m, 1_m).vram(1_gb).config());
+}
+
+// A cell size gives whole cells along each side, as an original example's fixed grid (dam_break: 128 x 256 x 256).
+TEST(Domain, BoxWithACellSizeHasWholeCells) {
+    const DomainPlan plan = DomainPlanner::plan(Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(1.0_m / 256.0f).config(), d3q19_fp16_surface);
+    EXPECT_EQ(plan.Nx, 128u);
+    EXPECT_EQ(plan.Ny, 256u);
+    EXPECT_EQ(plan.Nz, 256u);
+    // 8.4 M cells need 536 MB
+    EXPECT_THROW(DomainPlanner::plan(Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(1.0_m / 256.0f).max_vram(100_mb).config(), d3q19_fp16_surface), SetupError);
+    EXPECT_THROW(DomainPlanner::plan(Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(2_m).config(), d3q19_fp16_surface), SetupError);
+}
+
+TEST(Domain, SizeWithACellSizeHasWholeCells) {
+    const BoxStl box(test_file("fluidx3d_test_domain_cells.stl"), 4.0f, 2.0f, 1.0f);
+    const std::string file = resource_name(box.path());
+    const DomainPlan plan = DomainPlanner::plan(Domain::around(Model(file).length(1.0_m)).size(2_m, 4_m, 1_m).cell_size(0.05_m).config(), d3q19_fp16);
+    EXPECT_EQ(plan.Nx, 40u);
+    EXPECT_EQ(plan.Ny, 80u);
+    EXPECT_EQ(plan.Nz, 20u);
+    EXPECT_FLOAT_EQ(plan.lbm_reference_size, 20.0f); // the model's 1 m along Y
+}
+
+// on_floor(): the model's bottom one cell above z = 0 at any resolution, as the originals placed it (pmin.z = 1).
+TEST(Domain, OnFloorPutsTheModelOneCellAboveZeroZ) {
+    const BoxStl box(test_file("fluidx3d_test_domain_floor.stl"), 4.0f, 2.0f, 1.0f);
+    const std::string file = resource_name(box.path());
+    const DomainPlan plan = DomainPlanner::plan(
+        Domain::around(Model(file).length(1.2_m)).size(1.2_m, 2.4_m, 1.2_m).on_floor().vram(100_mb).config(), d3q19_fp16);
+    const float half_height = 0.5f * 0.5f * plan.lbm_reference_size; // 1 of the box's 2 STL units along Y, halved
+    EXPECT_NEAR(plan.center_lbm.z, 1.0f + half_height, 1e-3f);
+    EXPECT_THROW(Domain::around(Model(file).length(1.2_m)).size(1.2_m, 2.4_m, 1.2_m).on_floor().gap_to_floor(1_cm).config(), SetupError);
+    EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).on_floor().config(), SetupError); // no model to place
 }
 
 // A size in metres around a model of known length plans like the aspect ratio and geometry scale it stands for.
@@ -126,7 +160,6 @@ TEST(Domain, LengthIsMeasuredBeforeTheAngleOfAttack) {
 TEST(Domain, SizeAndPlacementNeedTheirCounterparts) {
     EXPECT_THROW(Domain::around(Model("any.stl")).size(1_m, 2_m, 1_m).config(), SetupError); // no Model::length()
     EXPECT_THROW(Domain::around(Model("any.stl").length(1_m)).size(1_m, 2_m, 1_m).clearances(0_m, 0_m, 0_m).config(), SetupError);
-    EXPECT_THROW(Domain::around(Model("any.stl").length(1_m)).size(1_m, 2_m, 1_m).cell_size(1_cm).config(), SetupError);
     EXPECT_THROW(Domain::around(Model("any.stl").length(1_m)).size(1_m, 2_m, 1_m).model_offset(0_m, 0_m, 0_m).gap_to_inlet(1_m).config(), SetupError);
     EXPECT_THROW(Domain::around(Model("any.stl").length(1_m)).clearances(0_m, 0_m, 0_m).config(), SetupError); // length() is for size()
     EXPECT_THROW(Domain::around(Model("any.stl")).clearances(0_m, 0_m, 0_m).gap_to_inlet(1_m).config(), SetupError); // placement needs size()

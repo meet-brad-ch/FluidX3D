@@ -24,7 +24,7 @@ void main_setup() {
 		.vram(1760_mb));
 
 	sim.setup();
-	sim.configure_units(flow_velocity, Fluid::AIR);
+	sim.configure_units(flow_velocity, Fluid::AIR, 0.075f);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM
@@ -40,7 +40,7 @@ void main_setup() {
 
 	// Configure boundaries - open with inlet velocity
 	BoundaryBuilder(lbm)
-		.set_all_open()
+		.set_open_boundaries()
 		.initialize_velocity_y(flow_velocity)
 		.apply();
 

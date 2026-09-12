@@ -45,7 +45,7 @@ void main_setup() {
 
 	// Configure boundaries - all open with uniform velocity
 	BoundaryBuilder(lbm)
-		.set_all_open()
+		.set_open_boundaries()
 		.initialize_velocity_y(flow_velocity)
 		.apply();
 
