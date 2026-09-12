@@ -1,81 +1,38 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.25)
 
 project(FluidX3D VERSION 3.5 LANGUAGES CXX)
 
-# Define absolute path to project resources at compile time
-add_compile_definitions(FLUIDX3D_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Fetch external dependencies
-include(FetchContent)
-
-# Fetch LodePNG (PNG encoding/decoding library)
-# Using version 20200306 (commit e34ac04 from 2020-03-06)
-FetchContent_Declare(
-    lodepng
-    GIT_REPOSITORY https://github.com/lvandeve/lodepng.git
-    GIT_TAG        e34ac04553e51a6982ae234d98ce6b76dd57a6a1
-    GIT_SHALLOW    FALSE  # Need full history to fetch older commit
-)
-FetchContent_MakeAvailable(lodepng)
-
-# Fetch OpenCL Headers (Khronos official C headers)
-# Using latest release v2024.10.24
-FetchContent_Declare(
-    opencl_headers
-    GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-Headers.git
-    GIT_TAG        v2024.10.24
-)
-FetchContent_MakeAvailable(opencl_headers)
-
-# Fetch OpenCL C++ bindings (Khronos official C++ wrapper)
-# Using latest release v2024.10.24
-set(BUILD_DOCS OFF CACHE BOOL "Build documentation" FORCE)
-set(BUILD_EXAMPLES OFF CACHE BOOL "Build examples" FORCE)
-set(BUILD_TESTING OFF CACHE BOOL "Build tests" FORCE)
-FetchContent_Declare(
-    opencl_clhpp
-    GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-CLHPP.git
-    GIT_TAG        v2024.10.24
-)
-FetchContent_MakeAvailable(opencl_clhpp)
-# Fetch SDFGen (SDF generation utility), pinned to a release
-set(SDFGEN_TAG v1.0.0)
-# Compile SDFGen's CUDA code only for this machine's GPU (SDFGen's default is every major architecture)
-set(SDFGEN_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures for SDFGen")
-FetchContent_Declare(
-    sdfgen
-    GIT_REPOSITORY https://github.com/meet-brad-ch/SDFGenFast.git
-    GIT_TAG        ${SDFGEN_TAG}
-)
-FetchContent_MakeAvailable(sdfgen)
-
-# Add SDF cache module (depends on sdfgen); the SDFGen version is part of the SDF cache key
-add_subdirectory(src/sdf_cache)
-target_compile_definitions(sdf_cache PRIVATE SDFGEN_VERSION_TAG="${SDFGEN_TAG}")
-
-
-# Find dependencies - create IMPORTED targets
-if(UNIX)
-    find_package(Threads REQUIRED)
+# Build type (single-configuration generators): the configurations cmake/FluidX3DBuildOptions.cmake defines
+if(NOT CMAKE_CONFIGURATION_TYPES)
+    if(NOT CMAKE_BUILD_TYPE)
+        set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    endif()
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo)
+    if(NOT CMAKE_BUILD_TYPE MATCHES "^(Debug|Release|RelWithDebInfo)$")
+        message(FATAL_ERROR "CMAKE_BUILD_TYPE must be Debug, Release or RelWithDebInfo, not '${CMAKE_BUILD_TYPE}'")
+    endif()
 endif()
 
-# We use fetched OpenCL headers + bundled ICD loader libs
-# We use bundled X11/Xrandr on Unix (no find_package needed)
+option(FLUIDX3D_BUILD_TESTS "Build tests: a baseline build of every example, and unit tests" ON)
+option(FLUIDX3D_WERROR "Treat warnings in first-party code (examples, Setup API, tests) as errors" OFF)
+set(SDFGEN_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures for SDFGen (default: this machine's GPU)")
 
-# Set paths for examples to use
-set(FLUIDX3D_SRC_DIR ${PROJECT_SOURCE_DIR}/src)
-set(FLUIDX3D_OPENCL_HEADERS_DIR ${opencl_headers_SOURCE_DIR})
-set(FLUIDX3D_OPENCL_CLHPP_DIR ${opencl_clhpp_SOURCE_DIR}/include)
-set(FLUIDX3D_OPENCL_LIB_DIR ${PROJECT_SOURCE_DIR}/third_party/OpenCL/lib)
-set(FLUIDX3D_X11_DIR ${PROJECT_SOURCE_DIR}/third_party/X11)
-set(FLUIDX3D_LODEPNG_DIR ${lodepng_SOURCE_DIR})
-
-# Include generic example builder module
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-include(FluidX3DExample)
+include(FluidX3DDependencies)  # pinned third-party code: LodePNG, OpenCL headers, SDFGen
+include(FluidX3DBuildOptions)  # fluidx3d::build_options, fluidx3d::warnings
+include(FluidX3DPlatform)      # fluidx3d::platform: OpenCL ICD loader, system libraries, X11, threads
 
-# No core library - each example compiles core sources directly
-# This avoids ODR violations from different defines.hpp configs
+add_subdirectory(src/sdf_cache)
+target_compile_definitions(sdf_cache PRIVATE SDFGEN_VERSION_TAG="${SDFGEN_TAG}") # the SDFGen version is part of the SDF cache key
+
+include(FluidX3DCore)          # fluidx3d::core and the core source lists
+include(FluidX3DExample)       # add_fluidx3d_example()
+
+if(FLUIDX3D_BUILD_TESTS)
+    enable_testing() # before the examples: each one registers its baseline test
+endif()
 add_subdirectory(examples)
 
 # Detect platform
@@ -118,4 +75,6 @@ message(STATUS "Platform:        ${PLATFORM_NAME}")
 message(STATUS "Compiler:        ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "Architecture:    Unity build (no library)")
 message(STATUS "Using bundled:   ${BUNDLED_LIBS}")
+message(STATUS "Tests:           ${FLUIDX3D_BUILD_TESTS}")
+message(STATUS "Warnings=errors: ${FLUIDX3D_WERROR}")
 message(STATUS "===========================================")

@@ -1,123 +1,73 @@
-# FluidX3D Example Builder
-# Generic CMake function to create FluidX3D examples with optional STL downloads
+# add_fluidx3d_example(NAME <name>)
+#   Builds examples/<name>/main.cpp with examples/<name>/defines.hpp into bin/<name>.
+#   With FLUIDX3D_BUILD_TESTS also its headless baseline variant bin/<name>_baseline and the CTest test baseline_<name>.
 
-function(add_fluidx3d_example)
-    # Parse arguments
-    cmake_parse_arguments(
-        EXAMPLE                          # Prefix for output variables
-        ""                               # Options (boolean flags)
-        "NAME"                          # Single-value arguments
-        "THINGIVERSE_STL"               # Multi-value arguments (pairs: thing_id stl_filename)
-        ${ARGN}
-    )
+# Internal: executable TARGET from the setup SOURCES (ARGN) and the core, configured by DEFINES_DIR/defines.hpp.
+# The setup sources form the OBJECT library <TARGET>_setup, which gets first-party warnings; the core sources do not.
+function(_fluidx3d_add_executable TARGET DEFINES_DIR)
+    add_library(${TARGET}_setup OBJECT ${ARGN} ${FLUIDX3D_SETUP_SOURCES})
+    target_include_directories(${TARGET}_setup PUBLIC ${DEFINES_DIR})
+    target_link_libraries(${TARGET}_setup PUBLIC fluidx3d::core PRIVATE fluidx3d::warnings)
 
-    # Validate required arguments
-    if(NOT EXAMPLE_NAME)
-        message(FATAL_ERROR "add_fluidx3d_example: NAME argument is required")
-    endif()
+    add_executable(${TARGET} ${FLUIDX3D_CORE_SOURCES})
+    target_link_libraries(${TARGET} PRIVATE ${TARGET}_setup)
 
-    # ==========================================================================
-    # Create executable with all core sources (Unity Build)
-    # ==========================================================================
-    add_executable(${EXAMPLE_NAME}
-        main.cpp
-        ${FLUIDX3D_SRC_DIR}/graphics.cpp
-        ${FLUIDX3D_SRC_DIR}/info.cpp
-        ${FLUIDX3D_SRC_DIR}/kernel.cpp
-        ${FLUIDX3D_SRC_DIR}/lbm.cpp
-        ${FLUIDX3D_SRC_DIR}/main.cpp
-        ${FLUIDX3D_SRC_DIR}/shapes.cpp
-        ${FLUIDX3D_SRC_DIR}/setup/simulation/geometry_scaler.cpp
-        ${FLUIDX3D_SRC_DIR}/setup/sdf/sdf_generator.cpp
-        ${FLUIDX3D_LODEPNG_DIR}/lodepng.cpp
-    )
-
-    # ==========================================================================
-    # Stricter warnings for Setup API code only
-    # ==========================================================================
-    set(STRICT_WARNING_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
-        ${FLUIDX3D_SRC_DIR}/setup/simulation/geometry_scaler.cpp
-        ${FLUIDX3D_SRC_DIR}/setup/sdf/sdf_generator.cpp
-    )
-    if(MSVC)
-        # /external:I marks directories as external, /external:W0 suppresses warnings from them
-        set_source_files_properties(${STRICT_WARNING_SOURCES} PROPERTIES COMPILE_FLAGS
-            "/W4 /WX /external:anglebrackets /external:I \"${FLUIDX3D_SRC_DIR}\" /external:W0")
-    else()
-        set_source_files_properties(${STRICT_WARNING_SOURCES} PROPERTIES COMPILE_FLAGS "-Wall -Wextra -Wpedantic -Werror")
-    endif()
-
-    # ==========================================================================
-    # Include directories (example's defines.hpp overrides core's)
-    # ==========================================================================
-    target_include_directories(${EXAMPLE_NAME} BEFORE PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}        # Example's defines.hpp
-        ${FLUIDX3D_OPENCL_CLHPP_DIR}       # Fetched OpenCL C++ bindings (opencl.hpp)
-        ${FLUIDX3D_OPENCL_HEADERS_DIR}     # Fetched OpenCL C headers (cl.h, cl_platform.h, etc.)
-        ${FLUIDX3D_SRC_DIR}                # FluidX3D source headers (lbm.hpp, graphics.hpp, etc.)
-        ${FLUIDX3D_LODEPNG_DIR}            # Fetched LodePNG
-        ${PROJECT_SOURCE_DIR}/src          # For relative includes
-        ${FLUIDX3D_SRC_DIR}/setup          # Setup module headers
-    )
-
-    include(configs)
-
-    # ==========================================================================
-    # Link directories for bundled libraries (platform-specific)
-    # ==========================================================================
-    target_link_directories(${EXAMPLE_NAME} PRIVATE
-        ${FLUIDX3D_OPENCL_LIB_DIR}
-    )
-
-    # X11 libraries only on Unix-like systems
-    if(APPLE)
-        # macOS: X11 from XQuartz
-        target_link_directories(${EXAMPLE_NAME} PRIVATE
-            /opt/X11/lib
-        )
-    elseif(UNIX)
-        target_link_directories(${EXAMPLE_NAME} PRIVATE
-            ${FLUIDX3D_X11_DIR}/lib
-        )
-    endif()
-
-    # ==========================================================================
-    # Set output directories (place executable next to stl/ folder)
-    # ==========================================================================
-    # For multi-config generators (Visual Studio), put exe in build/examples/<name>/
-    # CRITICAL FIX: Output to project root's bin/ directory
-    # The executable MUST be in ${PROJECT_SOURCE_DIR}/bin/ for runtime to work correctly.
-    # When placed in build directories, initialization fails with "Memory size must be larger than 0"
-    # See runtime_problem_solution.md for detailed explanation
-    set_target_properties(${EXAMPLE_NAME} PROPERTIES
+    # Executables run from bin/ (the runtime needs it, see runtime_problem_solution.md)
+    set_target_properties(${TARGET} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin"
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${PROJECT_SOURCE_DIR}/bin"
         RUNTIME_OUTPUT_DIRECTORY_RELEASE "${PROJECT_SOURCE_DIR}/bin"
         RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${PROJECT_SOURCE_DIR}/bin"
         RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${PROJECT_SOURCE_DIR}/bin"
     )
+endfunction()
 
-    # ==========================================================================
-    # Link libraries (platform-specific)
-    # ==========================================================================
-    # Common libraries
-    target_link_libraries(${EXAMPLE_NAME} PRIVATE OpenCL sdf_cache)
+# Internal: headless baseline variant of example NAME, registered as CTest test baseline_<NAME>.
+# It renders with GRAPHICS instead of INTERACTIVE_GRAPHICS (so the example's video branch is compiled too),
+# prints the setup state at the first lbm.run() (tests/baseline/baseline_dump.cpp) and exits.
+function(_fluidx3d_add_baseline NAME)
+    set(BASELINE_DIR ${CMAKE_CURRENT_BINARY_DIR}/baseline)
+    file(CONFIGURE OUTPUT ${BASELINE_DIR}/defines.hpp CONTENT
+"#pragma once
+// Baseline build of example '${NAME}': its own settings, rendered headless
+#include \"${CMAKE_CURRENT_SOURCE_DIR}/defines.hpp\"
+#undef INTERACTIVE_GRAPHICS
+#undef INTERACTIVE_GRAPHICS_ASCII
+")
+    file(CONFIGURE OUTPUT ${BASELINE_DIR}/main.cpp CONTENT
+"#include \"defines.hpp\"
+#include \"${CMAKE_CURRENT_SOURCE_DIR}/main.cpp\"
+")
+    _fluidx3d_add_executable(${NAME}_baseline ${BASELINE_DIR}
+        ${BASELINE_DIR}/main.cpp
+        ${PROJECT_SOURCE_DIR}/tests/baseline/baseline_dump.cpp
+    )
+    target_compile_definitions(${NAME}_baseline_setup PUBLIC FLUIDX3D_BASELINE) # PUBLIC: lbm.cpp calls the dump
 
-    # Platform-specific libraries
-    if(WIN32)
-        # Windows: System libraries required by OpenCL
-        target_link_libraries(${EXAMPLE_NAME} PRIVATE
-            kernel32 user32 gdi32 winspool comdlg32 advapi32
-            shell32 ole32 oleaut32 uuid odbc32 odbccp32
-        )
-    elseif(UNIX)
-        # Linux/Mac: X11 and threading
-        target_link_libraries(${EXAMPLE_NAME} PRIVATE
-            Threads::Threads
-            X11
-            Xrandr
-        )
+    add_test(NAME baseline_${NAME}
+        COMMAND ${CMAKE_COMMAND}
+            -DEXE=$<TARGET_FILE:${NAME}_baseline>
+            -DWORKDIR=${PROJECT_SOURCE_DIR}/bin
+            -DEXPECTED=${PROJECT_SOURCE_DIR}/tests/baselines/${NAME}.txt
+            -DACTUAL=${BASELINE_DIR}/${NAME}.actual.txt
+            -P ${PROJECT_SOURCE_DIR}/tests/baseline/run_baseline.cmake
+    )
+    set_tests_properties(baseline_${NAME} PROPERTIES
+        LABELS "baseline;gpu"
+        SKIP_REGULAR_EXPRESSION "BASELINE_SKIPPED"
+        TIMEOUT 900
+        RUN_SERIAL TRUE
+    )
+endfunction()
+
+function(add_fluidx3d_example)
+    cmake_parse_arguments(PARSE_ARGV 0 EXAMPLE "" "NAME" "THINGIVERSE_STL")
+    if(NOT EXAMPLE_NAME)
+        message(FATAL_ERROR "add_fluidx3d_example: NAME argument is required")
     endif()
 
+    _fluidx3d_add_executable(${EXAMPLE_NAME} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
+    if(FLUIDX3D_BUILD_TESTS)
+        _fluidx3d_add_baseline(${EXAMPLE_NAME})
+    endif()
 endfunction()

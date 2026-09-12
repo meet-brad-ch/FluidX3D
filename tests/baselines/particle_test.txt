@@ -1,0 +1,26 @@
+BASELINE grid 271 271 271
+BASELINE domains 1 1 1
+BASELINE nu 0.0271
+BASELINE unit_m 0.00369004
+BASELINE unit_s 0.000369004
+BASELINE unit_kg 5.01545e-05
+BASELINE cells_S 437402
+BASELINE cells_E 0
+BASELINE cells_T 0
+BASELINE cells_F 0
+BASELINE cells_I 0
+BASELINE cells_G 0
+BASELINE cells_X 0
+BASELINE cells_Y 0
+BASELINE object_cells 0
+BASELINE u_mean 0 0 0
+BASELINE rho_mean 1
+BASELINE force_per_volume 0 0 -3.69669e-10
+BASELINE particles 32768
+BASELINE particles_mean 135.712 135.484 135.519
+BASELINE vis_modes 10
+BASELINE field_mode 0
+BASELINE slice_mode 0
+BASELINE camera_angles 1.5708 3.14159 100
+BASELINE camera_zoom 3.98524
+BASELINE camera_free 0
