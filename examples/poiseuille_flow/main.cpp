@@ -19,7 +19,7 @@ void main_setup() { // Poiseuille flow validation; required extensions: VOLUME_F
 	SimulationSetup sim(Domain::box(cell, diameter, cell).cell_size(cell)); // 1 x 128 x 1 cells, periodic along X
 #endif // D2Q9
 	sim.setup();
-	sim.configure_units(center_speed, Fluid::WATER, 0.1f);
+	sim.configure_units(center_speed, Fluid::WATER);
 
 #ifndef D2Q9
 	const Acceleration drive = 4.0f * center_speed * viscosity / (radius * radius); // pressure gradient per density
@@ -39,8 +39,9 @@ void main_setup() { // Poiseuille flow validation; required extensions: VOLUME_F
 	const uint Nx = lbm.get_Nx(), Ny = lbm.get_Ny(), Nz = lbm.get_Nz();
 	const double R = radius.si(), u_center = center_speed.si(), dx = cell.si();
 	double error_min = max_double;
-	while(true) { // main simulation loop
-		lbm.run(1000u);
+	Runner runner(lbm);
+	runner.every(4.0_s, [&](Duration t) { // about every 1000 time steps, as the original
+		if(t == Duration{}) return; // no flow at the start
 		lbm.u.read_from_device();
 		double error_dif = 0.0, error_sum = 0.0;
 		for(uint z = 0u; z < Nz; z++) {
@@ -65,11 +66,13 @@ void main_setup() { // Poiseuille flow validation; required extensions: VOLUME_F
 			}
 		}
 		if(sqrt(error_dif / error_sum) >= error_min) { // stop when error has converged
-			print_info("Poiseuille flow error converged after " + to_string(lbm.get_t()) + " steps to " + to_string(100.0 * error_min, 3u) + "%"); // typical expected L2 errors: 2-5% (Krüger p. 256)
+			print_info("Poiseuille flow error converged after " + to_string(t.si(), 0u) + " s (" + to_string(lbm.get_t()) + " time steps) to " + to_string(100.0 * error_min, 3u) + "%"); // typical expected L2 errors: 2-5% (Krüger p. 256)
 			wait();
-			exit(0);
+			runner.stop();
+			return;
 		}
 		error_min = fmin(error_min, sqrt(error_dif / error_sum));
-		print_info("Poiseuille flow error after t=" + to_string(lbm.get_t()) + " is " + to_string(100.0 * error_min, 3u) + "%"); // typical expected L2 errors: 2-5% (Krüger p. 256)
-	}
+		print_info("Poiseuille flow error after " + to_string(t.si(), 0u) + " s is " + to_string(100.0 * error_min, 3u) + "%"); // typical expected L2 errors: 2-5% (Krüger p. 256)
+	});
+	runner.run();
 } /**/

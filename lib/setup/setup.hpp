@@ -24,6 +24,7 @@
 #include "setup/domain/shape.hpp"
 #include "setup/simulation/mesh_loader.hpp"
 #include "setup/simulation/simulation_setup.hpp"
+#include "setup/simulation/runner.hpp"
 
 #include "setup/boundaries/boundary_flags.hpp"
 #include "setup/boundaries/boundary_builder.hpp"

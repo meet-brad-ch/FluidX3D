@@ -24,7 +24,9 @@ The Setup API provides:
 | grid from a mesh plus margins | `Domain::around(Model("hill.stl")).clearances(2_m, 500_m, 100_m).cell_size(8_m)` |
 | `resolution(...)` + `lbm_length = 0.65f*lbm_N.y` | `Domain::around(Model(file).length(2.4_m)).size(x, y, z).vram(1000_mb)` |
 | `read_stl(...)` + `mesh->translate(...)` | `.gap_to_inlet(...)`, `.gap_to_floor(...)` or `.model_offset(...)` |
-| `units.set_m_kg_s(...)` | `sim.configure_units(10.0_mps, Fluid::AIR, lbm_u)` |
+| `units.set_m_kg_s(...)` | `sim.configure_units(10.0_mps, Fluid::AIR)`, optionally with `LatticeMach(0.13f)` for `lbm_u = 0.075` |
+| `lbm.run(n)` loops with `lbm.get_t()` | `Runner(lbm).every(0.1_s, [&](Duration t) { ... }).run_for(10.0_s)` |
+| parts re-voxelized every n time steps | `MovingPart::set_update_interval(0.8_us)`; by default when the tip has moved half a cell |
 | `lbm.voxelize_mesh_on_device(mesh)` | `sim.voxelize(lbm)` |
 | `parallel_for` boundary setup | `BoundaryBuilder(lbm).set_solid_floor()...` |
 | `sphere(x, y, z, p, r)` and the other shapes in a `parallel_for` | `Shape::sphere(center, radius)` with `BoundaryBuilder::add_solid()`, `SurfaceBuilder::add_water()` or `add_gas()` |
@@ -183,14 +185,16 @@ Placement (with `size()` only); a centered model is at the domain's center, the 
 
 ```cpp
 sim.setup();                                        // plans the domain
-sim.configure_units(flow_velocity, Fluid::AIR); // optional third argument: lattice velocity (default 0.1)
+sim.configure_units(flow_velocity, Fluid::AIR);     // optional third argument: LatticeMach(0.13f)
 LBM lbm = sim.create_lbm(Fluid::AIR);               // or create_lbm_surface / create_lbm_thermal / create_lbm_particles_reynolds
 ```
 The reference length comes from the domain (the box's longest side, or the model's `length()`), so there is no separate length to pass.
 
-An original set up in lattice units (a viscosity of 0.02, a gravity of 0.0005) has no physical size. Its port picks one, such as a 1 cm cylinder in water, and keeps the original's dimensionless numbers: the lattice speed as the third argument of `configure_units()`, the Reynolds number for the viscosity (`speed * length / reynolds`), the Froude number with real gravity for free surfaces (`froude * sqrt(9.81_mps2 * depth)`), and the original's lattice surface tension with `sim.unit_scale().si_surface_tension(0.01f)`. The lattice setup then equals the original's; see `lid_driven_cavity`, `karman_vortex_street`, `river` and `cube_gravity`.
+The LBM's speed of sound is not the fluid's: it is 1/sqrt(3) cells per time step. The lattice Mach number, the reference velocity over it, sets the time step and how compressible the simulated flow is (the error grows as its square); `configure_units()` prints it. The default, about 0.17, is the originals' `lbm_u = 0.1`; an original's other `lbm_u` is `LatticeMach(sqrtf(3.0f) * lbm_u)`, or rounded: `LatticeMach(0.13f)` for 0.075, `LatticeMach(0.0866f)` for 0.05.
 
-Gravity and other volume forces are given in m/s²: `sim.create_lbm_surface(Fluid::WATER, 9.81_mps2)`, or as a vector for any direction: `sim.create_lbm(viscosity, { Acceleration{}, drive, Acceleration{} })` for a pressure gradient per density (`poiseuille_flow`), `create_lbm_surface(viscosity, { Acceleration{}, -0.14f * g, -g }, sigma)` for a sloped river bed. Times are durations (`sim.to_lbm_timesteps(0.5_s)`, `parts.run(1.0_min)`), temperatures absolute (`330.0_K` or `57.0_C`). A thermal LBM needs the range of its temperatures first: `sim.configure_temperatures(300.0_K, 330.0_K)` before `create_lbm_thermal()`, then `ThermalBuilder(lbm, sim.temperature_scale()).set_hot_wall(Face::Z_MIN, 330.0_K)`. For free-surface cases with a sub-cell water depth, see `dam_break` and `breaking_waves`: they match the original's Reynolds number, because real water viscosity would need a much finer grid.
+An original set up in lattice units (a viscosity of 0.02, a gravity of 0.0005) has no physical size. Its port picks one, such as a 1 cm cylinder in water, and keeps the original's dimensionless numbers: its lattice speed as the lattice Mach number, the Reynolds number for the viscosity (`speed * length / reynolds`), the Froude number with real gravity for free surfaces (`froude * sqrt(9.81_mps2 * depth)`), and the original's lattice surface tension with `sim.unit_scale().si_surface_tension(0.01f)`. The lattice setup then equals the original's; see `lid_driven_cavity`, `karman_vortex_street`, `river` and `cube_gravity`.
+
+Gravity and other volume forces are given in m/s²: `sim.create_lbm_surface(Fluid::WATER, 9.81_mps2)`, or as a vector for any direction: `sim.create_lbm(viscosity, { Acceleration{}, drive, Acceleration{} })` for a pressure gradient per density (`poiseuille_flow`), `create_lbm_surface(viscosity, { Acceleration{}, -0.14f * g, -g }, sigma)` for a sloped river bed. Times are durations (`Runner`, below; `parts.run(1.0_min)`), temperatures absolute (`330.0_K` or `57.0_C`). A thermal LBM needs the range of its temperatures first: `sim.configure_temperatures(300.0_K, 330.0_K)` before `create_lbm_thermal()`, then `ThermalBuilder(lbm, sim.temperature_scale()).set_hot_wall(Face::Z_MIN, 330.0_K)`. For free-surface cases with a sub-cell water depth, see `dam_break` and `breaking_waves`: they match the original's Reynolds number, because real water viscosity would need a much finer grid.
 
 ### 4. Boundary Conditions
 
@@ -258,8 +262,9 @@ parts.add(MovingPart("rotor.stl")
     .set_tip_speed(tip_speed)
     .centered_on_model(Position{0_m, -0.21f * fan_diameter, 0_m})); // only for an STL in other coordinates
 parts.initialize();
+parts.run(0.5_s);                                   // or VideoRecorder().record(lbm, 0.5_s, parts)
 ```
-`ModelPlacement::of(sim.get_results())` gives the same transform for meshes placed by hand (`cells_per_unit()`, `load(path)`).
+A part is re-voxelized, turned by the angle since its last update, whenever its tip has moved half a cell, or every `set_update_interval(0.8_us)`. A tumbling part turns at an angular speed: `MovingPart(file).set_tumble(axis, 180_deg / 1.0_s).set_update_interval(2.2_ms)` (`tie_fighter`). `ModelPlacement::of(sim.get_results())` gives the same transform for meshes placed by hand (`cells_per_unit()`, `load(path)`).
 
 ### 5. Graphics and Video
 
@@ -286,6 +291,17 @@ A camera's azimuth (about Z, from +X toward +Y) and elevation (above the horizon
 | `set_camera_free(float3(fx*Nx, fy*Ny, fz*Nz), rx, ry, fov)` | `CameraView::at({(fx + 0.5) * X, (fy + 0.5) * Y, (fz + 0.5) * Z}, rx_deg, ry_deg).field_of_view(fov_deg)` for a domain of `X` x `Y` x `Z` metres: positions are from the domain's origin corner, the core's from its center |
 | `next_frame(lbm_T, 30.0f)` in the run loop | `VideoRecorder().set_video_length(30.0_s).record(lbm, time)` |
 | a camera computed from `lbm.get_t()/lbm_T` | `.add(name, [](float progress) { return CameraView::...; })` |
+
+### 6. Running
+
+`lbm.run()` runs until the window is closed. A run loop that changes something as the simulation runs becomes a `Runner` with tasks in simulated time:
+```cpp
+Runner runner(lbm);
+runner.every(0.1_s, [&](Duration t) { wave.update(t); })   // at 0 s, then every 0.1 s of simulated time (breaking_waves)
+      .every_step([&](Duration t) { /* ... */ });           // every time step (liquid_metal)
+runner.run_for(20.0_s);                                     // or run(): until a task calls runner.stop() (stokes_drag)
+```
+A task gets the simulated time since the start. `run_for()` continues from where the last run ended, so phases follow one another: `set_gravity(...); runner.run_for(0.8_s);` (`cube_gravity`). `MovingPartsManager::run()` and `VideoRecorder::record()` run a `Runner` themselves.
 
 ---
 

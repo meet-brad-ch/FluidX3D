@@ -19,7 +19,7 @@ void main_setup() {
 		.vram(1000_mb));
 
 	sim.setup();
-	sim.configure_units(reentry_speed, Fluid::AIR, 0.05f); // the original's lattice speed
+	sim.configure_units(reentry_speed, Fluid::AIR, LatticeMach(0.0866f)); // the original's lattice speed 0.05
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);

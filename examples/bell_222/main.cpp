@@ -14,7 +14,6 @@ void main_setup() {
 	const Frequency rotor_speed = 348.0f / 60.0_s; // 348 rpm
 	const Speed tip_speed = rotor_speed * rotor_diameter * pif;
 	const Duration simulation_time = 2.0f / rotor_speed; // 2 revolutions of the main rotor
-	const uint32_t update_interval = 4u;
 
 	// Check for required STL files
 	const string body_path = get_resource_path("Bell-222-body.stl");
@@ -39,7 +38,7 @@ void main_setup() {
 		.vram(8000_mb));
 
 	sim.setup();
-	sim.configure_units(tip_speed, Fluid::AIR, 0.16f); // the original's lattice tip speed
+	sim.configure_units(tip_speed, Fluid::AIR, LatticeMach(0.277f)); // the original's lattice tip speed 0.16
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -61,15 +60,13 @@ void main_setup() {
 	// Main rotor - rotates around Z axis
 	parts.add(MovingPart("Bell-222-main.stl")
 		.set_rotation_axis(RotationAxis::Z)
-		.set_tip_speed(tip_speed)
-		.set_update_interval(update_interval));
+		.set_tip_speed(tip_speed));
 
 	// Tail rotor - rotates around X axis (reversed direction)
 	parts.add(MovingPart("Bell-222-back.stl")
 		.set_rotation_axis(RotationAxis::X)
 		.set_tip_speed(tip_speed)
-		.reverse_direction()
-		.set_update_interval(update_interval));
+		.reverse_direction());
 
 	parts.initialize();
 
@@ -80,9 +77,6 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time);
-	print_info(to_string(simulation_time.si(), 5u) + " seconds = " + to_string(lbm_T) + " time steps");
-
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	const Length W = domain_width; // camera positions from the domain's origin corner
 	VideoRecorder()

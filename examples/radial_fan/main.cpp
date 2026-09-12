@@ -13,7 +13,7 @@ void main_setup() {
 	const Length fan_diameter = 0.3_m;           // 30 cm fan
 	const Speed tip_speed = 30.0_mps;            // Blade tip speed
 	const Duration simulation_time = 1.0_s;      // 1 second of rotation
-	const uint32_t update_interval = 10u;
+	const Duration update_interval = 90_us;  // 10 time steps, as the original
 
 	// the fan fills half of the enclosure's width, near the floor
 	SimulationSetup sim(Domain::around(Model("FAN_Solid_Bottom.stl").length(fan_diameter))
@@ -50,9 +50,6 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time);
-	print_info(to_string(simulation_time.si(), 1u) + " seconds = " + to_string(total_timesteps) + " time steps");
-
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	const Length d = fan_diameter; // camera position from the domain's origin corner
 	VideoRecorder()

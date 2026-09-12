@@ -19,7 +19,7 @@ void main_setup() {
 		.vram(1000_mb));
 
 	sim.setup();
-	sim.configure_units(flight_speed, Fluid::AIR, 0.075f); // the original's lattice speed
+	sim.configure_units(flight_speed, Fluid::AIR, LatticeMach(0.13f)); // the original's lattice speed 0.075
 	sim.print_reynolds_number(Fluid::AIR);
 
 	const auto& r = sim.get_results();

@@ -14,7 +14,7 @@ void main_setup() { // cube with changing gravity; required extensions: FP16S, V
 
 	SimulationSetup sim(Domain::box(size, size, size).cell_size(size / 96.0f));
 	sim.setup();
-	sim.configure_units(speed, Fluid::WATER, lbm_speed);
+	sim.configure_units(speed, Fluid::WATER, LatticeMach(sqrtf(3.0f) * lbm_speed)); // the original's lattice speed
 
 	LBM lbm = sim.create_lbm_surface(speed * size / reynolds, g, sim.unit_scale().si_surface_tension(0.001f)); // the original lattice setup's
 
@@ -33,17 +33,17 @@ void main_setup() { // cube with changing gravity; required extensions: FP16S, V
 		const float3 f = sim.to_lbm_acceleration(a);
 		lbm.set_f(f.x, f.y, f.z);
 	};
-	lbm.run(0u); // initialize simulation
+	Runner runner(lbm);
 	while(true) { // main simulation loop
 		set_gravity({ none, none, -g });
-		lbm.run(sim.to_lbm_timesteps(0.8_s));
+		runner.run_for(0.8_s);
 		set_gravity({ none, g, none });
-		lbm.run(sim.to_lbm_timesteps(0.8_s));
+		runner.run_for(0.8_s);
 		set_gravity({ none, none, g });
-		lbm.run(sim.to_lbm_timesteps(0.8_s));
+		runner.run_for(0.8_s);
 		set_gravity({ none, -g, none });
-		lbm.run(sim.to_lbm_timesteps(0.65_s));
+		runner.run_for(0.65_s);
 		set_gravity({ none, none, none });
-		lbm.run(sim.to_lbm_timesteps(1.0_s));
+		runner.run_for(1.0_s);
 	}
 } /**/

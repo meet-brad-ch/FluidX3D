@@ -15,7 +15,7 @@ void main_setup() { // Taylor-Couette flow; required extensions: MOVING_BOUNDARI
 
 	SimulationSetup sim(Domain::box(width, width, height).cell_size(cell));
 	sim.setup();
-	sim.configure_units(surface_speed, Fluid::WATER, 0.25f);
+	sim.configure_units(surface_speed, Fluid::WATER, LatticeMach(0.433f)); // the original's lattice speed 0.25
 
 	LBM lbm = sim.create_lbm(Fluid::WATER);
 

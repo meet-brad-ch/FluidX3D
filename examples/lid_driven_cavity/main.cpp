@@ -12,7 +12,7 @@ void main_setup() { // lid-driven cavity; required extensions: MOVING_BOUNDARIES
 
 	SimulationSetup sim(Domain::box(cavity_size, cavity_size, cavity_size).cell_size(cell));
 	sim.setup();
-	sim.configure_units(lid_speed, Fluid::WATER, 0.1f);
+	sim.configure_units(lid_speed, Fluid::WATER);
 
 	LBM lbm = sim.create_lbm(lid_speed * (cavity_size - 2.0f * cell) / reynolds);
 

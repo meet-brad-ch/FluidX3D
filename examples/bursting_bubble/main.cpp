@@ -11,10 +11,10 @@ void main_setup() { // bursting bubble; required extensions: FP16C, VOLUME_FORCE
 
 	SimulationSetup sim(Domain::box(4.0f * d, 4.0f * d, 3.0f * d).vram(1000_mb)); // 275 x 275 x 206 cells, as the original
 	sim.setup();
-	// no flow sets the units, but the bubble's capillary speed sqrt(sigma/(rho*d)), in lattice units the original's with
-	// the lattice surface tension 0.0003
+	// no flow sets the units, but the bubble's capillary speed sqrt(sigma/(rho*d)); on the lattice it is the original's,
+	// sqrt(sigma/d) with the lattice surface tension 0.0003 and d in cells
 	const float cells_per_diameter = 0.25f * (float)sim.get_results().Nx;
-	sim.configure_units(sqrt(surface_tension / (water.density * d)), water, sqrtf(0.0003f / cells_per_diameter));
+	sim.configure_units(sqrt(surface_tension / (water.density * d)), water, LatticeMach(sqrtf(3.0f * 0.0003f / cells_per_diameter)));
 
 	LBM lbm = sim.create_lbm_surface(water, 9.81_mps2, surface_tension);
 

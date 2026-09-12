@@ -20,7 +20,7 @@ void main_setup() {
 		.cell_size(domain_width / 512.0f)); // 512 x 1024 x 256 cells, as the original
 
 	sim.setup();
-	sim.configure_units(wind_speed, Fluid::AIR, 0.07f);
+	sim.configure_units(wind_speed, Fluid::AIR, LatticeMach(0.121f)); // the original's lattice speed 0.07
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);

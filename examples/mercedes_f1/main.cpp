@@ -99,9 +99,6 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time);
-	print_info(to_string(simulation_time.si(), 2u) + " seconds = " + to_string(lbm_T) + " time steps");
-
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	const Length D = domain_length; // camera positions from the domain's origin corner
 	VideoRecorder()

@@ -122,6 +122,38 @@ private:
     float deg_ = 0.0f; // degrees: the core takes degrees (rotations, cameras), so they pass through unchanged
 };
 
+/// A rate of rotation, written as an angle per duration: 180_deg / 1.0_s is half a turn per second.
+class AngularSpeed {
+public:
+    constexpr AngularSpeed() = default;
+    static constexpr AngularSpeed from_deg_per_s(float deg_per_s) { AngularSpeed w; w.deg_per_s_ = deg_per_s; return w; }
+    constexpr float deg_per_s() const { return deg_per_s_; }
+    constexpr float rad_per_s() const { return (Angle::from_deg(deg_per_s_)).rad(); }
+    constexpr auto operator<=>(const AngularSpeed&) const = default;
+private:
+    float deg_per_s_ = 0.0f;
+};
+
+constexpr AngularSpeed operator/(Angle angle, Duration time) { return AngularSpeed::from_deg_per_s(angle.deg() / time.si()); }
+
+/// @brief How compressible the simulation makes the flow: the reference velocity (configure_units()) as a fraction of
+/// the lattice's speed of sound.
+///
+/// The LBM's speed of sound is not the fluid's: it is 1/sqrt(3) cells per time step, so this number sets the time step.
+/// A lower one is more accurate (the compressibility error grows as its square) and takes more time steps; 0.1 to 0.3 is
+/// usual. The default, about 0.17, is a reference velocity of 0.1 cells per time step.
+class LatticeMach {
+public:
+    constexpr LatticeMach() = default;
+    constexpr explicit LatticeMach(float mach) : lattice_speed_(mach * sound_speed) {}
+    constexpr float value() const { return lattice_speed_ / sound_speed; }
+    /// The reference velocity in cells per time step.
+    constexpr float lattice_speed() const { return lattice_speed_; }
+private:
+    static constexpr float sound_speed = 0.57735027f; // 1/sqrt(3) cells per time step
+    float lattice_speed_ = 0.1f;
+};
+
 // A distance in units of the model's reference length (set with Model::length()), e.g. 0.5_lengths.
 class ModelLengths {
 public:
@@ -161,6 +193,8 @@ FLUIDX3D_QUANTITY_LITERAL(_cm,    Length,             0.01f,       0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_mm,    Length,             0.001f,      0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_km,    Length,             1000.0f,     0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_s,     Duration,           1.0f,        0.0f)
+FLUIDX3D_QUANTITY_LITERAL(_ms,    Duration,           0.001f,      0.0f)
+FLUIDX3D_QUANTITY_LITERAL(_us,    Duration,           1.0E-6f,     0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_min,   Duration,           60.0f,       0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_Hz,    Frequency,          1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_mps,   Speed,              1.0f,        0.0f)

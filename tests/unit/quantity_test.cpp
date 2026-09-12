@@ -114,6 +114,30 @@ TEST(MemorySize, GigabytesAre1024Megabytes) {
     EXPECT_EQ(1_gb, 1024_mb);
 }
 
+static_assert(std::is_same_v<decltype(180.0_deg / 1.0_s), AngularSpeed>);
+static_assert(!Constructible<LatticeMach, Speed>);
+static_assert(!std::is_convertible_v<float, LatticeMach>);
+
+TEST(Duration, MillisecondsAndMicroseconds) {
+    EXPECT_FLOAT_EQ((2.2_ms).si(), 0.0022f);
+    EXPECT_FLOAT_EQ((90_us).si(), 9.0e-5f);
+}
+
+TEST(AngularSpeed, IsAnAnglePerDuration) {
+    const AngularSpeed half_turn_per_second = 180_deg / 1.0_s;
+    EXPECT_FLOAT_EQ(half_turn_per_second.deg_per_s(), 180.0f);
+    EXPECT_FLOAT_EQ(half_turn_per_second.rad_per_s(), 3.14159265f);
+    EXPECT_FLOAT_EQ((90_deg / 0.5_s).deg_per_s(), 180.0f);
+}
+
+TEST(LatticeMach, IsTheLatticeSpeedOverTheLatticeSpeedOfSound) {
+    EXPECT_EQ(LatticeMach().lattice_speed(), 0.1f); // the default: 0.1 cells per time step, exactly
+    EXPECT_NEAR(LatticeMach().value(), 0.17320508f, 1e-6f);
+    EXPECT_EQ(LatticeMach(1.0f).lattice_speed(), 0.57735027f); // the lattice speed of sound
+    EXPECT_NEAR(LatticeMach(0.13f).lattice_speed(), 0.075055f, 1e-6f);
+    EXPECT_NEAR(LatticeMach(0.075f * sqrtf(3.0f)).lattice_speed(), 0.075f, 1e-7f); // a lattice speed round trips
+}
+
 TEST(Quantity, SpecsUseDesignatedInitializers) {
     struct CameraSpec {
         Angle yaw{};

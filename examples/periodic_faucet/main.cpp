@@ -16,7 +16,7 @@ void main_setup() { // periodic faucet mass conservation test; required extensio
 
 	SimulationSetup sim(Domain::box(width, length, height).cell_size(cell));
 	sim.setup();
-	sim.configure_units(fall_speed, Fluid::WATER, lbm_fall_speed);
+	sim.configure_units(fall_speed, Fluid::WATER, LatticeMach(sqrtf(3.0f) * lbm_fall_speed)); // the original's lattice speed
 
 	LBM lbm = sim.create_lbm_surface(fall_speed * height / reynolds, gravity);
 

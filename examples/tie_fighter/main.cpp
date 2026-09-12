@@ -14,7 +14,7 @@ void main_setup() {
 	const Length height = 8.8_m;                 // TIE/LN (Wookieepedia): the wing panels' height (Z), the longest side
 	const Speed flow_velocity = 50.0_mps;        // Flow velocity
 	const Duration simulation_time = 5.0_s;      // 5 seconds of tumbling
-	const uint32_t update_interval = 28u;
+	const Duration update_interval = 2.2_ms;  // 28 time steps, as the original
 
 	// the height (Z) is 65 % of the domain width; the fighter's center is about 0.6 heights from the inlet
 	const Length domain_width = height / 0.65f;
@@ -24,7 +24,7 @@ void main_setup() {
 		.vram(1760_mb));
 
 	sim.setup();
-	sim.configure_units(flow_velocity, Fluid::AIR, 0.075f);
+	sim.configure_units(flow_velocity, Fluid::AIR, LatticeMach(0.13f)); // the original's lattice speed 0.075
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM
@@ -34,7 +34,7 @@ void main_setup() {
 	// Uses the same geometry as the main config, with arbitrary axis rotation
 	MovingPartsManager parts(sim, lbm);
 	parts.add(MovingPart(sim.model_file())
-		.set_tumble(float3(0.2f, 1.0f, 0.1f), radians(0.4032f))
+		.set_tumble(float3(0.2f, 1.0f, 0.1f), 180_deg / 1.0_s) // half a turn per second (the original: 0.4° per 28 time steps)
 		.set_update_interval(update_interval));
 	parts.initialize();
 
@@ -52,9 +52,6 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time);
-	print_info(to_string(simulation_time.si(), 1u) + " seconds = " + to_string(total_timesteps) + " time steps");
-
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	const Length W = domain_width; // camera positions from the domain's origin corner
 	VideoRecorder()
