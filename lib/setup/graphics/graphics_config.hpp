@@ -1,7 +1,13 @@
 #pragma once
 
 #include "setup/core/types.hpp"
+#include "setup/core/setup_error.hpp"
+#include "setup/graphics/camera_view.hpp"
 #include "lbm.hpp"
+#include "units.hpp"
+#include <optional>
+
+extern Units units; // global units object from lbm.cpp
 
 enum class FieldMode { // lbm.graphics.field_mode
     VELOCITY = 0,
@@ -20,7 +26,7 @@ enum class SliceMode { // lbm.graphics.slice_mode
     XY = 7
 };
 
-// Visualization modes of the LBM graphics; apply() writes them and turns camera autorotation off.
+// Visualization modes and the camera of the LBM graphics; apply() writes them and turns camera autorotation off.
 // Starts with no modes; inherit_modes() starts from the LBM's current modes instead.
 class GraphicsConfig {
 public:
@@ -80,17 +86,43 @@ public:
         return *this;
     }
 
+    /// The view the graphics start with (also for interactive graphics); units from configure_units().
+    GraphicsConfig& set_camera(const CameraView& view) {
+        camera_ = view;
+        return *this;
+    }
+
     void apply() {
 #ifdef GRAPHICS
         lbm_.graphics.visualization_modes = visualization_modes_;
         lbm_.graphics.field_mode = field_mode_;
         lbm_.graphics.slice_mode = slice_mode_;
         camera.autorotation = false;
+        if(camera_) apply_camera(lbm_, *camera_);
+#endif
+    }
+
+    /// Points the LBM's camera (the core's global camera) as this view, with the global units; exits with a message
+    /// for contradictory camera settings.
+    static void apply_camera(LBM& lbm, const CameraView& view) {
+#ifdef GRAPHICS
+        std::optional<CameraPose> pose;
+        try {
+            pose.emplace(view.pose(uint3(lbm.get_Nx(), lbm.get_Ny(), lbm.get_Nz()), units.si_x(1.0f)));
+        } catch(const SetupError& error) {
+            print_error(error.what()); // waits for Enter (Windows) and exits; nothing may follow it (C4702 with /GL)
+        }
+        if(pose->free) lbm.graphics.set_camera_free(pose->position, pose->azimuth, pose->elevation, pose->field_of_view);
+        else lbm.graphics.set_camera_centered(pose->azimuth, pose->elevation, pose->field_of_view, pose->zoom);
+#else
+        (void)lbm;
+        (void)view;
 #endif
     }
 
 private:
     LBM& lbm_;
+    std::optional<CameraView> camera_;
     int32_t visualization_modes_ = 0;
     int32_t field_mode_ = 0;
     int32_t slice_mode_ = 0;

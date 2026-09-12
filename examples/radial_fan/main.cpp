@@ -54,13 +54,11 @@ void main_setup() {
 	print_info(to_string(simulation_time.si(), 1u) + " seconds = " + to_string(total_timesteps) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
+	const Length d = fan_diameter; // camera position from the domain's origin corner
 	VideoRecorder()
-		.add(CameraConfig()
-			.set_free_position(0.353512f, -0.150326f, 1.643939f)
-			.set_angles(-25.0f, 61.0f)
-			.set_fov(100.0f))
+		.add(CameraView::at({ 1.70702f * d, 0.699348f * d, 1.42929f * d }, -25_deg, 61_deg))
 		.set_video_length(30.0_s)
-		.record(lbm, simulation_time, [&]() { parts.update(); }, update_interval);
+		.record(lbm, simulation_time, parts);
 #else
 	parts.run(simulation_time);
 #endif

@@ -35,7 +35,7 @@ void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGR
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	VideoRecorder()
-		.add(CameraConfig().set_angles(-40.0f, 20.0f).set_fov(78.0f).set_zoom(1.25f))
+		.add(CameraView::orbit(-40_deg, 20_deg).field_of_view(78_deg).view_height(domain_length / 1.25f))
 		.set_video_length(10.0_s)
 		.record(lbm, 10.0_s);
 #else

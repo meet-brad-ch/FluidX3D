@@ -14,7 +14,7 @@
 #include "setup/core/fluids.hpp"
 #include "setup/core/boundary_utils.hpp"
 
-#include "setup/config/camera_config.hpp"
+#include "setup/graphics/camera_view.hpp"
 
 #include "setup/domain/lattice.hpp"
 #include "setup/domain/geometry_scaler.hpp"

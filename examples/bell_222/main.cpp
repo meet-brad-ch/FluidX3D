@@ -84,33 +84,18 @@ void main_setup() {
 	print_info(to_string(simulation_time.si(), 5u) + " seconds = " + to_string(lbm_T) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
+	const Length W = domain_width; // camera positions from the domain's origin corner
 	VideoRecorder()
-		.add("a", CameraConfig()
-			.set_free_position(0.528513f, 0.102095f, 1.302283f)
-			.set_angles(16.0f, 47.0f)
-			.set_fov(96.0f))
-		.add("b", CameraConfig()
-			.set_free_position(0.0f, -0.114244f, 0.543265f)
-			.set_angles(90.0f, 36.0f)
-			.set_fov(120.0f))
-		.add("c", CameraConfig()
-			.set_free_position(0.557719f, -0.503388f, -0.591976f)
-			.set_angles(-43.0f, -21.0f)
-			.set_fov(75.0f))
-		.add("d", CameraConfig()
-			.set_angles(58.0f, 9.0f)
-			.set_fov(88.0f)
-			.set_zoom(1.648722f))
-		.add("e", CameraConfig()
-			.set_angles(0.0f, 90.0f)
-			.set_fov(100.0f)
-			.set_zoom(1.100000f))
-		.add("f", CameraConfig()
-			.set_free_position(0.001612f, 0.523852f, 0.992613f)
-			.set_angles(90.0f, 37.0f)
-			.set_fov(94.0f))
+		.add("a", CameraView::at({ 1.02851f * W, 0.722514f * W, 0.540685f * W }, 16_deg, 47_deg).field_of_view(96_deg))
+		.add("b", [W](float progress) { // turns with the main rotor through its two revolutions, as the original
+			return CameraView::at({ 0.5f * W, 0.462907f * W, 0.312979f * W }, 90_deg + progress * 720_deg, 36_deg).field_of_view(120_deg);
+		})
+		.add("c", CameraView::at({ 1.05772f * W, -0.0040656f * W, -0.0275928f * W }, -43_deg, -21_deg).field_of_view(75_deg))
+		.add("d", CameraView::orbit(58_deg, 9_deg).field_of_view(88_deg).view_height(1.2f * W / 1.648722f))
+		.add("e", CameraView::orbit(0_deg, 90_deg).view_height(1.2f * W / 1.1f))
+		.add("f", CameraView::at({ 0.501612f * W, 1.22862f * W, 0.447784f * W }, 90_deg, 37_deg).field_of_view(94_deg))
 		.set_video_length(10.0_s)
-		.record(lbm, simulation_time, [&]() { parts.update(); }, update_interval);
+		.record(lbm, simulation_time, parts);
 #else
 	parts.run(simulation_time);
 #endif

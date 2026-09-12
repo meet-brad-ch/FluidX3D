@@ -47,7 +47,7 @@ This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for
 | `MovingPartsManager`, `MovingPart` | Rotating and tumbling parts, re-voxelized while the simulation runs |
 | `ParticleManager` | Particle seeding in m (PARTICLES) |
 | `ForceAnalyzer` | Force in N and drag coefficient on the tracked object (FORCE_FIELD) |
-| `GraphicsConfig`, `VideoRecorder`, `CameraConfig` | Visualization modes; video frames from several cameras |
+| `GraphicsConfig`, `VideoRecorder`, `CameraView` | Visualization modes; video frames from several cameras, placed in metres and degrees, fixed or moving |
 
 ```cpp
 #include "defines.hpp"

@@ -70,21 +70,13 @@ void main_setup() {
 	print_info(to_string(simulation_time.si(), 3u) + " seconds = " + to_string(lbm_T) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
+	const Length W = domain_width; // camera positions from the domain's origin corner
 	VideoRecorder()
-		.add("front", CameraConfig()
-			.set_free_position(0.192778f, -0.669183f, 0.657584f)
-			.set_angles(-77.0f, 27.0f)
-			.set_fov(100.0f))
-		.add("bottom", CameraConfig()
-			.set_free_position(0.224926f, -0.594332f, -0.277894f)
-			.set_angles(-65.0f, -14.0f)
-			.set_fov(100.0f))
-		.add("back", CameraConfig()
-			.set_free_position(0.0f, 0.650189f, 1.461048f)
-			.set_angles(90.0f, 40.0f)
-			.set_fov(100.0f))
+		.add("front", CameraView::at({ 0.692778f * W, -0.135346f * W, 0.289396f * W }, -77_deg, 27_deg))
+		.add("bottom", CameraView::at({ 0.724926f * W, -0.0754656f * W, 0.0555265f * W }, -65_deg, -14_deg))
+		.add("back", CameraView::at({ 0.5f * W, 0.920151f * W, 0.490262f * W }, 90_deg, 40_deg))
 		.set_video_length(5.0_s)
-		.record(lbm, simulation_time, [&]() { parts.update(); }, update_interval);
+		.record(lbm, simulation_time, parts);
 #else
 	parts.run(simulation_time);
 #endif

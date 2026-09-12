@@ -21,6 +21,7 @@ BASELINE rho_mean 1
 BASELINE vis_modes 18
 BASELINE field_mode 0
 BASELINE slice_mode 0
-BASELINE camera_angles 1.5708 3.14159 100
-BASELINE camera_zoom 1.20805
-BASELINE camera_free 0
+BASELINE camera_angles 0.20944 3.03687 22
+BASELINE camera_zoom 1e+16
+BASELINE camera_free 1
+BASELINE camera_pos 146.421 -788.639 84.0867
