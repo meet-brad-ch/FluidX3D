@@ -52,7 +52,12 @@ function(add_fluidx3d_example)
     )
 
     # X11 libraries only on Unix-like systems
-    if(UNIX)
+    if(APPLE)
+        # macOS: X11 from XQuartz
+        target_link_directories(${EXAMPLE_NAME} PRIVATE
+            /opt/X11/lib
+        )
+    elseif(UNIX)
         target_link_directories(${EXAMPLE_NAME} PRIVATE
             ${FLUIDX3D_X11_DIR}/lib
         )
