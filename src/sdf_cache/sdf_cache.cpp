@@ -309,9 +309,9 @@ std::string SDFCacheManager::generate_sdf(const std::string& stl_path, uint32_t 
         std::cout << dx << " m" << std::endl;
     }
 
-    // Generate the SDF using SDFGen's GPU-accelerated unified interface
+    // Generate the SDF using SDFGen's unified interface (GPU, falls back to CPU if the GPU fails)
     Array3f phi_grid;
-    sdfgen::make_level_set3(faceList, vertList, min_box, dx, sdf_nx, sdf_ny, sdf_nz, phi_grid, 1, sdfgen::HardwareBackend::GPU);
+    sdfgen::make_level_set3(faceList, vertList, min_box, dx, sdf_nx, sdf_ny, sdf_nz, phi_grid, 1, sdfgen::HardwareBackend::Auto);
 
     // Generate output filename
     fs::path stl_file(stl_path);
