@@ -3,7 +3,7 @@
 // Setup API: one include for all components. Typical flow (see porting_guide.md and the examples):
 //   SimulationSetup sim(SimulationConfig("mesh.stl").set_vram_mb(2000u));
 //   sim.setup();
-//   sim.configure_units(1.0f, Fluid::AIR); // reference velocity in m/s
+//   sim.configure_units(1.0_mps, Fluid::AIR); // reference velocity
 //   LBM lbm = sim.create_lbm(Fluid::AIR);
 //   sim.voxelize(lbm);
 //   BoundaryBuilder(lbm).set_solid_floor().set_open_boundaries().initialize_velocity_y(1.0f).apply();

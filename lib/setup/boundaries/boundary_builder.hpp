@@ -1,114 +1,120 @@
 #pragma once
 
 #include "setup/core/types.hpp"
+#include "setup/core/quantity.hpp"
 #include "setup/core/boundary_utils.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
 #include "lbm.hpp"
 #include "units.hpp"
+#include <optional>
 
 extern Units units; // global units object from lbm.cpp
 
-// Domain boundaries and initial velocity in SI units; apply() writes them to the grid.
-// Order per cell: floor, ceiling, walls, open faces (TYPE_E), then velocities in non-solid cells.
+/// @brief Domain boundaries and the initial velocity in physical units; apply() writes them to the grid.
+///
+/// Speeds and heights are converted with the global units (SimulationSetup::configure_units() first).
+/// Order per cell: floor, ceiling, walls, open faces (TYPE_E), then the velocities of the non-solid cells.
+/// @code
+/// BoundaryBuilder(lbm).set_solid_floor().set_open_boundaries().initialize_velocity_y(10.0_mps).apply();
+/// @endcode
 class BoundaryBuilder {
 public:
+    /// @param lbm the LBM whose flags and velocities are set
     explicit BoundaryBuilder(LBM& lbm) : lbm_(lbm) {}
 
-    BoundaryBuilder& set_solid_floor(uchar flag = TYPE_S) { // z = 0
+    /// Solid floor (z = 0) with this flag.
+    BoundaryBuilder& set_solid_floor(uchar flag = TYPE_S) {
         floor_flag_ = flag;
         apply_floor_ = true;
         return *this;
     }
 
-    BoundaryBuilder& set_solid_ceiling(uchar flag = TYPE_S) { // z = Nz-1
+    /// Solid ceiling (z = Nz-1) with this flag.
+    BoundaryBuilder& set_solid_ceiling(uchar flag = TYPE_S) {
         ceiling_flag_ = flag;
         apply_ceiling_ = true;
         return *this;
     }
 
-    BoundaryBuilder& set_solid_walls(uchar flag = TYPE_S) { // x and y faces
+    /// Solid walls on the four x and y faces with this flag.
+    BoundaryBuilder& set_solid_walls(uchar flag = TYPE_S) {
         walls_flag_ = flag;
         apply_walls_ = true;
         return *this;
     }
 
-    // all faces except the floor open (wind tunnel)
+    /// All faces except the floor open (wind tunnel).
     BoundaryBuilder& set_open_boundaries() {
         open_x_ = open_y_ = open_z_max_ = true;
         return *this;
     }
 
+    /// All six faces open.
     BoundaryBuilder& set_all_open() {
         open_x_ = open_y_ = open_z_min_ = open_z_max_ = true;
         return *this;
     }
 
-    // all walls solid; moving_face slides at velocity_mps along its first tangential axis (X faces: +y, Y and Z faces: +x)
-    BoundaryBuilder& preset_lid_driven_cavity(Face moving_face, float32_t velocity_mps) {
+    /// All walls solid; moving_face slides at this speed along its first tangential axis (X faces: +y, Y and Z faces: +x).
+    BoundaryBuilder& preset_lid_driven_cavity(Face moving_face, Speed speed) {
         set_solid_floor();
         set_solid_ceiling();
         set_solid_walls();
-        has_moving_lid_ = true;
-        lid_face_ = moving_face;
-        lid_velocity_ = velocity_mps;
+        lid_ = Lid{ moving_face, speed };
         return *this;
     }
 
-    // initial velocity in m/s in all non-solid cells
-    BoundaryBuilder& initialize_velocity_x(float32_t si_velocity) {
-        init_u_x_ = si_velocity;
-        has_init_u_x_ = true;
+    /// Initial velocity along x in all non-solid cells.
+    BoundaryBuilder& initialize_velocity_x(Speed u) {
+        init_u_x_ = u;
         return *this;
     }
 
-    BoundaryBuilder& initialize_velocity_y(float32_t si_velocity) {
-        init_u_y_ = si_velocity;
-        has_init_u_y_ = true;
+    /// Initial velocity along y in all non-solid cells.
+    BoundaryBuilder& initialize_velocity_y(Speed u) {
+        init_u_y_ = u;
         return *this;
     }
 
-    BoundaryBuilder& initialize_velocity_z(float32_t si_velocity) {
-        init_u_z_ = si_velocity;
-        has_init_u_z_ = true;
+    /// Initial velocity along z in all non-solid cells.
+    BoundaryBuilder& initialize_velocity_z(Speed u) {
+        init_u_z_ = u;
         return *this;
     }
 
-    BoundaryBuilder& initialize_velocity(float32_t si_vx, float32_t si_vy, float32_t si_vz) {
-        init_u_x_ = si_vx; has_init_u_x_ = true;
-        init_u_y_ = si_vy; has_init_u_y_ = true;
-        init_u_z_ = si_vz; has_init_u_z_ = true;
+    /// Initial velocity in all non-solid cells.
+    BoundaryBuilder& initialize_velocity(Speed ux, Speed uy, Speed uz) {
+        init_u_x_ = ux;
+        init_u_y_ = uy;
+        init_u_z_ = uz;
         return *this;
     }
 
-    // atmospheric boundary layer u(z) = u_ref*(z/z_ref)^alpha, in m/s and m
-    // (alpha: 0.10 sea, 0.143 open terrain, 0.20 suburbs, 0.25-0.40 urban)
-    BoundaryBuilder& set_wind_profile_power_law(float32_t si_reference_velocity,
-                                                 float32_t si_reference_height_m,
-                                                 float32_t alpha = 0.143f) {
-        wind_profile_velocity_ = si_reference_velocity;
-        wind_profile_height_ = si_reference_height_m;
-        wind_profile_alpha_ = alpha;
-        has_wind_profile_ = true;
+    /// @brief Atmospheric boundary layer u(z) = u_ref*(z/z_ref)^alpha in the non-solid cells above the floor.
+    /// @param alpha power-law exponent: 0.10 sea, 0.143 open terrain, 0.20 suburbs, 0.25-0.40 urban
+    BoundaryBuilder& set_wind_profile_power_law(Speed reference_speed, Length reference_height, float32_t alpha = 0.143f) {
+        wind_ = WindProfile{ reference_speed, reference_height, alpha };
         return *this;
     }
 
-    // face the wind comes from (default Y_MIN)
+    /// The face the wind comes from (default Y_MIN).
     BoundaryBuilder& set_wind_direction(Face direction) {
         wind_direction_ = direction;
         return *this;
     }
 
+    /// Writes the boundaries and velocities to the grid.
     void apply() {
         const uint32_t Nx = lbm_.get_Nx();
         const uint32_t Ny = lbm_.get_Ny();
         const uint32_t Nz = lbm_.get_Nz();
 
-        const float32_t lbm_init_u_x = has_init_u_x_ ? units.u(init_u_x_) : 0.0f;
-        const float32_t lbm_init_u_y = has_init_u_y_ ? units.u(init_u_y_) : 0.0f;
-        const float32_t lbm_init_u_z = has_init_u_z_ ? units.u(init_u_z_) : 0.0f;
-        const float32_t lbm_lid_velocity = has_moving_lid_ ? units.u(lid_velocity_) : 0.0f;
-        const float32_t lbm_wind_ref_velocity = has_wind_profile_ ? units.u(wind_profile_velocity_) : 0.0f;
-        const float32_t lbm_wind_ref_height = has_wind_profile_ ? units.x(wind_profile_height_) : 1.0f;
+        const float32_t lbm_init_u_x = init_u_x_ ? units.u(init_u_x_->si()) : 0.0f;
+        const float32_t lbm_init_u_y = init_u_y_ ? units.u(init_u_y_->si()) : 0.0f;
+        const float32_t lbm_init_u_z = init_u_z_ ? units.u(init_u_z_->si()) : 0.0f;
+        const float32_t lbm_lid_velocity = lid_ ? units.u(lid_->speed.si()) : 0.0f;
+        const float32_t lbm_wind_ref_velocity = wind_ ? units.u(wind_->reference_speed.si()) : 0.0f;
+        const float32_t lbm_wind_ref_height = wind_ ? units.x(wind_->reference_height.si()) : 1.0f;
 
         parallel_for(lbm_.get_N(), [&](uint64_t n) {
             uint32_t x = 0u, y = 0u, z = 0u;
@@ -125,14 +131,14 @@ public:
             if (is_open_boundary) lbm_.flags[n] = TYPE_E;
 
             if (!(lbm_.flags[n] & TYPE_S)) {
-                if (has_init_u_x_) lbm_.u.x[n] = lbm_init_u_x;
-                if (has_init_u_y_) lbm_.u.y[n] = lbm_init_u_y;
-                if (has_init_u_z_) lbm_.u.z[n] = lbm_init_u_z;
+                if (init_u_x_) lbm_.u.x[n] = lbm_init_u_x;
+                if (init_u_y_) lbm_.u.y[n] = lbm_init_u_y;
+                if (init_u_z_) lbm_.u.z[n] = lbm_init_u_z;
             }
 
-            if (has_wind_profile_ && !(lbm_.flags[n] & TYPE_S) && z > 0u) {
+            if (wind_ && !(lbm_.flags[n] & TYPE_S) && z > 0u) {
                 const float32_t height_ratio = (float32_t)z / lbm_wind_ref_height;
-                const float32_t wind_velocity = lbm_wind_ref_velocity * pow(height_ratio, wind_profile_alpha_);
+                const float32_t wind_velocity = lbm_wind_ref_velocity * pow(height_ratio, wind_->alpha);
                 switch (wind_direction_) {
                     case Face::X_MIN: lbm_.u.x[n] = wind_velocity; break;
                     case Face::X_MAX: lbm_.u.x[n] = -wind_velocity; break;
@@ -143,8 +149,8 @@ public:
                 }
             }
 
-            if (has_moving_lid_ && boundary_utils::is_on_face(x, y, z, Nx, Ny, Nz, lid_face_)) {
-                if (lid_face_ == Face::X_MIN || lid_face_ == Face::X_MAX) {
+            if (lid_ && boundary_utils::is_on_face(x, y, z, Nx, Ny, Nz, lid_->face)) {
+                if (lid_->face == Face::X_MIN || lid_->face == Face::X_MAX) {
                     lbm_.u.y[n] = lbm_lid_velocity;
                 } else {
                     lbm_.u.x[n] = lbm_lid_velocity;
@@ -154,6 +160,9 @@ public:
     }
 
 private:
+    struct Lid { Face face; Speed speed; };                                        ///< the moving wall of a lid-driven cavity
+    struct WindProfile { Speed reference_speed; Length reference_height; float32_t alpha; }; ///< power-law wind
+
     LBM& lbm_;
 
     uchar floor_flag_ = TYPE_S;
@@ -163,25 +172,13 @@ private:
     bool apply_ceiling_ = false;
     bool apply_walls_ = false;
 
-    bool has_moving_lid_ = false;
-    Face lid_face_ = Face::Z_MAX;
-    float32_t lid_velocity_ = 0.0f; // m/s
-
-    bool open_x_ = false; // both x faces
-    bool open_y_ = false; // both y faces
+    bool open_x_ = false; ///< both x faces
+    bool open_y_ = false; ///< both y faces
     bool open_z_min_ = false;
     bool open_z_max_ = false;
 
-    bool has_init_u_x_ = false;
-    bool has_init_u_y_ = false;
-    bool has_init_u_z_ = false;
-    float32_t init_u_x_ = 0.0f; // m/s
-    float32_t init_u_y_ = 0.0f;
-    float32_t init_u_z_ = 0.0f;
-
-    bool has_wind_profile_ = false;
-    float32_t wind_profile_velocity_ = 0.0f; // m/s
-    float32_t wind_profile_height_ = 10.0f;  // m
-    float32_t wind_profile_alpha_ = 0.143f;
+    std::optional<Speed> init_u_x_, init_u_y_, init_u_z_;
+    std::optional<Lid> lid_;
+    std::optional<WindProfile> wind_;
     Face wind_direction_ = Face::Y_MIN;
 };

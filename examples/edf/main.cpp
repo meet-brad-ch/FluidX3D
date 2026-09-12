@@ -12,8 +12,8 @@
 
 void main_setup() {
 	const Length fan_diameter = 0.09_m;          // 90 mm EDF
-	const float32_t tip_speed_mps = 100.0f;      // Blade tip speed
-	const float32_t inlet_velocity_mps = 30.0f;  // 30% of tip speed
+	const Speed tip_speed = 100.0_mps;           // Blade tip speed
+	const Speed inlet_velocity = 30.0_mps;       // 30% of tip speed
 	const float32_t simulation_time_s = 0.5f;
 	const uint32_t update_interval = 4u;
 
@@ -25,7 +25,7 @@ void main_setup() {
 		.vram(8000_mb));
 
 	sim.setup();
-	sim.configure_units(tip_speed_mps, Fluid::AIR);
+	sim.configure_units(tip_speed, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM
@@ -37,14 +37,14 @@ void main_setup() {
 	// Configure boundaries - open with inlet velocity
 	BoundaryBuilder(lbm)
 		.set_all_open()
-		.initialize_velocity_y(inlet_velocity_mps)
+		.initialize_velocity_y(inlet_velocity)
 		.apply();
 
 	// Configure rotor with different Y offset (difference from stator: -0.41 - (-0.2) = -0.21)
 	MovingPartsManager parts(sim, lbm);
 	parts.add(MovingPart("edf_v391.stl")
 		.set_rotation_axis(RotationAxis::Y)
-		.set_tip_speed_mps(tip_speed_mps)
+		.set_tip_speed(tip_speed)
 		.set_offset_ratio(0.0f, -0.21f, 0.0f)
 		.set_update_interval(update_interval));
 	parts.initialize();

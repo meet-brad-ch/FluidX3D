@@ -24,7 +24,7 @@ The Setup API provides:
 | grid from a mesh plus margins | `Domain::around(Model("hill.stl")).clearances(2_m, 500_m, 100_m).cell_size(8_m)` |
 | `resolution(...)` + `lbm_length = 0.65f*lbm_N.y` | `Domain::around(Model(file).length(2.4_m)).size(x, y, z).vram(1000_mb)` |
 | `read_stl(...)` + `mesh->translate(...)` | `.gap_to_inlet(...)`, `.gap_to_floor(...)` or `.model_offset(...)` |
-| `units.set_m_kg_s(...)` | `sim.configure_units(velocity_mps, Fluid::AIR, lbm_u)` |
+| `units.set_m_kg_s(...)` | `sim.configure_units(10.0_mps, Fluid::AIR, lbm_u)` |
 | `lbm.voxelize_mesh_on_device(mesh)` | `sim.voxelize(lbm)` |
 | `parallel_for` boundary setup | `BoundaryBuilder(lbm).set_solid_floor()...` |
 | `lbm.graphics.visualization_modes = ...` | `GraphicsConfig(lbm).show_surface()...` |
@@ -88,7 +88,7 @@ void main_setup() {
 #include "setup/setup.hpp"
 
 void main_setup() {
-    const float32_t flow_velocity_mps = 1.0f;
+    const Speed flow_velocity = 1.0_mps;
     const Length cow_length = 2.4_m;
     const Length domain_length = cow_length / 0.65f; // the cow is 65 % of the domain length
 
@@ -99,7 +99,7 @@ void main_setup() {
         .vram(1000_mb));
 
     sim.setup();
-    sim.configure_units(flow_velocity_mps, Fluid::AIR, 0.075f);
+    sim.configure_units(flow_velocity, Fluid::AIR, 0.075f);
     sim.print_reynolds_number(Fluid::AIR);
 
     LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -108,7 +108,7 @@ void main_setup() {
     BoundaryBuilder(lbm)
         .set_solid_floor()
         .set_open_boundaries()
-        .initialize_velocity_y(flow_velocity_mps)
+        .initialize_velocity_y(flow_velocity)
         .apply();
 
     GraphicsConfig(lbm)
@@ -173,7 +173,7 @@ Placement (with `size()` only):
 
 ```cpp
 sim.setup();                                        // plans the domain
-sim.configure_units(flow_velocity_mps, Fluid::AIR); // optional third argument: lattice velocity (default 0.1)
+sim.configure_units(flow_velocity, Fluid::AIR); // optional third argument: lattice velocity (default 0.1)
 LBM lbm = sim.create_lbm(Fluid::AIR);               // or create_lbm_surface / create_lbm_thermal / create_lbm_particles_reynolds
 ```
 The reference length comes from the domain (the box's longest side, or the model's `length()`), so there is no separate length to pass.
@@ -198,7 +198,7 @@ parallel_for(lbm.get_N(), [&](ulong n) {
 BoundaryBuilder(lbm)
     .set_solid_floor()
     .set_open_boundaries()
-    .initialize_velocity_y(flow_velocity_mps)
+    .initialize_velocity_y(flow_velocity)
     .apply();
 ```
 Free surfaces use `SurfaceBuilder`, in metres and m/s (`hydraulic_jump`):

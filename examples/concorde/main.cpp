@@ -9,7 +9,7 @@
 
 void main_setup() {
 	const Length fuselage_length = 62.0_m;
-	const float32_t cruise_speed_mps = 300.0f / 3.6f;
+	const Speed cruise_speed = 300.0_kmh;
 
 	// the fuselage (Y) is 56 % of the domain length
 	const Length domain_length = fuselage_length / 0.56f;
@@ -19,7 +19,7 @@ void main_setup() {
 		.vram(6084_mb));
 
 	sim.setup();
-	sim.configure_units(cruise_speed_mps, Fluid::AIR);
+	sim.configure_units(cruise_speed, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -27,7 +27,7 @@ void main_setup() {
 
 	BoundaryBuilder(lbm)
 		.set_open_boundaries()
-		.initialize_velocity_y(cruise_speed_mps)
+		.initialize_velocity_y(cruise_speed)
 		.apply();
 
 	GraphicsConfig(lbm)

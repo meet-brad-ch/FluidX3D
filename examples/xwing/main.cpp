@@ -8,7 +8,7 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t flight_speed_mps = 100.0f;
+	const Speed flight_speed = 100.0_mps;
 
 	SimulationSetup sim(SimulationConfig("X-Wing.stl")
 		.set_domain_aspect_ratio(1.0f, 2.0f, 0.5f)
@@ -19,7 +19,7 @@ void main_setup() {
 		.set_reference_axis(SimulationConfig::ReferenceAxis::X));
 
 	sim.setup();
-	sim.configure_units(flight_speed_mps, Fluid::AIR);
+	sim.configure_units(flight_speed, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -27,7 +27,7 @@ void main_setup() {
 
 	BoundaryBuilder(lbm)
 		.set_open_boundaries()
-		.initialize_velocity_y(flight_speed_mps)
+		.initialize_velocity_y(flight_speed)
 		.apply();
 
 	GraphicsConfig(lbm)

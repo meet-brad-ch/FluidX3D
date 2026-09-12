@@ -9,9 +9,9 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t rotor_diameter_m = 12.12f;
-	const float32_t rotor_rpm = 348.0f;
-	const float32_t tip_speed_mps = rotor_rpm / 60.0f * rotor_diameter_m * pif;
+	const Length rotor_diameter = 12.12_m;
+	const Frequency rotor_speed = 348.0f / 60.0_s; // 348 rpm
+	const Speed tip_speed = rotor_speed * rotor_diameter * pif;
 	const float32_t simulation_time_s = 0.34483f;  // 2 revolutions of main rotor
 	const uint32_t update_interval = 4u;
 
@@ -39,7 +39,7 @@ void main_setup() {
 		.set_reference_axis(SimulationConfig::ReferenceAxis::X));
 
 	sim.setup();
-	sim.configure_units(tip_speed_mps, Fluid::AIR);
+	sim.configure_units(tip_speed, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -48,11 +48,11 @@ void main_setup() {
 	sim.voxelize(lbm);
 
 	// Configure boundaries - forward flight with slight descent
-	const float32_t forward_velocity_mps = 0.2f * tip_speed_mps;
-	const float32_t descent_velocity_mps = -0.1f * tip_speed_mps;
+	const Speed forward_velocity = 0.2f * tip_speed;
+	const Speed descent_velocity = -0.1f * tip_speed;
 	BoundaryBuilder(lbm)
 		.set_open_boundaries()
-		.initialize_velocity(0.0f, forward_velocity_mps, descent_velocity_mps)
+		.initialize_velocity(0.0_mps, forward_velocity, descent_velocity)
 		.apply();
 
 	// Configure rotors
@@ -61,13 +61,13 @@ void main_setup() {
 	// Main rotor - rotates around Z axis
 	parts.add(MovingPart("Bell-222-main.stl")
 		.set_rotation_axis(RotationAxis::Z)
-		.set_tip_speed_mps(tip_speed_mps)
+		.set_tip_speed(tip_speed)
 		.set_update_interval(update_interval));
 
 	// Tail rotor - rotates around X axis (reversed direction)
 	parts.add(MovingPart("Bell-222-back.stl")
 		.set_rotation_axis(RotationAxis::X)
-		.set_tip_speed_mps(tip_speed_mps)
+		.set_tip_speed(tip_speed)
 		.reverse_direction()
 		.set_update_interval(update_interval));
 

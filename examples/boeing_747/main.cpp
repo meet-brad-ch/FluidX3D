@@ -9,7 +9,7 @@
 
 void main_setup() {
 	const Length fuselage_length = 70.7_m;
-	const float32_t cruise_speed_mps = 250.0f;
+	const Speed cruise_speed = 250.0_mps;
 
 	// the aircraft (its size along X) is as wide as the domain
 	SimulationSetup sim(Domain::around(Model("techtris_airplane.stl").angle_of_attack(-15_deg).length(fuselage_length, Axis::X).repair_mesh())
@@ -18,7 +18,7 @@ void main_setup() {
 		.vram(880_mb));
 
 	sim.setup();
-	sim.configure_units(cruise_speed_mps, Fluid::AIR);
+	sim.configure_units(cruise_speed, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -26,7 +26,7 @@ void main_setup() {
 
 	BoundaryBuilder(lbm)
 		.set_open_boundaries()
-		.initialize_velocity_y(cruise_speed_mps)
+		.initialize_velocity_y(cruise_speed)
 		.apply();
 
 	GraphicsConfig(lbm)

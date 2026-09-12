@@ -10,7 +10,7 @@
 
 void main_setup() {
 	const Length wingspan = 11.0_m;
-	const float32_t flight_speed_mps = 226.0f / 3.6f;  // 226 km/h
+	const Speed flight_speed = 226.0_kmh;
 	const float32_t simulation_time_s = 1.0f;
 	const uint32_t update_interval = 4u;
 
@@ -36,7 +36,7 @@ void main_setup() {
 		.vram(8000_mb));
 
 	sim.setup();
-	sim.configure_units(flight_speed_mps, Fluid::AIR);
+	sim.configure_units(flight_speed, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -47,14 +47,14 @@ void main_setup() {
 	// Configure boundaries
 	BoundaryBuilder(lbm)
 		.set_open_boundaries()
-		.initialize_velocity_y(flight_speed_mps)
+		.initialize_velocity_y(flight_speed)
 		.apply();
 
 	// Configure propeller
 	MovingPartsManager parts(sim, lbm);
 	parts.add(MovingPart("Cessna-172-Skyhawk-rotor.stl")
 		.set_rotation_axis(RotationAxis::Y)
-		.set_tip_speed_mps(flight_speed_mps)
+		.set_tip_speed(flight_speed)
 		.reverse_direction()
 		.set_update_interval(update_interval));
 	parts.initialize();

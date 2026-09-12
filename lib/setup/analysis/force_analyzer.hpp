@@ -1,6 +1,8 @@
 #pragma once
 
 #include "setup/core/types.hpp"
+#include "setup/core/quantity.hpp"
+#include "setup/core/fluids.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
 #include "lbm.hpp"
 #include "units.hpp"
@@ -14,18 +16,21 @@ public:
     explicit ForceAnalyzer(LBM& lbm, uchar flag_marker = TYPE_S | TYPE_X)
         : lbm_(lbm), flag_marker_(flag_marker) {}
 
-    ForceAnalyzer& set_reference_area(float32_t si_area_m2) { // usually the frontal area
-        reference_area_ = si_area_m2;
+    /// The area of the drag coefficient, usually the frontal area.
+    ForceAnalyzer& set_reference_area(Area area) {
+        reference_area_ = area.si();
         return *this;
     }
 
-    ForceAnalyzer& set_reference_velocity(float32_t si_velocity) { // m/s, usually the free stream
-        reference_velocity_ = si_velocity;
+    /// The velocity of the drag coefficient, usually the free stream.
+    ForceAnalyzer& set_reference_velocity(Speed velocity) {
+        reference_velocity_ = velocity.si();
         return *this;
     }
 
-    ForceAnalyzer& set_fluid_density(float32_t si_density = 1.225f) { // kg/m³
-        fluid_density_ = si_density;
+    /// The fluid, for its density (default: air).
+    ForceAnalyzer& set_fluid(const FluidProperties& fluid) {
+        fluid_density_ = fluid.density;
         return *this;
     }
 

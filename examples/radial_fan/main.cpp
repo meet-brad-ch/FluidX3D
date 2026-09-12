@@ -11,7 +11,7 @@
 
 void main_setup() {
 	const Length fan_diameter = 0.3_m;           // 30 cm fan
-	const float32_t tip_speed_mps = 30.0f;       // Blade tip speed
+	const Speed tip_speed = 30.0_mps;            // Blade tip speed
 	const float32_t simulation_time_s = 1.0f;    // 1 second of rotation
 	const uint32_t update_interval = 10u;
 
@@ -22,7 +22,7 @@ void main_setup() {
 		.vram(181_mb));
 
 	sim.setup();
-	sim.configure_units(tip_speed_mps, Fluid::AIR);
+	sim.configure_units(tip_speed, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM
@@ -38,7 +38,7 @@ void main_setup() {
 	MovingPartsManager parts(sim, lbm);
 	parts.add(MovingPart("FAN_Solid_Bottom.stl")
 		.set_rotation_axis(RotationAxis::Z)
-		.set_tip_speed_mps(tip_speed_mps)
+		.set_tip_speed(tip_speed)
 		.set_update_interval(update_interval));
 	parts.initialize();
 

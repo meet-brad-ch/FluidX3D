@@ -16,14 +16,14 @@ void main_setup() { // dam break; required extensions: FP16S, VOLUME_FORCE, SURF
 	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).vram(2000_mb));
 
 	sim.setup();
-	const float front_speed_mps = sqrt(2.0f*9.81f*water_height.si()); // dam-break front speed, the fastest velocity in the flow
-	sim.configure_units(front_speed_mps, Fluid::WATER, 0.28f); // front speed in LBM units as in the original lattice setup: sqrt(2*0.0002*192)
+	const Speed front_speed = sqrt(2.0f*9.81_mps2*water_height); // dam-break front speed, the fastest velocity in the flow
+	sim.configure_units(front_speed, Fluid::WATER, 0.28f); // front speed in LBM units as in the original lattice setup: sqrt(2*0.0002*192)
 
 	// create LBM for free surface simulation
 	// Reynolds number of the original lattice setup (front speed, water height 192 cells, viscosity 0.005);
 	// water's own viscosity (Reynolds number about 3E6) would need a much finer grid
 	const float reynolds = sqrt(2.0f*0.0002f*192.0f)*192.0f/0.005f; // about 10600
-	const float kinematic_viscosity_m2ps = front_speed_mps*water_height.si()/reynolds;
+	const float kinematic_viscosity_m2ps = front_speed.si()*water_height.si()/reynolds;
 	LBM lbm = sim.create_lbm_surface(kinematic_viscosity_m2ps, 9.81f);
 
 	// water column at the y = 0 wall

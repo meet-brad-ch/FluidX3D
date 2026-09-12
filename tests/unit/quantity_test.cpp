@@ -1,6 +1,7 @@
 #include "setup/core/quantity.hpp"
 
 #include <gtest/gtest.h>
+#include <cmath>
 #include <type_traits>
 
 namespace {
@@ -18,6 +19,11 @@ static_assert(std::is_same_v<decltype(1.0_kgpm3 * 1.0_mps2 * 1.0_m), Pressure>);
 static_assert(std::is_same_v<decltype(1.0_m / 1.0_m), float>);
 static_assert(std::is_same_v<decltype(1.0f / 1.0_s), Frequency>);
 static_assert(std::is_same_v<decltype(1.0_m3ps / (1.0_m * 1.0_m)), Speed>); // flow rate through an area
+static_assert(std::is_same_v<decltype(sqrt(1.0_mps2 * 1.0_m)), Speed>);    // shallow-water wave speed sqrt(g*h)
+
+template<typename Q> concept HasSqrt = requires(Q q) { sqrt(q); };
+static_assert(HasSqrt<Area>);
+static_assert(!HasSqrt<Length>); // m^(1/2) is not a quantity
 
 static_assert(Addable<Length, Length>);
 static_assert(!Addable<Length, Speed>);
@@ -66,6 +72,16 @@ TEST(Quantity, ArithmeticCombinesDimensions) {
     EXPECT_FLOAT_EQ(p.si(), 19620.0f);
     const float reynolds = 2.0_m * 1.0_mps / 1.48e-5_m2ps;
     EXPECT_NEAR(reynolds, 135135.1f, 0.1f);
+}
+
+TEST(Quantity, SquareRootHalvesTheDimension) {
+    EXPECT_FLOAT_EQ(sqrt(4.0_m * 1.0_m).si(), 2.0f);
+    EXPECT_EQ(sqrt(2.0f * 9.81_mps2 * 0.75_m).si(), std::sqrt(2.0f * 9.81f * 0.75f)); // the same float operations
+}
+
+TEST(Quantity, KilometresPerHourAreDividedBy3point6) {
+    EXPECT_EQ((300.0_kmh).si(), 300.0f / 3.6f);
+    EXPECT_EQ((226_kmh).si(), 226.0f / 3.6f);
 }
 
 TEST(Angle, ConvertsBetweenDegreesAndRadians) {

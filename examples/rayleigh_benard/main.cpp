@@ -15,7 +15,7 @@ void main_setup() { // Rayleigh-Benard convection; required extensions: FP16S, V
 	const float delta_T = T_hot_K - T_cold_K;
 
 	// buoyancy velocity scale for natural convection: u ~ sqrt(g * beta * dT * L)
-	const float u_buoyancy = sqrtf(9.81f * Fluid::AIR.thermal_expansion * delta_T * height.si());
+	const Speed u_buoyancy = sqrt(9.81_mps2 * Fluid::AIR.thermal_expansion * delta_T * height);
 
 	// simulation setup (domain-only, no geometry)
 	SimulationSetup sim(Domain::box(domain_size, domain_size, height).vram(2000_mb));

@@ -8,7 +8,7 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t reentry_speed_mps = 100.0f;
+	const Speed reentry_speed = 100.0_mps;
 
 	SimulationSetup sim(SimulationConfig("StarShipV2.stl")
 		.set_domain_aspect_ratio(1.0f, 2.0f, 2.0f)
@@ -19,7 +19,7 @@ void main_setup() {
 		.set_fix_mesh(true));
 
 	sim.setup();
-	sim.configure_units(reentry_speed_mps, Fluid::AIR);
+	sim.configure_units(reentry_speed, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -27,7 +27,7 @@ void main_setup() {
 
 	BoundaryBuilder(lbm)
 		.set_open_boundaries()
-		.initialize_velocity_z(reentry_speed_mps)
+		.initialize_velocity_z(reentry_speed)
 		.apply();
 
 	GraphicsConfig(lbm)

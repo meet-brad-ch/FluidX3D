@@ -13,7 +13,7 @@
 
 void main_setup() {
 	const Length aircraft_length = 62.0_m;       // full-scale CRM length
-	const float32_t flow_velocity_mps = 80.0f;   // Approach speed (~155 knots)
+	const Speed flow_velocity = 80.0_mps;        // Approach speed (~155 knots)
 
 	// Check for required STL file
 	const string stl_path = get_resource_path("crm-hl_reference_ldg.stl");
@@ -34,7 +34,7 @@ void main_setup() {
 		.vram(2000_mb));
 
 	sim.setup();
-	sim.configure_units(flow_velocity_mps, Fluid::AIR);
+	sim.configure_units(flow_velocity, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM
@@ -46,7 +46,7 @@ void main_setup() {
 	// Configure boundaries - all open with uniform velocity
 	BoundaryBuilder(lbm)
 		.set_all_open()
-		.initialize_velocity_y(flow_velocity_mps)
+		.initialize_velocity_y(flow_velocity)
 		.apply();
 
 	// Configure graphics

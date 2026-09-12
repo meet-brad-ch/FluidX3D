@@ -157,6 +157,6 @@ private:
     // angular velocity in rad per time step: the tip speed at half the part's largest dimension
     float32_t calculate_lbm_omega(const MovingPart& config, const Mesh* mesh) const {
         const float32_t radius_lbm = 0.5f * mesh->get_max_size();
-        return setup_.to_lbm_velocity(config.get_tip_speed_mps()) / radius_lbm;
+        return setup_.to_lbm_velocity(config.get_tip_speed().si()) / radius_lbm;
     }
 };

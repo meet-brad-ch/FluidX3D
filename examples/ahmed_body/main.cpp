@@ -11,16 +11,16 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t flow_velocity_mps = 60.0f;
+	const Speed flow_velocity = 60.0_mps;
 	const float32_t simulation_time_s = 0.25f;
-	const float32_t frontal_area_m2 = 0.389f * 0.288f + 2.0f * 0.05f * 0.03f;
+	const Area frontal_area = 0.389_m * 0.288_m + 2.0f * 0.05_m * 0.03_m;
 
 	SimulationSetup sim(Domain::around(Model("ahmed_25deg_m.stl").rotation(0_deg, 0_deg, 90_deg))
 		.clearances(0_m, 1_m, 2.6_m) // below, above, on each side
 		.vram(10000_mb));
 
 	sim.setup();
-	sim.configure_units(flow_velocity_mps, Fluid::AIR, 0.05f);
+	sim.configure_units(flow_velocity, Fluid::AIR, 0.05f);
 	sim.enable_force_tracking();
 	sim.print_reynolds_number(Fluid::AIR);
 
@@ -31,7 +31,7 @@ void main_setup() {
 	BoundaryBuilder(lbm)
 		.set_solid_floor()
 		.set_open_boundaries()
-		.initialize_velocity_y(flow_velocity_mps)
+		.initialize_velocity_y(flow_velocity)
 		.apply();
 
 	GraphicsConfig(lbm)
@@ -42,9 +42,9 @@ void main_setup() {
 
 #ifdef FORCE_FIELD
 	ForceAnalyzer forces(lbm);
-	forces.set_reference_area(frontal_area_m2)
-	      .set_reference_velocity(flow_velocity_mps)
-	      .set_fluid_density(Fluid::AIR.density)
+	forces.set_reference_area(frontal_area)
+	      .set_reference_velocity(flow_velocity)
+	      .set_fluid(Fluid::AIR)
 	      .set_flow_direction(Axis::Y);
 
 	print_info("Center of mass: " + to_string(forces.get_center_of_mass_lbm().x, 2u) + ", " +

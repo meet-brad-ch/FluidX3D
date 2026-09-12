@@ -16,7 +16,7 @@ void main_setup() { // thermal convection; required extensions: FP16S, VOLUME_FO
 	const float delta_T = T_hot_K - T_cold_K;
 
 	// buoyancy velocity scale for natural convection: u ~ sqrt(g * beta * dT * L)
-	const float u_buoyancy = sqrtf(9.81f * Fluid::AIR.thermal_expansion * delta_T * domain_z.si());
+	const Speed u_buoyancy = sqrt(9.81_mps2 * Fluid::AIR.thermal_expansion * delta_T * domain_z);
 
 	// simulation setup (domain-only, no geometry)
 	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).vram(2000_mb));

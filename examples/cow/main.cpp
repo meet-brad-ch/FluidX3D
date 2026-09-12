@@ -5,7 +5,7 @@
 #include "setup/setup.hpp"
 
 void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS or GRAPHICS
-	const float32_t flow_velocity_mps = 1.0f;
+	const Speed flow_velocity = 1.0_mps;
 	const Length cow_length = 2.4_m;
 	const Length domain_length = cow_length / 0.65f; // the cow is 65 % of the domain length
 
@@ -16,7 +16,7 @@ void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGR
 		.vram(1000_mb));
 
 	sim.setup();
-	sim.configure_units(flow_velocity_mps, Fluid::AIR, 0.075f);
+	sim.configure_units(flow_velocity, Fluid::AIR, 0.075f);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -25,7 +25,7 @@ void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGR
 	BoundaryBuilder(lbm)
 		.set_solid_floor()
 		.set_open_boundaries()
-		.initialize_velocity_y(flow_velocity_mps)
+		.initialize_velocity_y(flow_velocity)
 		.apply();
 
 	GraphicsConfig(lbm)

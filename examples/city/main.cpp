@@ -12,8 +12,8 @@
 
 void main_setup() {
 	const Length city_size = 1000.0_m;           // city block size
-	const float32_t wind_speed_mps = 10.0f;      // Wind speed at reference height
-	const float32_t reference_height_m = 100.0f; // Reference height for wind profile
+	const Speed wind_speed = 10.0_mps;           // Wind speed at reference height
+	const Length reference_height = 100.0_m;     // Reference height for wind profile
 	const float32_t simulation_time_s = 60.0f;   // 1 minute of simulation
 
 	// the city (its size along X) is 1.7 domain widths: the domain's side walls cut through it
@@ -24,7 +24,7 @@ void main_setup() {
 		.vram(2152_mb));
 
 	sim.setup();
-	sim.configure_units(wind_speed_mps, Fluid::AIR);
+	sim.configure_units(wind_speed, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM
@@ -39,7 +39,7 @@ void main_setup() {
 	BoundaryBuilder(lbm)
 		.set_solid_floor()
 		.set_open_boundaries()
-		.set_wind_profile_power_law(wind_speed_mps, reference_height_m, 0.25f)
+		.set_wind_profile_power_law(wind_speed, reference_height, 0.25f)
 		.set_wind_direction(Face::Y_MIN)
 		.apply();
 
