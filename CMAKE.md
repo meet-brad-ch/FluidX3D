@@ -8,23 +8,36 @@ This document explains the CMake-based build architecture for FluidX3D.
 FluidX3D/
 ├── CMakeLists.txt              # Root CMake configuration
 ├── cmake/
-│   └── FluidX3DExample.cmake   # Generic example builder function
+│   ├── configs.cmake           # Options, build type, fluidx3d::build_options, fluidx3d::warnings
+│   ├── FluidX3DDependencies.cmake  # Pinned third-party code (FetchContent)
+│   ├── FluidX3DPlatform.cmake  # fluidx3d::platform: OpenCL, system libraries, X11
+│   ├── FluidX3DCore.cmake      # fluidx3d::core and the core source lists
+│   └── FluidX3DExample.cmake   # add_fluidx3d_example()
 ├── resources/                  # Resource files (STL models, textures)
 │   ├── skybox8k.png           # Skybox texture for raytracing
 │   ├── *.stl                  # 3D models
 │   └── download_all_thingiverse_stl.py    # STL downloader script
-├── src/                        # Core source files (NO library - Unity Build)
+├── src/                        # Upstream core sources (NO library - Unity Build)
 │   ├── graphics.cpp/hpp
 │   ├── lbm.cpp/hpp
 │   ├── info.cpp/hpp
 │   ├── kernel.cpp/hpp
 │   ├── shapes.cpp/hpp
 │   ├── main.cpp
+│   ├── sdf_cache/             # SDF generation and caching (static library)
 │   └── utilities.hpp          # Includes get_resource_path()
+├── lib/setup/                  # Setup API (#include "setup/setup.hpp")
+│   ├── CMakeLists.txt         # fluidx3d::setup: the layers that do not need the LBM
+│   └── ...
+├── tests/
+│   ├── CMakeLists.txt         # GoogleTest, fluidx3d_add_test(), unit tests
+│   ├── unit/                  # CPU unit tests (ctest -L unit)
+│   ├── baseline/              # Baseline dump, comparison and runner
+│   └── baselines/             # Expected baseline output per example
 ├── third_party/               # Bundled third-party binaries
 │   ├── OpenCL/lib/           # OpenCL ICD loaders
 │   └── X11/                  # X11/Xrandr libraries
-└── examples/                  # Example simulations (37 total)
+└── examples/                  # Example simulations (41 total)
     ├── CMakeLists.txt
     ├── taylor_green_3d/
     │   ├── defines.hpp         # Example-specific configuration
@@ -52,6 +65,24 @@ This build system uses a **unity build** approach where each example compiles al
 - No shared library = No ODR violations
 - Matches original FluidX3D architecture philosophy
 
+**Exception: the Setup API library.** The parts of the Setup API that do not include `lbm.hpp` (physical quantities, unit scaling) do not depend on `defines.hpp`. They are compiled once into the static library `fluidx3d::setup` (`lib/setup/CMakeLists.txt`) and unit-tested on the CPU. The parts that use the LBM are compiled per example, like the core.
+
+---
+
+## Targets and Settings
+
+All build settings are attached to targets (`target_*` commands); there are no global flags.
+
+| Target | Kind | Carries |
+|--------|------|---------|
+| `fluidx3d::build_options` | INTERFACE | C++20, optimization and per-compiler flags per build type |
+| `fluidx3d::warnings` | INTERFACE | `/W4` or `-Wall -Wextra -Wpedantic`; errors with `-DFLUIDX3D_WERROR=ON` |
+| `fluidx3d::platform` | INTERFACE | OpenCL, system libraries, X11/Xrandr, threads |
+| `fluidx3d::core` | INTERFACE | Core headers (as SYSTEM headers), resource path, LodePNG, SDF cache |
+| `fluidx3d::setup` | STATIC | Setup API layers without the LBM |
+
+The upstream core in `src/` is included as SYSTEM headers: its warnings are not reported. The Setup API in `lib/setup/` is first-party code: `fluidx3d::warnings` applies to it.
+
 ---
 
 ## Generic Example Builder
@@ -74,22 +105,11 @@ add_fluidx3d_example(NAME cow)
 
 ### What the Function Does
 
-The `add_fluidx3d_example()` function automatically:
+For an example `<name>`, `add_fluidx3d_example()` creates:
 
-1. **Compiles all core sources** (Unity Build):
-   - `main.cpp` + `graphics.cpp` + `lbm.cpp` + `info.cpp` + `kernel.cpp` + `shapes.cpp` + fetched `lodepng.cpp`
-
-2. **Sets up include directories** (with `BEFORE PRIVATE` priority):
-   - Example's `defines.hpp` (FIRST - shadows core's defines.hpp)
-   - Fetched OpenCL C++ bindings
-   - Fetched OpenCL C headers
-   - Core source headers
-   - Fetched LodePNG
-   - Project source directory
-
-3. **Configures compiler**: `-O3 -pthread -Wno-comment`
-
-4. **Links libraries**: `Threads::Threads`, `OpenCL`, `X11`, `Xrandr`
+1. **`<name>_setup`** (OBJECT library): the example's `main.cpp` and the per-example Setup API sources, with the example directory (its `defines.hpp`) on the include path and `fluidx3d::warnings` applied.
+2. **`<name>`** (executable in `bin/`): the core sources (`graphics.cpp`, `info.cpp`, `kernel.cpp`, `lbm.cpp`, `main.cpp`, `shapes.cpp`), linked with `<name>_setup` and `fluidx3d::core`.
+3. **`<name>_baseline`** and the CTest test **`baseline_<name>`** (when `FLUIDX3D_BUILD_TESTS` is on): a headless build of the same example that prints its setup state instead of running (see [Tests](#tests)).
 
 ### Benefits
 
@@ -194,6 +214,11 @@ Each example has its own `examples/<name>/defines.hpp` file that configures:
    cmake --build build --target my_example
    ```
 
+7. **Record its baseline** (see [Tests](#tests)):
+   ```bash
+   FLUIDX3D_BLESS=1 ctest --test-dir build -R baseline_my_example
+   ```
+
 ### Example with STL Files
 
 Place STL files in `resources/` directory and reference them using `get_resource_path()`:
@@ -213,17 +238,39 @@ The `get_resource_path()` function searches:
 
 ---
 
+## Tests
+
+Tests are built when `FLUIDX3D_BUILD_TESTS` is on (the default) and run with CTest.
+
+| Label | What it checks | Needs |
+|-------|----------------|-------|
+| `unit` | Setup API library (quantities, unit scaling), one CTest test per GoogleTest `TEST` | CPU only |
+| `baseline` | Each example's setup state (grid, units, cell flag counts, velocities, graphics settings) against `tests/baselines/<name>.txt`, with a relative tolerance of 1e-4 | OpenCL device |
+
+```bash
+ctest --test-dir build -L unit
+ctest --test-dir build -L baseline
+FLUIDX3D_BLESS=1 ctest --test-dir build -L baseline       # accept intended changes as the new baselines
+FLUIDX3D_BASELINE_STEPS=3000 ./bin/dam_break_baseline     # stability check: run 3000 steps, report the largest velocity
+```
+
+Examples whose STL files are missing report their baseline test as skipped.
+
+Unit tests are added with `fluidx3d_add_test(<name> SOURCES <files...> LINK <targets...>)` in `tests/CMakeLists.txt`.
+
+---
+
 ## Dependency Management
 
 ### FetchContent (Automatic)
 
-These dependencies are automatically fetched at configure time:
+These dependencies are automatically fetched at configure time (pinned versions, as SYSTEM so their warnings are not reported):
 
-- **LodePNG** (v20200306) - PNG encoding/decoding
+- **LodePNG** - PNG encoding/decoding
 - **OpenCL Headers** (v2024.10.24) - Khronos C headers
 - **OpenCL C++ Bindings** (v2024.10.24) - Khronos C++ wrapper
-
-Result: ~8200 lines removed from repository.
+- **SDFGen** (v1.0.0) - GPU signed distance field generation, used by the SDF cache
+- **GoogleTest** (v1.15.2) - unit tests (only with `FLUIDX3D_BUILD_TESTS`)
 
 ### Bundled Libraries
 
@@ -272,23 +319,14 @@ Mesh* cow = read_stl(get_resource_path("Cow_t.stl"), ...);
 
 ### Include Path Priority
 
-The `BEFORE PRIVATE` directive ensures correct include order:
-
-1. **Example directory** - Example's `defines.hpp` (FIRST)
-2. **Fetched OpenCL C++ bindings**
-3. **Fetched OpenCL C headers**
-4. **Core headers** (`src/`)
-5. **Fetched LodePNG**
-6. **Project source directory**
-
-This guarantees each example's `defines.hpp` overrides the core's default configuration.
+The example directory comes first on each example's include path, so its `defines.hpp` is found before the core's default `src/defines.hpp`.
 
 ### Performance Considerations
 
 **Runtime:**
 - ✅ No overhead - each example optimally compiled
 - ✅ No shared library overhead
-- ✅ Full `-O3` optimization per example
+- ✅ Full optimization per example (`-O3 -march=native -ffast-math` or `/O2 /GL /fp:fast` in Release)
 
 ---
 
@@ -302,7 +340,7 @@ This guarantees each example's `defines.hpp` overrides the core's default config
 | **Parallel examples** | ❌ | ✅ |
 | **IDE integration** | Limited | Full |
 | **Dependency management** | Bundled | FetchContent |
-| **Repository size** | Larger | -8200 lines |
+| **Tests** | None | Unit tests and per-example baselines (CTest) |
 
 ---
 
@@ -315,5 +353,6 @@ The CMake build system provides:
 - ✅ **Flexibility**: Different examples with different features
 - ✅ **Modern**: IDE support, FetchContent, target-based builds
 - ✅ **Maintainable**: Centralized build logic, no duplication
+- ✅ **Tested**: CTest unit tests and baselines
 
 **See [BUILD.md](BUILD.md) for build instructions and [EXAMPLES.md](EXAMPLES.md) for the complete list of examples.**

@@ -11,6 +11,7 @@ include(FluidX3DPlatform)      # fluidx3d::platform: OpenCL ICD loader, system l
 
 add_subdirectory(src/sdf_cache)
 target_compile_definitions(sdf_cache PRIVATE SDFGEN_VERSION_TAG="${SDFGEN_TAG}") # the SDFGen version is part of the SDF cache key
+add_subdirectory(lib/setup)    # fluidx3d::setup: the Setup API layers that do not need the LBM
 
 include(FluidX3DCore)          # fluidx3d::core and the core source lists
 include(FluidX3DExample)       # add_fluidx3d_example()
@@ -59,7 +60,7 @@ message(STATUS "===========================================")
 message(STATUS "Version:         ${PROJECT_VERSION}")
 message(STATUS "Platform:        ${PLATFORM_NAME}")
 message(STATUS "Compiler:        ${CMAKE_CXX_COMPILER_ID}")
-message(STATUS "Architecture:    Unity build (no library)")
+message(STATUS "Architecture:    Unity build per example, Setup API library")
 message(STATUS "Using bundled:   ${BUNDLED_LIBS}")
 message(STATUS "Tests:           ${FLUIDX3D_BUILD_TESTS}")
 message(STATUS "Warnings=errors: ${FLUIDX3D_WERROR}")
