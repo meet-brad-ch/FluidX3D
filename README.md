@@ -39,7 +39,8 @@ This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for
 
 | Component | Purpose |
 |-----------|---------|
-| `SimulationConfig` | Geometry file, domain size (clearances in m, aspect ratio, or size in m), VRAM budget or cell size, rotation |
+| `Domain`, `Model` | The domain in physical units: `Domain::box(1.0_m, 5.0_m, 0.75_m)` or `Domain::around(Model("hill.stl")).clearances(...)`, with `.vram(2000_mb)` or `.cell_size(8_m)` |
+| `SimulationConfig` | Aspect-ratio domains (being replaced by `Domain`): aspect ratio, geometry scale, offsets, rotation |
 | `SimulationSetup` | Domain sizing, unit conversion, LBM creation (plain, thermal, free surface, particles), voxelization (STL converted to a cached SDF) |
 | `BoundaryBuilder` | Solid and open faces, initial velocity, wind profile, lid-driven cavity |
 | `SurfaceBuilder`, `WaveBoundary` | Free surface regions, solid blocks, inlets and outlets; oscillating wave maker (SURFACE) |

@@ -11,13 +11,6 @@ namespace {
 constexpr LatticeMemory d3q19_fp16 { 55u };
 constexpr LatticeMemory d3q19_fp16_surface { 67u };
 
-// SimulationConfig looks geometry files up in resources/ (and exits if they are missing), so the test files are
-// written to the test build directory and named relative to resources/.
-std::filesystem::path test_file(const char* name) { return std::filesystem::path(FLUIDX3D_TEST_DIR) / name; }
-std::string resource_name(const std::string& path) {
-    return std::filesystem::relative(path, FLUIDX3D_RESOURCE_DIR).generic_string();
-}
-
 TEST(DomainPlanner, DomainOnlySizesTheBoxFromTheVramBudget) {
     // breaking_waves: 1 m x 5 m x 0.75 m in 2000 MB with FP16 and SURFACE
     const DomainPlan plan = DomainPlanner::plan(SimulationConfig().set_domain_size_m(1.0f, 5.0f, 0.75f).set_vram_mb(2000u), d3q19_fp16_surface);

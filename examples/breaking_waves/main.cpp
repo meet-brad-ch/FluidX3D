@@ -7,11 +7,11 @@
 
 void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, SURFACE, INTERACTIVE_GRAPHICS
 	// physical parameters (SI units)
-	const float domain_x_m = 1.0f;
-	const float domain_y_m = 5.0f;
-	const float domain_z_m = 0.75f;
+	const Length domain_x = 1.0_m;
+	const Length domain_y = 5.0_m;
+	const Length domain_z = 0.75_m;
 
-	const float water_depth_m = 0.5f*domain_z_m; // initial water level at 50% height
+	const float water_depth_m = 0.5f*domain_z.si(); // initial water level at 50% height
 	const float shallow_wave_speed_mps = sqrt(9.81f*water_depth_m); // shallow-water wave speed sqrt(g*h), the fastest velocity in the flow
 
 	// wave maker as in the original lattice setup (peak velocity 0.12, frequency 0.0007 per step, water depth 48 cells,
@@ -23,9 +23,7 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 	const float beach_position_m = 1.0f;  // beach starts at 1m from inlet
 
 	// simulation setup
-	SimulationSetup sim(SimulationConfig()
-		.set_domain_size_m(domain_x_m, domain_y_m, domain_z_m)
-		.set_vram_mb(2000u));
+	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).vram(2000_mb));
 
 	sim.setup();
 	sim.configure_units(shallow_wave_speed_mps, Fluid::WATER, 0.22f); // wave speed in LBM units as in the original lattice setup: sqrt(0.001*48)

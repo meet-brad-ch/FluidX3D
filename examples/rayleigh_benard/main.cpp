@@ -7,20 +7,18 @@
 
 void main_setup() { // Rayleigh-Benard convection; required extensions: FP16S, VOLUME_FORCE, TEMPERATURE, INTERACTIVE_GRAPHICS
 	// physical parameters (SI units)
-	const float domain_size_m = 0.2f;  // 20cm cube domain
-	const float height_m = 0.05f;      // 5cm height (for Ra calculation)
+	const Length domain_size = 0.2_m;  // side of the square domain
+	const Length height = 0.05_m;      // height (also for the Rayleigh number)
 
 	const float T_hot_K = 330.0f;      // hot bottom: 330K (57°C)
 	const float T_cold_K = 300.0f;     // cold top: 300K (27°C)
 	const float delta_T = T_hot_K - T_cold_K;
 
 	// buoyancy velocity scale for natural convection: u ~ sqrt(g * beta * dT * L)
-	const float u_buoyancy = sqrtf(9.81f * Fluid::AIR.thermal_expansion * delta_T * height_m);
+	const float u_buoyancy = sqrtf(9.81f * Fluid::AIR.thermal_expansion * delta_T * height.si());
 
 	// simulation setup (domain-only, no geometry)
-	SimulationSetup sim(SimulationConfig()
-		.set_domain_size_m(domain_size_m, domain_size_m, height_m)
-		.set_vram_mb(2000u));
+	SimulationSetup sim(Domain::box(domain_size, domain_size, height).vram(2000_mb));
 
 	sim.setup();
 	sim.configure_units(u_buoyancy, Fluid::AIR);

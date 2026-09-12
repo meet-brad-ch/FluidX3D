@@ -15,11 +15,9 @@ void main_setup() {
 	const float32_t simulation_time_s = 0.25f;
 	const float32_t frontal_area_m2 = 0.389f * 0.288f + 2.0f * 0.05f * 0.03f;
 
-	SimulationSetup sim(SimulationConfig("ahmed_25deg_m.stl")
-		.set_vram_mb(10000u)
-		.set_rotation_deg(0.0f, 0.0f, 90.0f)
-		.set_clearances_m(0.0f, 1.0f, 2.6f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::Y));
+	SimulationSetup sim(Domain::around(Model("ahmed_25deg_m.stl").rotation(0_deg, 0_deg, 90_deg))
+		.clearances(0_m, 1_m, 2.6_m) // below, above, on each side
+		.vram(10000_mb));
 
 	sim.setup();
 	sim.configure_units(flow_velocity_mps, Fluid::AIR, 0.05f);

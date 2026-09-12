@@ -72,6 +72,22 @@ TEST(Angle, ConvertsBetweenDegreesAndRadians) {
     EXPECT_NEAR((30_deg + 15.0_deg).deg(), 45.0f, 1e-4f);
 }
 
+static_assert(!Constructible<ModelLengths, float>);
+static_assert(!Constructible<MemorySize, unsigned int>);
+static_assert(!Addable<ModelLengths, Length>);
+
+TEST(ModelLengths, AreAPlainNumberOfModelLengths) {
+    EXPECT_FLOAT_EQ((0.5_lengths).value(), 0.5f);
+    EXPECT_FLOAT_EQ((2_lengths).value(), 2.0f);
+    EXPECT_LT(0.5_lengths, 1.0_lengths);
+}
+
+TEST(MemorySize, GigabytesAre1024Megabytes) {
+    EXPECT_EQ((2000_mb).mb(), 2000u);
+    EXPECT_EQ((20_gb).mb(), 20480u);
+    EXPECT_EQ(1_gb, 1024_mb);
+}
+
 TEST(Quantity, SpecsUseDesignatedInitializers) {
     struct CameraSpec {
         Angle yaw{};
