@@ -23,20 +23,23 @@ void main_setup() { // thermal convection; required extensions: FP16S, VOLUME_FO
 
 	sim.setup();
 	sim.configure_units(u_buoyancy, Fluid::AIR);
+	sim.configure_temperatures(T_cold, T_hot); // 0.5 and 1.5 in lattice units
 
 	// create LBM with thermal parameters (air properties, gravity in -Z)
 	LBM lbm = sim.create_lbm_thermal(Fluid::AIR, 9.81_mps2, Axis::Z);
 
 	// thermal boundary conditions (SI temperatures in Kelvin)
-	ThermalBuilder(lbm)
+	ThermalBuilder(lbm, sim.temperature_scale())
 		.set_hot_wall(Face::Y_MIN, T_hot)
 		.set_cold_wall(Face::Y_MAX, T_cold)
 		.set_gravity_axis(Axis::Z)
 		.initialize_hydrostatic_pressure()
 		.apply();
 
-	// solid walls
+	// all six faces solid, as the original
 	BoundaryBuilder(lbm)
+		.set_solid_floor()
+		.set_solid_ceiling()
 		.set_solid_walls()
 		.apply();
 

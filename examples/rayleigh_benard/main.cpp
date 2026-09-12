@@ -22,17 +22,18 @@ void main_setup() { // Rayleigh-Benard convection; required extensions: FP16S, V
 
 	sim.setup();
 	sim.configure_units(u_buoyancy, Fluid::AIR);
+	sim.configure_temperatures(T_cold, T_hot); // 0.5 and 1.5 in lattice units
 
 	// create LBM with thermal parameters (air properties, gravity in -Z)
 	LBM lbm = sim.create_lbm_thermal(Fluid::AIR, 9.81_mps2, Axis::Z);
 
 	// thermal boundary conditions with random perturbation to trigger instability
-	ThermalBuilder(lbm)
+	ThermalBuilder(lbm, sim.temperature_scale())
 		.set_hot_wall(Face::Z_MIN, T_hot)
 		.set_cold_wall(Face::Z_MAX, T_cold)
 		.set_gravity_axis(Axis::Z)
 		.initialize_hydrostatic_pressure()
-		.initialize_random_perturbation(0.015f)
+		.initialize_random_perturbation(0.15f*u_buoyancy) // 0.015 in lattice units, as the original
 		.apply();
 
 	// solid floor and ceiling only (lateral walls periodic)

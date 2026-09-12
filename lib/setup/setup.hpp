@@ -28,7 +28,6 @@
 #include "setup/boundaries/boundary_builder.hpp"
 
 #ifdef TEMPERATURE
-#include "setup/boundaries/thermal_utils.hpp"
 #include "setup/boundaries/thermal_builder.hpp"
 #endif // TEMPERATURE
 

@@ -39,6 +39,7 @@ fluidx3d_add_test(fluidx3d_setup_tests
     SOURCES
         unit/quantity_test.cpp
         unit/unit_scale_test.cpp
+        unit/temperature_scale_test.cpp
         unit/lattice_test.cpp
         unit/geometry_scaler_test.cpp
         unit/domain_plan_test.cpp
