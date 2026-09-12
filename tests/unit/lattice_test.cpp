@@ -55,6 +55,28 @@ TEST(Lattice, RequiredMemoryInWholeMegabytes) {
     EXPECT_EQ(required_memory_mb({ 1u, 1u, 1u }, { 93u }), 0u);
 }
 
+static_assert(CellSpan::of(0.0f, 1.0f / (1.0f / 397.0f) / 8.0f, 397u).end == 49u); // dam_break's water column: y < Ny/8
+
+TEST(CellSpan, TruncatesBothBoundsToWholeCells) {
+    EXPECT_EQ(CellSpan::of(2.9f, 7.99f, 100u), (CellSpan{ 2u, 7u }));
+    EXPECT_EQ(CellSpan::of(-3.0f, 0.0f, 100u), (CellSpan{ 0u, 0u }));
+}
+
+TEST(CellSpan, ABoundInTheLastCellReachesTheEnd) {
+    EXPECT_EQ(CellSpan::of(0.0f, 198.5f, 199u).end, 199u); // dam_break: 0.5 m of 1/397 m cells on its 199-cell axis
+    EXPECT_EQ(CellSpan::of(0.0f, 250.0f, 199u).end, 199u);
+    EXPECT_EQ(CellSpan::of(0.0f, 197.99f, 199u).end, 197u);
+    EXPECT_EQ(CellSpan::of(250.0f, 300.0f, 199u), (CellSpan{ 199u, 199u })); // beyond the axis: empty
+}
+
+TEST(CellSpan, ContainsItsCells) {
+    const CellSpan span{ 2u, 5u };
+    EXPECT_FALSE(span.contains(1u));
+    EXPECT_TRUE(span.contains(2u));
+    EXPECT_TRUE(span.contains(4u));
+    EXPECT_FALSE(span.contains(5u));
+}
+
 TEST(Lattice, GridFitsItsBudget) {
     for(const ExampleGrid& e : example_grids) {
         const GridSize grid = grid_for_memory(e.aspect_x, e.aspect_y, e.aspect_z, e.budget_mb, e.lattice);

@@ -11,7 +11,8 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 	const Length domain_y = 5.0_m;
 	const Length domain_z = 0.75_m;
 
-	const float water_depth_m = 0.5f*domain_z.si(); // initial water level at 50% height
+	const Length water_depth = 0.5f*domain_z; // initial water level at 50% height
+	const float water_depth_m = water_depth.si();
 	const float shallow_wave_speed_mps = sqrt(9.81f*water_depth_m); // shallow-water wave speed sqrt(g*h), the fastest velocity in the flow
 
 	// wave maker as in the original lattice setup (peak velocity 0.12, frequency 0.0007 per step, water depth 48 cells,
@@ -40,9 +41,7 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 
 	// configure free surface with beach geometry
 	SurfaceBuilder(lbm)
-		// initial water level at 50% height
-		.set_water_level(0.5f)
-		.set_gravity_lbm(sim.to_lbm_acceleration(9.81f))
+		.set_water_level(water_depth)
 		.initialize_hydrostatic()
 		// solid walls on all sides (wave inlet will override Y_MIN)
 		.set_solid_walls()
