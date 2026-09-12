@@ -10,6 +10,7 @@
 #include "setup/domain/lattice.hpp"
 #include "setup/sdf/sdf_generator.hpp"
 #include "setup/simulation/mesh_loader.hpp"
+#include <optional>
 
 extern Units units; // global units object from lbm.cpp
 
@@ -231,11 +232,18 @@ public:
         clearances.top_m = config.top_clearance_m;
         clearances.side_m = config.side_clearance_m;
 
-        GeometryScaler scaler = (config.resolution_mode_ == SimulationConfig::ResolutionMode::VOXEL_SIZE)
-            ? GeometryScaler(original_stl_path_, config.voxel_size_m_, config.max_vram_mb_, lattice_memory(), scaler_axis)
-            : GeometryScaler(original_stl_path_, config.vram_mb, clearances, lattice_memory(), scaler_axis);
+        std::optional<GeometryScaler> scaler;
+        try {
+            if(config.resolution_mode_ == SimulationConfig::ResolutionMode::VOXEL_SIZE) {
+                scaler.emplace(original_stl_path_, config.voxel_size_m_, config.max_vram_mb_, clearances, lattice_memory(), scaler_axis);
+            } else {
+                scaler.emplace(original_stl_path_, config.vram_mb, clearances, lattice_memory(), scaler_axis);
+            }
+        } catch(const SetupError& error) {
+            print_error(error.what()); // waits for Enter (Windows) and exits; nothing may follow it (C4702 with /GL)
+        }
 
-        results.base_grid = scaler.get_stl_size_cells();
+        results.base_grid = scaler->get_stl_size_cells();
 
         if(!config.use_sdf && config.geometry_filename.find(".stl") != string::npos) {
             // convert the STL to an SDF at the base grid resolution (cached), for smoother voxelization
@@ -259,20 +267,20 @@ public:
             resolved_geometry_path = get_resource_path(config.geometry_filename);
         }
 
-        results.stl_size_si = scaler.get_stl_size_meters();
-        results.lbm_reference_size = scaler.get_reference_size_cells();
-        results.si_reference_size = scaler.get_reference_size_meters();
+        results.stl_size_si = scaler->get_stl_size_meters();
+        results.lbm_reference_size = scaler->get_reference_size_cells();
+        results.si_reference_size = scaler->get_reference_size_meters();
 
-        const uint3 domain_size = scaler.calculate_domain_size(clearances);
+        const uint3 domain_size = scaler->calculate_domain_size(clearances);
         results.Nx = domain_size.x;
         results.Ny = domain_size.y;
         results.Nz = domain_size.z;
-        results.center_lbm = scaler.calculate_center(domain_size, clearances);
+        results.center_lbm = scaler->calculate_center(domain_size, clearances);
         results.rotation_matrix = create_rotation_matrix();
 
         print_info("Geometry: " + config.geometry_filename);
         print_info("Dimensions: X=" + to_string(results.stl_size_si.x) + "m, Y=" + to_string(results.stl_size_si.y) + "m, Z=" + to_string(results.stl_size_si.z) + "m");
-        print_info("Scale: " + to_string(scaler.get_scale_factor()) + " m/cell");
+        print_info("Scale: " + to_string(scaler->get_scale_factor()) + " m/cell");
         print_info("Base grid (mesh only): " + to_string(results.base_grid.x) + " x " + to_string(results.base_grid.y) + " x " + to_string(results.base_grid.z));
         print_info("Domain: Nx=" + to_string(results.Nx) + ", Ny=" + to_string(results.Ny) + ", Nz=" + to_string(results.Nz));
         print_info("VRAM usage: ~" + to_string(config.vram_mb) + " MB");

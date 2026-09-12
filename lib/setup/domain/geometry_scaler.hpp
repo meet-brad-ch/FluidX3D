@@ -1,10 +1,12 @@
 #pragma once
 #include "setup/core/types.hpp"
+#include "setup/core/setup_error.hpp"
 #include "setup/domain/lattice.hpp"
 #include "utilities.hpp"
 
 // Scale between an STL geometry in m and the lattice: cell size from a VRAM budget (for geometry plus clearances)
 // or from a given cell size, and the domain size and geometry center in cells.
+// Throws SetupError if the STL file does not exist or the grid does not fit the memory limit.
 class GeometryScaler {
 public:
     enum class ReferenceAxis { X, Y, Z, MAX, MIN }; // geometry dimension used for scaling (default Y)
@@ -24,11 +26,12 @@ public:
         ReferenceAxis reference_axis = ReferenceAxis::Y
     );
 
-    // given cell size; exits if the grid needs more than max_vram_mb
+    // given cell size; the grid with its clearances must fit max_vram_mb
     GeometryScaler(
         const string& stl_path,
         float32_t voxel_size_meters,
         uint32_t max_vram_mb,
+        const Clearances& clearances,
         LatticeMemory lattice,
         ReferenceAxis reference_axis = ReferenceAxis::Y
     );
@@ -60,6 +63,7 @@ private:
     Clearances clearances_;
     LatticeMemory lattice_;
 
+    void read_stl_size();                  // stl_size_si_ from the file's bounding box
     void load_stl_and_calculate_scaling(); // VRAM budget mode
     void calculate_from_voxel_size(float32_t voxel_size_m, uint32_t max_vram_mb);
     float32_t calculate_min_voxel_size(uint32_t max_vram_mb) const; // for the error message

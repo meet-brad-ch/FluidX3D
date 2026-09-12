@@ -1,5 +1,7 @@
 #include "setup/domain/geometry_scaler.hpp"
 
+#include <filesystem>
+
 GeometryScaler::GeometryScaler(
     const string& stl_path,
     uint32_t vram_mb,
@@ -14,29 +16,30 @@ GeometryScaler::GeometryScaler(
     const string& stl_path,
     float32_t voxel_size_meters,
     uint32_t max_vram_mb,
+    const Clearances& clearances,
     LatticeMemory lattice,
     ReferenceAxis reference_axis
-) : stl_path_(stl_path), vram_mb_(0u), reference_axis_(reference_axis), clearances_{0.0f, 0.0f, 0.0f}, lattice_(lattice) {
-    Mesh* mesh = read_stl(stl_path_, 1.0f);
-    if(mesh == nullptr) {
-        print_error("GeometryScaler: Failed to load STL file: " + stl_path_);
-        exit(1);
-    }
-    stl_size_si_ = mesh->get_bounding_box_size();
-    delete mesh;
-
+) : stl_path_(stl_path), vram_mb_(0u), reference_axis_(reference_axis), clearances_(clearances), lattice_(lattice) {
+    read_stl_size();
     si_reference_size_ = get_reference_dimension(stl_size_si_);
     calculate_from_voxel_size(voxel_size_meters, max_vram_mb);
 }
 
-void GeometryScaler::load_stl_and_calculate_scaling() {
+void GeometryScaler::read_stl_size() {
+    // checked here: the core's read_stl() reports a missing file with print_error(), which waits for Enter and exits
+    if(!std::filesystem::exists(stl_path_)) {
+        throw SetupError("GeometryScaler: STL file not found: " + stl_path_);
+    }
     Mesh* mesh = read_stl(stl_path_, 1.0f);
     if(mesh == nullptr) {
-        print_error("GeometryScaler: Failed to load STL file: " + stl_path_);
-        exit(1);
+        throw SetupError("GeometryScaler: failed to load STL file: " + stl_path_);
     }
     stl_size_si_ = mesh->get_bounding_box_size();
     delete mesh;
+}
+
+void GeometryScaler::load_stl_and_calculate_scaling() {
+    read_stl_size();
 
     // the VRAM budget applies to the whole domain: STL + clearances
     const float3 domain_size_si = float3(
@@ -110,19 +113,15 @@ void GeometryScaler::calculate_from_voxel_size(float32_t voxel_size_m, uint32_t 
         float3((float32_t)stl_size_lbm_.x, (float32_t)stl_size_lbm_.y, (float32_t)stl_size_lbm_.z)
     );
 
-    const GridSize grid { stl_size_lbm_.x, stl_size_lbm_.y, stl_size_lbm_.z };
-    const uint32_t required_mb = (uint32_t)required_memory_mb(grid, lattice_);
+    // the whole domain has to fit: geometry and clearances
+    const uint3 domain = calculate_domain_size(clearances_);
+    const uint32_t required_mb = (uint32_t)required_memory_mb({ domain.x, domain.y, domain.z }, lattice_);
 
     if(required_mb > max_vram_mb) {
-        print_error("VRAM requirement exceeds limit!");
-        print_error("  Voxel size: " + to_string(voxel_size_m) + " m");
-        print_error("  Grid: " + to_string(stl_size_lbm_.x) + " x " +
-                    to_string(stl_size_lbm_.y) + " x " +
-                    to_string(stl_size_lbm_.z));
-        print_error("  Required VRAM: " + to_string(required_mb) + " MB");
-        print_error("  Max VRAM: " + to_string(max_vram_mb) + " MB");
-        print_error("Suggestion: Increase voxel size to >= " + to_string(calculate_min_voxel_size(max_vram_mb)) + " m");
-        exit(1);
+        throw SetupError("VRAM requirement exceeds the limit: a cell size of " + to_string(voxel_size_m) + " m gives a grid of " +
+            to_string(domain.x) + " x " + to_string(domain.y) + " x " + to_string(domain.z) + " cells with the clearances, which needs " +
+            to_string(required_mb) + " MB of the " + to_string(max_vram_mb) + " MB allowed (set_max_vram_mb). " +
+            "Use a cell size of at least " + to_string(calculate_min_voxel_size(max_vram_mb)) + " m.");
     }
 
     print_info("Voxel size mode: " + to_string(voxel_size_m) + " m/cell");
@@ -130,8 +129,10 @@ void GeometryScaler::calculate_from_voxel_size(float32_t voxel_size_m, uint32_t 
 }
 
 float32_t GeometryScaler::calculate_min_voxel_size(uint32_t max_vram_mb) const {
-    // cells = (sx*sy*sz)/v³ <= max_cells, so v >= cbrt(sx*sy*sz/max_cells)
+    // cells = V/v³ <= max_cells for the domain volume V (geometry and clearances), so v >= cbrt(V/max_cells)
     const float32_t max_cells = (float32_t)max_vram_mb * 1048576.0f / (float32_t)lattice_.bytes_per_cell;
-    const float32_t volume_m3 = stl_size_si_.x * stl_size_si_.y * stl_size_si_.z;
+    const float32_t volume_m3 = (stl_size_si_.x + 2.0f * clearances_.side_m) *
+                                (stl_size_si_.y + 2.0f * clearances_.side_m) *
+                                (stl_size_si_.z + clearances_.bottom_m + clearances_.top_m);
     return cbrt(volume_m3 / max_cells);
 }
