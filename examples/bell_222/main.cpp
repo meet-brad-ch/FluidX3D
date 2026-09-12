@@ -9,6 +9,7 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
+	const Length fuselage_length = 12.85_m; // Bell 222B, as in the original
 	const Length rotor_diameter = 12.12_m;
 	const Frequency rotor_speed = 348.0f / 60.0_s; // 348 rpm
 	const Speed tip_speed = rotor_speed * rotor_diameter * pif;
@@ -31,15 +32,14 @@ void main_setup() {
 		return;
 	}
 
-	// Configure body using X axis as reference (matches original sizing)
-	SimulationSetup sim(SimulationConfig("Bell-222-body.stl")
-		.set_domain_aspect_ratio(1.0f, 1.2f, 0.3f)
-		.set_vram_mb(8000u)
-		.set_geometry_scale(0.8f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::X));
+	// the fuselage (Y) is 80 % of the domain width, as in the original
+	const Length domain_width = fuselage_length / 0.8f;
+	SimulationSetup sim(Domain::around(Model("Bell-222-body.stl").length(fuselage_length))
+		.size(domain_width, 1.2f * domain_width, 0.3f * domain_width)
+		.vram(8000_mb));
 
 	sim.setup();
-	sim.configure_units(tip_speed, Fluid::AIR);
+	sim.configure_units(tip_speed, Fluid::AIR, 0.16f); // the original's lattice tip speed
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);

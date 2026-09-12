@@ -11,8 +11,8 @@ void main_setup() {
 	const Length fuselage_length = 70.7_m;
 	const Speed cruise_speed = 250.0_mps;
 
-	// the aircraft (its size along X) is as wide as the domain
-	SimulationSetup sim(Domain::around(Model("techtris_airplane.stl").angle_of_attack(-15_deg).length(fuselage_length, Axis::X).repair_mesh())
+	// the domain is as wide as the fuselage (Y) is long; the wingspan (X) is 64 m
+	SimulationSetup sim(Domain::around(Model("techtris_airplane.stl").angle_of_attack(-15_deg).length(fuselage_length).repair_mesh())
 		.size(fuselage_length, 2.0f * fuselage_length, 0.5f * fuselage_length)
 		.model_offset(0_m, -0.45f * fuselage_length, 0_m)
 		.vram(880_mb));

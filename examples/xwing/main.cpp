@@ -8,18 +8,17 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
+	const Length fuselage_length = 13.4_m; // T-65 X-wing; the model's longest side
 	const Speed flight_speed = 100.0_mps;
 
-	SimulationSetup sim(SimulationConfig("X-Wing.stl")
-		.set_domain_aspect_ratio(1.0f, 2.0f, 0.5f)
-		.set_vram_mb(880u)
-		.set_geometry_scale(1.0f)
-		.set_rotation_deg(0.0f, 0.0f, 180.0f)
-		.set_center_offset_ratio(0.0f, -0.45f, 0.0f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::X));
+	// the fuselage (Y) is as long as the domain is wide, half its length
+	SimulationSetup sim(Domain::around(Model("X-Wing.stl").rotation(0_deg, 0_deg, 180_deg).length(fuselage_length))
+		.size(fuselage_length, 2.0f * fuselage_length, 0.5f * fuselage_length)
+		.model_offset(0_m, -0.45f * fuselage_length, 0_m)
+		.vram(880_mb));
 
 	sim.setup();
-	sim.configure_units(flight_speed, Fluid::AIR);
+	sim.configure_units(flight_speed, Fluid::AIR, 0.075f); // the original's lattice speed
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);

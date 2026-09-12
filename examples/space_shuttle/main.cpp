@@ -8,19 +8,18 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
+	const Length orbiter_length = 37.24_m; // NASA: 37.24 m long, 23.79 m wingspan
 	const Speed flight_speed = 100.0_mps;
 
-	SimulationSetup sim(SimulationConfig("Full_Shuttle.stl")
-		.set_domain_aspect_ratio(1.0f, 4.0f, 0.8f)
-		.set_vram_mb(1000u)
-		.set_geometry_scale(1.25f)
-		.set_rotation_deg(0.0f, 0.0f, 270.0f)
-		.set_angle_of_attack_deg(-20.0f)
-		.set_center_offset_ratio(0.0f, -1.05f, 0.05f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::X));
+	// the orbiter (Y, before its angle of attack) is 30 % of the domain length
+	const Length domain_length = orbiter_length / 0.3f;
+	SimulationSetup sim(Domain::around(Model("Full_Shuttle.stl").rotation(0_deg, 0_deg, 270_deg).angle_of_attack(-20_deg).length(orbiter_length))
+		.size(0.25f * domain_length, domain_length, 0.2f * domain_length)
+		.model_offset(0_m, -1.1f * orbiter_length, 0.05f * orbiter_length)
+		.vram(1000_mb));
 
 	sim.setup();
-	sim.configure_units(flight_speed, Fluid::AIR);
+	sim.configure_units(flight_speed, Fluid::AIR, 0.075f); // the original's lattice speed
 	sim.print_reynolds_number(Fluid::AIR);
 
 	const auto& r = sim.get_results();

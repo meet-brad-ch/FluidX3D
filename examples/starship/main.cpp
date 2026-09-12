@@ -8,18 +8,18 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
+	const Length ship_length = 50.0_m; // Starship upper stage; the model's longest side
 	const Speed reentry_speed = 100.0_mps;
 
-	SimulationSetup sim(SimulationConfig("StarShipV2.stl")
-		.set_domain_aspect_ratio(1.0f, 2.0f, 2.0f)
-		.set_vram_mb(1000u)
-		.set_geometry_scale(1.6f)
-		.set_center_offset_ratio(0.0f, 0.05f, -0.445f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::X)
-		.set_fix_mesh(true));
+	// the ship (Y) is 80 % of the domain length; the air flows up (+z) past it, as in a belly-first reentry
+	const Length domain_length = ship_length / 0.8f;
+	SimulationSetup sim(Domain::around(Model("StarShipV2.stl").length(ship_length).repair_mesh())
+		.size(0.5f * domain_length, domain_length, domain_length)
+		.model_offset(0_m, 0.05f * ship_length, -0.445f * ship_length)
+		.vram(1000_mb));
 
 	sim.setup();
-	sim.configure_units(reentry_speed, Fluid::AIR);
+	sim.configure_units(reentry_speed, Fluid::AIR, 0.05f); // the original's lattice speed
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);

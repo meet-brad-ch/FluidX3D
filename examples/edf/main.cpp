@@ -17,9 +17,9 @@ void main_setup() {
 	const Duration simulation_time = 0.5_s;
 	const uint32_t update_interval = 4u;
 
-	// the stator (its size along Y) is 98 % of the domain length
+	// the stator's diameter (X) is 98 % of the domain length (Y)
 	const Length domain_length = fan_diameter / 0.98f;
-	SimulationSetup sim(Domain::around(Model("edf_v39.stl").rotation(0_deg, 0_deg, 180_deg).length(fan_diameter))
+	SimulationSetup sim(Domain::around(Model("edf_v39.stl").rotation(0_deg, 0_deg, 180_deg).length(fan_diameter, Axis::X))
 		.size(domain_length / 1.5f, domain_length, domain_length / 1.5f)
 		.model_offset(0_m, -0.2f * fan_diameter, 0_m) // stator position
 		.vram(8000_mb));
