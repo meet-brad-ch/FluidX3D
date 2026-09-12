@@ -1,11 +1,12 @@
 #pragma once
 #include "utilities.hpp"
 #include "setup/core/types.hpp"
-#include "setup/config/simulation_config.hpp"
+#include "setup/domain/domain.hpp"
 #include "setup/domain/lattice.hpp"
+#include <optional>
 
-// The simulation domain computed from a SimulationConfig: grid size, geometry placement, reference sizes, and the file
-// to voxelize. SimulationSetup::Results is this struct.
+// The simulation domain computed from a Domain: grid size, geometry placement, reference sizes, and the file to
+// voxelize. SimulationSetup::Results is this struct.
 struct DomainPlan {
     float3 stl_size_si{};           // geometry size in m (without geometry: the domain size)
     uint32_t Nx{}, Ny{}, Nz{};      // domain size in cells
@@ -18,26 +19,30 @@ struct DomainPlan {
     string voxelization_path;       // file for voxelize(): the STL, or its cached SDF
     bool voxelize_sdf = false;
     float32_t voxel_size{};         // the geometry's longest side in cells, as voxelize_stl/voxelize_sdf expect
+    std::optional<Axis> mirror;     // a half model, completed by its mirror image (Model::mirrored())
 };
 
-// Computes the DomainPlan for the config's mode (GEOMETRY_BASED, ASPECT_RATIO or DOMAIN_ONLY).
+/// Computes the DomainPlan of a Domain: a box without a model, a model with clearances() around it, or a model in a
+/// size() of the domain.
 class DomainPlanner {
 public:
-    // lattice: the example's device memory per cell. Throws SetupError (geometry file missing, grid over the memory limit).
-    static DomainPlan plan(const SimulationConfig& config, LatticeMemory lattice);
+    /// @param lattice the example's device memory per cell
+    /// @throws SetupError for conflicting settings, a missing geometry file or a grid over the memory limit
+    static DomainPlan plan(const Domain& domain, LatticeMemory lattice);
 
-    // voxelization file and kernel; in GEOMETRY_BASED mode the STL is converted to a cached SDF at the base grid resolution
-    static void choose_voxelization(DomainPlan& plan, const SimulationConfig& config);
+    /// The voxelization file and kernel; with clearances() the STL is converted to a cached SDF at the base grid resolution.
+    static void choose_voxelization(DomainPlan& plan, const Domain& domain);
 
 private:
-    static DomainPlan plan_domain_only(const SimulationConfig& config, LatticeMemory lattice);
-    static DomainPlan plan_aspect_ratio(const SimulationConfig& config, LatticeMemory lattice);
-    static DomainPlan plan_geometry_based(const SimulationConfig& config, LatticeMemory lattice);
+    static DomainPlan plan_box(const Domain& domain, LatticeMemory lattice);
+    static DomainPlan plan_with_clearances(const Domain& domain, const Model& model, LatticeMemory lattice);
+    static DomainPlan plan_in_size(const Domain& domain, const Model& model, LatticeMemory lattice);
 
-    static float3x3 rotation(const SimulationConfig& config, bool with_angle_of_attack = true);
-    static float32_t reference_dimension(const SimulationConfig& config, const float3& size);
-    static uint32_t reference_dimension(const SimulationConfig& config, const uint3& size);
-    // VRAM_BUDGET: the largest grid with the aspect ratio that fits; VOXEL_SIZE: whole cells of the cell size along each
-    // side of size_m (rounded), which must fit the memory limit (throws SetupError)
-    static uint3 grid_for_resolution(const SimulationConfig& config, const float3& aspect, const float3& size_m, LatticeMemory lattice);
+    /// vram(): the largest grid with the aspect ratio that fits; cell_size(): whole cells of the cell size along each
+    /// side of size_m (rounded), which must fit the memory limit (throws SetupError)
+    static uint3 grid_for_resolution(const Domain& domain, const float3& aspect, const float3& size_m, LatticeMemory lattice);
+
+    template<typename Vector> static auto along(const Vector& v, Axis axis) { // the component along an axis
+        return axis == Axis::X ? v.x : axis == Axis::Y ? v.y : v.z;
+    }
 };

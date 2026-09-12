@@ -6,7 +6,6 @@
 #include "setup/core/fluids.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
 
-#include "setup/config/simulation_config.hpp"
 #include "setup/core/setup_error.hpp"
 #include "setup/domain/domain.hpp"
 #include "setup/domain/domain_plan.hpp"
@@ -16,14 +15,14 @@
 
 extern Units units; // global units object from lbm.cpp
 
-// Sizes the domain from a SimulationConfig, configures SI<->LBM units, creates the LBM and voxelizes the geometry.
+// Sizes the Domain, configures SI<->LBM units, creates the LBM and voxelizes the model.
 // Call order: setup(), configure_units*(), create_lbm*(), voxelize().
 class SimulationSetup {
 public:
     using Results = DomainPlan; // computed by setup()
 
 private:
-    SimulationConfig config;
+    Domain domain_;
     Results results;
     UnitScale scale_;               // SI <-> lattice units, set by configure_units()
     std::optional<TemperatureScale> temperature_scale_; // set by configure_temperatures()
@@ -37,20 +36,21 @@ private:
     }
 
     void validate_geometry_file() {
-        const string geometry_path = get_resource_path(config.geometry_filename);
+        const Model& model = *domain_.model();
+        const string geometry_path = get_resource_path(model.file());
         if(geometry_path.empty()) {
             const string exe_path = get_exe_path();
-            const string file_type = config.use_sdf ? "SDF" : "STL";
+            const string file_type = model.is_sdf() ? "SDF" : "STL";
             std::cerr << "\n";
             std::cerr << "================================================================================\n";
             std::cerr << "FATAL ERROR: " << file_type << " file not found\n";
             std::cerr << "================================================================================\n";
-            std::cerr << "File: " << config.geometry_filename << "\n\n";
+            std::cerr << "File: " << model.file() << "\n\n";
             std::cerr << "Searched in:\n";
 #ifdef FLUIDX3D_RESOURCE_DIR
-            std::cerr << "  1. " << string(FLUIDX3D_RESOURCE_DIR) << "/" << config.geometry_filename << "\n";
+            std::cerr << "  1. " << string(FLUIDX3D_RESOURCE_DIR) << "/" << model.file() << "\n";
 #endif
-            std::cerr << "  2. " << exe_path << "resources/" << config.geometry_filename << "\n\n";
+            std::cerr << "  2. " << exe_path << "resources/" << model.file() << "\n\n";
             std::cerr << "Please ensure the file exists in one of these directories.\n";
             std::cerr << "================================================================================\n";
             std::cerr << std::endl;
@@ -58,14 +58,13 @@ private:
         }
     }
 
-    static SimulationConfig config_of(const Domain& domain) {
-        std::optional<SimulationConfig> config;
+    static const Domain& validated(const Domain& domain) {
         try {
-            config.emplace(domain.config());
+            domain.validate();
         } catch(const SetupError& error) {
             print_error(error.what()); // waits for Enter (Windows) and exits; nothing may follow it (C4702 with /GL)
         }
-        return *config;
+        return domain;
     }
 
     // device memory per cell of this example's lattice (it depends on its defines.hpp)
@@ -78,32 +77,26 @@ private:
     }
 
 public:
-    // the domain in physical units (exits with a message if its settings conflict)
-    explicit SimulationSetup(const Domain& domain) : SimulationSetup(config_of(domain)) {}
-
-    SimulationSetup(const SimulationConfig& cfg) : config(cfg) { // exits if the geometry file is not found
-        std::cout.flush();
-        if(config.domain_mode_ != SimulationConfig::DomainMode::DOMAIN_ONLY) {
-            validate_geometry_file();
-        }
-        std::cout.flush();
+    // the domain in physical units (exits with a message if its settings conflict or its geometry file is not found)
+    explicit SimulationSetup(const Domain& domain) : domain_(validated(domain)) {
+        if(domain_.model()) validate_geometry_file();
     }
 
     // compute the domain size and geometry placement (exits with a message if the setup cannot be simulated)
     Results setup() {
         std::optional<DomainPlan> plan;
         try {
-            plan.emplace(DomainPlanner::plan(config, lattice_memory()));
+            plan.emplace(DomainPlanner::plan(domain_, lattice_memory()));
         } catch(const SetupError& error) {
             print_error(error.what()); // waits for Enter (Windows) and exits; nothing may follow it (C4702 with /GL)
         }
         results = *plan;
-        DomainPlanner::choose_voxelization(results, config);
+        DomainPlanner::choose_voxelization(results, domain_);
         return results;
     }
 
-    const string& get_stl_path() const { return results.stl_path; }
-    const string& get_geometry_filename() const { return config.geometry_filename; }
+    /// The model's file in resources/ (empty for Domain::box()), for parts that move with it.
+    string model_file() const { return domain_.model() ? domain_.model()->file() : string(); }
 
     // voxelize() marks the geometry TYPE_S|TYPE_X so ForceAnalyzer can measure forces (needs FORCE_FIELD); call before voxelize()
     SimulationSetup& enable_force_tracking() {
@@ -114,10 +107,9 @@ public:
     void voxelize(LBM& lbm) {
         const uchar voxel_flag = force_tracking_ ? (TYPE_S | TYPE_X) : TYPE_S;
 
-        if(config.mirror_plane_ != SimulationConfig::MirrorPlane::NONE) { // symmetric half-model
-            Mesh* mesh = load_mesh_mirrored();
-            lbm.voxelize_mesh_on_device(mesh, voxel_flag);
-            delete mesh;
+        if(results.mirror) { // symmetric half model
+            const std::unique_ptr<Mesh> mesh = MeshLoader::load_mirrored(results, *results.mirror);
+            lbm.voxelize_mesh_on_device(mesh.get(), voxel_flag);
             return;
         }
 
@@ -247,24 +239,6 @@ public:
         const float3 f = lbm_gravity_force(gravity, gravity_axis);
         return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, f.x, f.y, f.z,
                    particle_count, particle_density);
-    }
-
-    // ========================================================================
-    // Meshes
-    // ========================================================================
-
-    MeshLoader::MeshParams get_mesh_params() const {
-        MeshLoader::MeshParams params;
-        params.stl_path = results.stl_path;
-        params.center_lbm = results.center_lbm;
-        params.rotation_matrix = results.rotation_matrix;
-        params.lbm_reference_size = results.lbm_reference_size;
-        return params;
-    }
-
-    // full mesh from a half model, mirrored across the configured plane (caller deletes)
-    Mesh* load_mesh_mirrored() {
-        return MeshLoader::load_mirrored(get_mesh_params(), config.mirror_plane_);
     }
 
     // ========================================================================

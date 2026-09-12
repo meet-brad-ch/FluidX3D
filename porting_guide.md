@@ -271,7 +271,7 @@ Quantities multiply and divide into new dimensions (`10_m / 2_s` is a `Speed`), 
 
 ## Mapping from SimulationConfig
 
-Earlier versions of the Setup API configured the domain with `SimulationConfig`. Its setters map to:
+Earlier versions of the Setup API configured the domain with `SimulationConfig`, which is removed. Its setters map to:
 
 | SimulationConfig | Domain / Model |
 |------------------|----------------|

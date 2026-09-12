@@ -52,5 +52,5 @@ fluidx3d_add_test(fluidx3d_setup_tests
     LINK
         fluidx3d::setup
 )
-# test geometry files are written here; SimulationConfig finds them relative to resources/
+# test geometry files are written here; Model finds them relative to resources/
 target_compile_definitions(fluidx3d_setup_tests PRIVATE FLUIDX3D_TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}")
