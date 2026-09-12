@@ -1,27 +1,30 @@
 # Porting Guide: Low-Level to High-Level API
 
-This guide explains how to port FluidX3D examples from the low-level API to the new high-level Setup API.
+This guide explains how to port FluidX3D examples from the low-level API to the Setup API (`#include "setup/setup.hpp"`).
 
 ---
 
 ## Overview
 
-The high-level API provides:
-- SI units throughout (no manual cell calculations)
-- Fluent builder pattern for configuration
-- Automatic mesh loading, scaling, and positioning
-- Predefined fluid properties (`Fluid::AIR`, `Fluid::WATER`, etc.)
+The Setup API provides:
+- Physical units with compile-time checks: `2.4_m`, `10_mps`, `180_deg`, `1000_mb` (a length where a speed is expected does not compile)
+- One description of the simulation box (`Domain`) and the geometry in it (`Model`)
+- Automatic domain sizing, mesh loading, scaling, placement and voxelization
+- Fluent builders for boundaries, free surfaces, thermal walls, graphics and video
+- Predefined fluids (`Fluid::AIR`, `Fluid::WATER`)
+- Clear errors: conflicting settings stop the program at startup with a message (`SetupError`)
 
 ---
 
 ## Quick Reference
 
-| Old (Low-Level) | New (High-Level) |
-|-----------------|------------------|
-| `resolution(float3(1,2,1), 1000u)` | `.set_domain_aspect_ratio(1.0f, 2.0f, 1.0f).set_vram_mb(1000u)` |
-| `lbm_length = 0.65f * lbm_N.y` | `.set_geometry_scale(0.65f)` |
-| `units.set_m_kg_s(...)` | `sim.configure_units_with_length(...)` |
-| `read_stl(...) + mesh->translate(...)` | `.set_pmin_offset_ratio(...)` |
+| Old (Low-Level) | New (Setup API) |
+|-----------------|-----------------|
+| `resolution(float3(1, 5, 0.75), 2000u)` | `Domain::box(1_m, 5_m, 0.75_m).vram(2000_mb)` |
+| grid from a mesh plus margins | `Domain::around(Model("hill.stl")).clearances(2_m, 500_m, 100_m).cell_size(8_m)` |
+| `resolution(...)` + `lbm_length = 0.65f*lbm_N.y` | `Domain::around(Model(file).length(2.4_m)).size(x, y, z).vram(1000_mb)` |
+| `read_stl(...)` + `mesh->translate(...)` | `.gap_to_inlet(...)`, `.gap_to_floor(...)` or `.model_offset(...)` |
+| `units.set_m_kg_s(...)` | `sim.configure_units(velocity_mps, Fluid::AIR, lbm_u)` |
 | `lbm.voxelize_mesh_on_device(mesh)` | `sim.voxelize(lbm)` |
 | `parallel_for` boundary setup | `BoundaryBuilder(lbm).set_solid_floor()...` |
 | `lbm.graphics.visualization_modes = ...` | `GraphicsConfig(lbm).show_surface()...` |
@@ -77,7 +80,7 @@ void main_setup() {
 }
 ```
 
-### New High-Level API
+### New Setup API
 
 ```cpp
 #include "defines.hpp"
@@ -86,18 +89,17 @@ void main_setup() {
 
 void main_setup() {
     const float32_t flow_velocity_mps = 1.0f;
-    const float32_t cow_size_m = 2.4f;
+    const Length cow_length = 2.4_m;
+    const Length domain_length = cow_length / 0.65f; // the cow is 65 % of the domain length
 
-    SimulationSetup sim(SimulationConfig("Cow_t.stl")
-        .set_domain_aspect_ratio(1.0f, 2.0f, 1.0f)
-        .set_vram_mb(1000u)
-        .set_geometry_scale(0.65f)
-        .set_rotation_deg(180.0f, 0.0f, 180.0f)
-        .set_reference_axis(SimulationConfig::ReferenceAxis::Y)
-        .set_pmin_offset_ratio(0.0f, 0.1f, 0.006f));
+    SimulationSetup sim(Domain::around(Model("Cow_t.stl").rotation(180_deg, 0_deg, 180_deg).length(cow_length))
+        .size(0.5f * domain_length, domain_length, 0.5f * domain_length)
+        .gap_to_inlet(0.1f * cow_length)   // the cow's nose
+        .gap_to_floor(0.006f * cow_length) // about one cell
+        .vram(1000_mb));
 
     sim.setup();
-    sim.configure_units_with_length(cow_size_m, flow_velocity_mps, Fluid::AIR, 0.075f);
+    sim.configure_units(flow_velocity_mps, Fluid::AIR, 0.075f);
     sim.print_reynolds_number(Fluid::AIR);
 
     LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -122,67 +124,61 @@ void main_setup() {
 
 ## Porting Step by Step
 
-### 1. Domain Configuration
+### 1. Domain
 
-**Old:**
+Pick the form that matches how the original sized its grid.
+
+**A box without geometry** (the original used `resolution()` with a fixed aspect ratio):
 ```cpp
-const uint3 lbm_N = resolution(float3(1.0f, 2.0f, 1.0f), 1000u);
-const float lbm_length = 0.65f * (float)lbm_N.y;
+SimulationSetup sim(Domain::box(1.0_m, 5.0_m, 0.75_m).vram(2000_mb));
 ```
 
-**New:**
+**Clearances around a model** whose STL is already in metres (terrain, measured parts):
 ```cpp
-SimulationConfig("geometry.stl")
-    .set_domain_aspect_ratio(1.0f, 2.0f, 1.0f)  // X:Y:Z ratio
-    .set_vram_mb(1000u)                          // VRAM budget
-    .set_geometry_scale(0.65f)                   // 65% of reference axis
-    .set_reference_axis(SimulationConfig::ReferenceAxis::Y)
+SimulationSetup sim(Domain::around(Model("hill.stl"))
+    .clearances(2_m, 500_m, 100_m) // below, above, on each side
+    .cell_size(8_m)                // or .vram(...)
+    .max_vram(20000_mb));          // limit for cell_size()
+```
+The model sits centered in X and Y, on the bottom clearance.
+
+**A size around a model of known length** (the original scaled the mesh to a fraction of the domain):
+```cpp
+SimulationSetup sim(Domain::around(Model("X-Wing.stl").length(13.4_m))  // real length along Y (default axis)
+    .size(12_m, 40_m, 6_m)
+    .model_offset(0_m, -6_m, 0_m) // model center 6 m upstream of the domain center
+    .vram(880_mb));
+```
+`Model::length(L, axis)` gives the model's real size along an axis after its rotation; the STL's own units then do not matter. If the original only knew a ratio (the model is 65 % of the domain), write the size as `length / 0.65f`, which keeps the grid and the scale of the original.
+
+The resolution is either `vram()` (the largest grid that fits the budget, default 2000 MB) or, around a model with clearances, `cell_size()` with an optional `max_vram()`.
+
+### 2. Geometry
+
+```cpp
+Model("aircraft.stl")
+    .rotation(90_deg, 0_deg, 90_deg) // applied in the order X, Y, Z
+    .angle_of_attack(-10_deg)        // additional pitch, positive: nose up
+    .length(62_m, Axis::Y)           // for Domain::size()
+    .repair_mesh()                   // fill holes before the SDF is generated
+    .mirrored(Axis::X)               // half model: add its mirror image
 ```
 
-### 2. Unit Conversion
+Placement (with `size()` only):
+- `.model_offset(x, y, z)`: the model's center, this far from the domain's center
+- `.gap_to_inlet(d)`: the model's front (bounding box minimum in Y) this far from the inlet at y = 0; X stays centered
+- `.gap_to_floor(d)`: the model's bottom this far above the floor at z = 0
 
-**Old:**
+### 3. Units
+
 ```cpp
-const float si_length = 2.4f;
-const float si_u = 1.0f;
-const float si_rho = 1.225f;
-const float lbm_u = 0.075f;
-units.set_m_kg_s(lbm_length, lbm_u, 1.0f, si_length, si_u, si_rho);
-const float lbm_nu = units.nu(si_nu);
+sim.setup();                                        // plans the domain
+sim.configure_units(flow_velocity_mps, Fluid::AIR); // optional third argument: lattice velocity (default 0.1)
+LBM lbm = sim.create_lbm(Fluid::AIR);               // or create_lbm_surface / create_lbm_thermal / create_lbm_particles_reynolds
 ```
+The reference length comes from the domain (the box's longest side, or the model's `length()`), so there is no separate length to pass.
 
-**New:**
-```cpp
-sim.configure_units_with_length(
-    2.4f,           // SI reference length (meters)
-    1.0f,           // SI velocity (m/s)
-    Fluid::AIR,     // Fluid properties (density, viscosity)
-    0.075f          // LBM reference velocity
-);
-```
-
-### 3. Geometry Positioning
-
-**Old (manual mesh translation):**
-```cpp
-Mesh* mesh = read_stl(path, lbm.size(), lbm.center(), rotation, lbm_length);
-mesh->translate(float3(0.0f, 1.0f-mesh->pmin.y+0.1f*lbm_length, 1.0f-mesh->pmin.z));
-lbm.voxelize_mesh_on_device(mesh);
-```
-
-**New (declarative positioning):**
-```cpp
-SimulationConfig("geometry.stl")
-    .set_rotation_deg(180.0f, 0.0f, 180.0f)
-    .set_pmin_offset_ratio(0.0f, 0.1f, 0.006f)  // Y: 10% gap, Z: ~1 cell
-// ...
-sim.voxelize(lbm);
-```
-
-The `set_pmin_offset_ratio(x, y, z)` method positions the geometry's bounding box minimum:
-- **X**: Ignored (geometry stays centered in X)
-- **Y**: `pmin.y = y * lbm_reference_size` (e.g., 0.1 = 10% of geometry length from inlet)
-- **Z**: `pmin.z = z * lbm_reference_size` (e.g., 0.006 ≈ 1 cell above floor)
+Gravity and other volume forces are given in m/s²: `sim.create_lbm_surface(Fluid::WATER, 9.81f)`. For free-surface cases with a sub-cell water depth, see `dam_break` and `breaking_waves`: they match the original's Reynolds number, because real water viscosity would need a much finer grid.
 
 ### 4. Boundary Conditions
 
@@ -197,103 +193,81 @@ parallel_for(lbm.get_N(), [&](ulong n) {
 });
 ```
 
-**New (fluent builder):**
+**New (fluent builder, SI units):**
 ```cpp
 BoundaryBuilder(lbm)
     .set_solid_floor()
     .set_open_boundaries()
-    .initialize_velocity_y(flow_velocity_mps)  // Uses SI units
+    .initialize_velocity_y(flow_velocity_mps)
     .apply();
 ```
+Free surfaces use `SurfaceBuilder`, thermal walls `ThermalBuilder` (temperatures in Kelvin), wave makers `WaveBoundary`, rotating parts `MovingPartsManager`.
 
-### 5. Graphics Configuration
+### 5. Graphics and Video
 
-**Old:**
-```cpp
-lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_Q_CRITERION;
-lbm.graphics.set_camera_centered(-40.0f, 20.0f, 78.0f, 1.25f);
-```
-
-**New:**
 ```cpp
 GraphicsConfig(lbm)
     .show_surface()
     .show_vortices()
     .apply();
 
-// For video recording:
+// headless video (GRAPHICS without INTERACTIVE_GRAPHICS)
 VideoRecorder()
     .add(CameraConfig().set_angles(-40.0f, 20.0f).set_fov(78.0f).set_zoom(1.25f))
     .set_video_length_s(10.0f)
-    .record(lbm, 10.0f, units);  // 10 seconds
+    .record(lbm, 10.0f, units); // 10 simulated seconds
 ```
 
 ---
 
-## Parameter Mapping
+## Units and Literals
 
-### Geometry Positioning
+| Quantity | Literals |
+|----------|----------|
+| Length | `_m`, `_cm`, `_mm`, `_km` |
+| Model lengths (relative) | `_lengths` |
+| Duration, frequency | `_s`, `_min`, `_Hz` |
+| Speed, acceleration | `_mps`, `_kmh`, `_mps2` |
+| Mass, density, viscosity | `_kg`, `_kgpm3`, `_m2ps` |
+| Force, pressure, surface tension | `_N`, `_Pa`, `_Npm` |
+| Temperature (absolute) | `_K`, `_C` |
+| Angle | `_deg`, `_rad` |
+| Device memory | `_mb`, `_gb` (1 GB = 1024 MB) |
 
-| Old Code | New API | Notes |
-|----------|---------|-------|
-| `mesh->translate(float3(0, dy, dz))` | `.set_pmin_offset_ratio(0, y_ratio, z_ratio)` | X stays centered |
-| `1.0f - mesh->pmin.z` (1 cell) | `z_ratio ≈ 0.006` | Ratio of lbm_reference_size |
-| `0.1f * lbm_length` (10% gap) | `y_ratio = 0.1` | Direct ratio |
-
-### Unit Conversion
-
-| Old Code | New API |
-|----------|---------|
-| `units.set_m_kg_s(lbm_L, lbm_u, 1, si_L, si_u, si_rho)` | `sim.configure_units_with_length(si_L, si_u, fluid, lbm_u)` |
-| `units.nu(si_nu)` | `sim.to_lbm_viscosity(si_nu)` or use `Fluid::AIR` |
-| `units.t(si_time)` | `sim.to_lbm_timesteps(si_time)` |
-
-### Fluid Properties
-
-Instead of manually specifying `si_nu` and `si_rho`, use predefined fluids:
-
-```cpp
-Fluid::AIR      // density=1.225, nu=1.48e-5
-Fluid::WATER    // density=998.2, nu=1.004e-6
-```
+Quantities multiply and divide into new dimensions (`10_m / 2_s` is a `Speed`), scale with plain numbers (`0.5f * domain_length`) and give their SI value with `.si()`.
 
 ---
 
-## Common Patterns
+## Mapping from SimulationConfig
 
-### Creating LBM with Fluid Properties
+Earlier versions of the Setup API configured the domain with `SimulationConfig`. Its setters map to:
 
-```cpp
-// Old
-LBM lbm(lbm_N, units.nu(1.48e-5f));
-
-// New
-LBM lbm = sim.create_lbm(Fluid::AIR);
-```
-
-### Reynolds Number
-
-```cpp
-// Old
-print_info("Re = " + to_string(to_uint(units.si_Re(si_length, si_u, si_nu))));
-
-// New
-sim.print_reynolds_number(Fluid::AIR);
-```
+| SimulationConfig | Domain / Model |
+|------------------|----------------|
+| `SimulationConfig().set_domain_size_m(x, y, z)` | `Domain::box(x, y, z)` |
+| `SimulationConfig(file).set_clearances_m(b, t, s)` | `Domain::around(Model(file)).clearances(b, t, s)` |
+| `.set_vram_mb(n)` | `.vram(n_mb)` |
+| `.set_voxel_size_m(v).set_max_vram_mb(n)` | `.cell_size(v).max_vram(n_mb)` |
+| `.set_domain_aspect_ratio(ax, ay, az).set_geometry_scale(s)` with reference axis A and `configure_units_with_length(L, ...)` | `Model(file).length(L, A)` and `.size(...)`, where the size along A is `L / s` and the other sides follow the ratio |
+| `.set_center_offset_ratio(x, y, z)` | `.model_offset(x * L, y * L, z * L)` |
+| `.set_pmin_offset_ratio(0, y, z)` | `.gap_to_inlet(y * L).gap_to_floor(z * L)` |
+| `.set_rotation_deg(x, y, z)` | `Model::rotation(x_deg, y_deg, z_deg)` |
+| `.set_angle_of_attack_deg(a)` | `Model::angle_of_attack(a_deg)` |
+| `.set_fix_mesh(true)` | `Model::repair_mesh()` |
+| `.set_mirror_plane(MirrorPlane::X)` | `Model::mirrored(Axis::X)` |
+| `configure_units_with_length(L, v, fluid)` | `Model::length(L)` and `configure_units(v, fluid)` |
 
 ---
 
 ## Checklist for Porting
 
 - [ ] Replace includes with `#include "setup/setup.hpp"`
-- [ ] Create `SimulationConfig` with geometry filename
-- [ ] Set domain aspect ratio and VRAM budget
-- [ ] Set geometry scale (fraction of reference axis)
-- [ ] Set rotation using degrees
-- [ ] Set positioning with `set_pmin_offset_ratio()` or `set_center_offset_ratio()`
-- [ ] Call `sim.setup()` and `sim.configure_units_with_length()`
-- [ ] Create LBM with `sim.create_lbm(Fluid::...)`
+- [ ] Describe the domain with `Domain::box`, `Domain::around(...).clearances(...)` or `Domain::around(...).size(...)`
+- [ ] Give the model's real length if the domain is sized around it
+- [ ] Set rotation, angle of attack and placement in degrees and metres
+- [ ] Call `sim.setup()` and `sim.configure_units()`
+- [ ] Create the LBM with `sim.create_lbm*(Fluid::...)`
 - [ ] Voxelize with `sim.voxelize(lbm)`
-- [ ] Replace boundary loops with `BoundaryBuilder`
+- [ ] Replace boundary loops with the builders
 - [ ] Replace graphics setup with `GraphicsConfig`
-- [ ] Use SI units for velocities in boundary initialization
+- [ ] Record the example's baseline: `FLUIDX3D_BLESS=1 ctest -R baseline_<example>` (see [CMAKE.md](CMAKE.md#tests))
