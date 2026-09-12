@@ -11,9 +11,9 @@ namespace {
 constexpr LatticeMemory d3q19_fp16 { 55u };
 constexpr LatticeMemory d3q19_fp16_surface { 67u };
 
-TEST(DomainPlanner, DomainOnlySizesTheBoxFromTheVramBudget) {
+TEST(DomainPlanner, BoxSizesTheGridFromTheVramBudget) {
     // breaking_waves: 1 m x 5 m x 0.75 m in 2000 MB with FP16 and SURFACE
-    const DomainPlan plan = DomainPlanner::plan(SimulationConfig().set_domain_size_m(1.0f, 5.0f, 0.75f).set_vram_mb(2000u), d3q19_fp16_surface);
+    const DomainPlan plan = DomainPlanner::plan(Domain::box(1.0_m, 5.0_m, 0.75_m).vram(2000_mb), d3q19_fp16_surface);
     EXPECT_EQ(plan.Nx, 203u);
     EXPECT_EQ(plan.Ny, 1014u);
     EXPECT_EQ(plan.Nz, 152u);
@@ -23,64 +23,67 @@ TEST(DomainPlanner, DomainOnlySizesTheBoxFromTheVramBudget) {
     EXPECT_FLOAT_EQ(plan.center_lbm.y, 507.0f);
     EXPECT_FLOAT_EQ(plan.center_lbm.z, 76.0f);
     EXPECT_TRUE(plan.stl_path.empty());
+    EXPECT_FALSE(plan.mirror);
 }
 
-TEST(DomainPlanner, GeometryBasedAddsTheClearancesAroundTheModel) {
+TEST(DomainPlanner, ClearancesAddCellsAroundTheModel) {
     const BoxStl box(test_file("fluidx3d_test_plan_geometry.stl"), 4.0f, 2.0f, 1.0f);
-    const DomainPlan plan = DomainPlanner::plan(SimulationConfig(resource_name(box.path()))
-        .set_voxel_size_m(0.1f)
-        .set_max_vram_mb(20000u)
-        .set_clearances_m(0.5f, 1.0f, 0.3f), d3q19_fp16);
+    const DomainPlan plan = DomainPlanner::plan(
+        Domain::around(Model(resource_name(box.path()))).clearances(0.5_m, 1.0_m, 0.3_m).cell_size(0.1_m).max_vram(20000_mb), d3q19_fp16);
     EXPECT_EQ(plan.Nx, 40u + 2u * 3u);
     EXPECT_EQ(plan.Ny, 20u + 2u * 3u);
     EXPECT_EQ(plan.Nz, 10u + 5u + 10u);
     EXPECT_FLOAT_EQ(plan.center_lbm.x, 23.0f);
     EXPECT_FLOAT_EQ(plan.center_lbm.y, 13.0f);
     EXPECT_FLOAT_EQ(plan.center_lbm.z, 10.0f); // resting on the 5-cell bottom clearance
-    EXPECT_FLOAT_EQ(plan.lbm_reference_size, 20.0f); // reference axis Y
+    EXPECT_FLOAT_EQ(plan.lbm_reference_size, 20.0f); // along Y
     EXPECT_NEAR(plan.si_reference_size, 2.0f, 1e-5f);
     EXPECT_FLOAT_EQ(plan.voxel_size, 40.0f);         // the longest side
     EXPECT_TRUE(std::filesystem::exists(plan.stl_path));
 }
 
-TEST(DomainPlanner, AspectRatioCentersTheModelWithAnOffset) {
+// A model 1.2 m long along Y (2 STL units) in a 1.2 m x 2.4 m x 1.2 m domain: half the domain's length.
+TEST(DomainPlanner, SizeCentersTheModelWithAnOffset) {
     const BoxStl box(test_file("fluidx3d_test_plan_center.stl"), 4.0f, 2.0f, 1.0f);
-    const DomainPlan plan = DomainPlanner::plan(SimulationConfig(resource_name(box.path()))
-        .set_domain_aspect_ratio(1.0f, 2.0f, 1.0f)
-        .set_vram_mb(100u)
-        .set_geometry_scale(0.5f)
-        .set_center_offset_ratio(0.0f, 0.1f, 0.0f), d3q19_fp16);
-    const GridSize grid = grid_for_memory(1.0f, 2.0f, 1.0f, 100u, d3q19_fp16);
+    const DomainPlan plan = DomainPlanner::plan(
+        Domain::around(Model(resource_name(box.path())).length(1.2_m)).size(1.2_m, 2.4_m, 1.2_m).model_offset(0_m, 0.12_m, 0_m).vram(100_mb),
+        d3q19_fp16);
+    const GridSize grid = grid_for_memory(1.2f, 2.4f, 1.2f, 100u, d3q19_fp16);
     EXPECT_EQ(plan.Nx, grid.x);
     EXPECT_EQ(plan.Ny, grid.y);
     EXPECT_EQ(plan.Nz, grid.z);
-    const float length = 0.5f * (float)grid.y; // geometry length: half of the reference axis Y
+    const float length = 0.5f * (float)grid.y;
     EXPECT_FLOAT_EQ(plan.lbm_reference_size, length);
-    EXPECT_FLOAT_EQ(plan.si_reference_size, 1.0f); // no SI length in this mode until configure_units_with_length()
+    EXPECT_FLOAT_EQ(plan.si_reference_size, 1.2f);
     EXPECT_NEAR(plan.center_lbm.x, 0.5f * (float)grid.x, 1e-4f);
-    EXPECT_NEAR(plan.center_lbm.y, 0.5f * (float)grid.y + 0.1f * length, 1e-3f);
+    EXPECT_NEAR(plan.center_lbm.y, 0.5f * (float)grid.y + 0.1f * length, 1e-3f); // 0.12 m is 0.1 model lengths
     EXPECT_NEAR(plan.center_lbm.z, 0.5f * (float)grid.z, 1e-4f);
-    EXPECT_FLOAT_EQ(plan.voxel_size, length);
+    EXPECT_NEAR(plan.voxel_size, 2.0f * length, 1e-3f); // the longest side, X, is twice the length along Y
 }
 
-TEST(DomainPlanner, AspectRatioPlacesTheBoundingBoxMinimum) {
-    const BoxStl box(test_file("fluidx3d_test_plan_pmin.stl"), 4.0f, 2.0f, 1.0f);
-    const DomainPlan plan = DomainPlanner::plan(SimulationConfig(resource_name(box.path()))
-        .set_domain_aspect_ratio(1.0f, 2.0f, 1.0f)
-        .set_vram_mb(100u)
-        .set_geometry_scale(0.5f)
-        .set_pmin_offset_ratio(0.3f, 0.1f, 0.02f), d3q19_fp16);
-    const GridSize grid = grid_for_memory(1.0f, 2.0f, 1.0f, 100u, d3q19_fp16);
+TEST(DomainPlanner, GapsPlaceTheModelsFrontAndBottom) {
+    const BoxStl box(test_file("fluidx3d_test_plan_gaps.stl"), 4.0f, 2.0f, 1.0f);
+    const DomainPlan plan = DomainPlanner::plan(
+        Domain::around(Model(resource_name(box.path())).length(1.2_m)).size(1.2_m, 2.4_m, 1.2_m).gap_to_inlet(0.12_m).gap_to_floor(0.024_m).vram(100_mb),
+        d3q19_fp16);
+    const GridSize grid = grid_for_memory(1.2f, 2.4f, 1.2f, 100u, d3q19_fp16);
     const float length = 0.5f * (float)grid.y;
-    const float cells_per_m = length / 2.0f; // the model is 2 m long along Y
-    EXPECT_EQ(plan.base_grid.x, (uint32_t)(cells_per_m * 4.0f + 0.5f));
-    EXPECT_EQ(plan.base_grid.y, (uint32_t)(cells_per_m * 2.0f + 0.5f));
-    EXPECT_EQ(plan.base_grid.z, (uint32_t)(cells_per_m * 1.0f + 0.5f));
-    // the bounding box minimum sits at 0.1 and 0.02 model lengths from the inlet and the floor;
-    // X stays centered: the X offset (0.3) is ignored (review A7)
+    const float cells_per_unit = length / 2.0f; // the model is 2 STL units long along Y
+    EXPECT_EQ(plan.base_grid.x, (uint32_t)(cells_per_unit * 4.0f + 0.5f));
+    EXPECT_EQ(plan.base_grid.y, (uint32_t)(cells_per_unit * 2.0f + 0.5f));
+    EXPECT_EQ(plan.base_grid.z, (uint32_t)(cells_per_unit * 1.0f + 0.5f));
+    // X centered; the bounding box minimum 0.1 and 0.02 model lengths from the inlet and the floor
     EXPECT_NEAR(plan.center_lbm.x, 0.5f * (float)grid.x, 1e-4f);
-    EXPECT_NEAR(plan.center_lbm.y, 0.1f * length + 0.5f * cells_per_m * 2.0f, 1e-3f);
-    EXPECT_NEAR(plan.center_lbm.z, 0.02f * length + 0.5f * cells_per_m * 1.0f, 1e-3f);
+    EXPECT_NEAR(plan.center_lbm.y, 0.1f * length + 0.5f * cells_per_unit * 2.0f, 1e-3f);
+    EXPECT_NEAR(plan.center_lbm.z, 0.02f * length + 0.5f * cells_per_unit * 1.0f, 1e-3f);
+}
+
+TEST(DomainPlanner, MirroredModelIsInThePlan) {
+    const BoxStl box(test_file("fluidx3d_test_plan_mirror.stl"), 4.0f, 2.0f, 1.0f);
+    const DomainPlan plan = DomainPlanner::plan(
+        Domain::around(Model(resource_name(box.path())).length(1_m).mirrored(Axis::X)).size(2_m, 2_m, 1_m).vram(100_mb), d3q19_fp16);
+    ASSERT_TRUE(plan.mirror);
+    EXPECT_EQ(*plan.mirror, Axis::X);
 }
 
 } // namespace

@@ -7,9 +7,8 @@ GeometryScaler::GeometryScaler(
     uint32_t vram_mb,
     const Clearances& clearances,
     LatticeMemory lattice,
-    ReferenceAxis reference_axis,
     const float3x3& rotation
-) : stl_path_(stl_path), vram_mb_(vram_mb), reference_axis_(reference_axis), clearances_(clearances), lattice_(lattice), rotation_(rotation) {
+) : stl_path_(stl_path), vram_mb_(vram_mb), clearances_(clearances), lattice_(lattice), rotation_(rotation) {
     load_stl_and_calculate_scaling();
 }
 
@@ -19,9 +18,8 @@ GeometryScaler::GeometryScaler(
     uint32_t max_vram_mb,
     const Clearances& clearances,
     LatticeMemory lattice,
-    ReferenceAxis reference_axis,
     const float3x3& rotation
-) : stl_path_(stl_path), vram_mb_(0u), reference_axis_(reference_axis), clearances_(clearances), lattice_(lattice), rotation_(rotation) {
+) : stl_path_(stl_path), vram_mb_(0u), clearances_(clearances), lattice_(lattice), rotation_(rotation) {
     read_stl_size();
     si_reference_size_ = get_reference_dimension(stl_size_si_);
     calculate_from_voxel_size(voxel_size_meters, max_vram_mb);
@@ -91,17 +89,6 @@ float3 GeometryScaler::calculate_center(const uint3& domain_size, const Clearanc
         (float32_t)domain_size.y / 2.0f,
         (float32_t)stl_size_lbm_.z / 2.0f + (float32_t)bottom_cells
     );
-}
-
-float32_t GeometryScaler::get_reference_dimension(const float3& size) const {
-    switch(reference_axis_) {
-        case ReferenceAxis::X: return size.x;
-        case ReferenceAxis::Y: return size.y;
-        case ReferenceAxis::Z: return size.z;
-        case ReferenceAxis::MAX: return fmax(fmax(size.x, size.y), size.z);
-        case ReferenceAxis::MIN: return fmin(fmin(size.x, size.y), size.z);
-        default: return size.y;
-    }
 }
 
 void GeometryScaler::calculate_from_voxel_size(float32_t voxel_size_m, uint32_t max_vram_mb) {

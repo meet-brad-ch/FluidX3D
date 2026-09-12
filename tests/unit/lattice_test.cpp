@@ -21,7 +21,7 @@ struct ExampleGrid {
     GridSize grid; // from tests/baselines/<example>.txt
 };
 
-// Aspect ratios as the examples compute them: set_domain_aspect_ratio(), or the size in m divided by its largest side.
+// Aspect ratios as the planner computes them: the size in m (Domain::size()), or divided by its largest side (Domain::box()).
 const ExampleGrid example_grids[] = {
     { "cow",                1.0f, 2.0f, 1.0f,  1000u, d3q19_fp16, { 212u, 424u, 212u } },
     { "xwing",              1.0f, 2.0f, 0.5f,   880u, d3q19_fp16, { 256u, 512u, 128u } },

@@ -6,12 +6,10 @@
 
 // Scale between an STL geometry in m and the lattice: cell size from a VRAM budget (for geometry plus clearances)
 // or from a given cell size, and the domain size and geometry center in cells. The geometry is measured after its
-// rotation, as the core voxelizes it.
+// rotation, as the core voxelizes it. The reference length (units, Reynolds number) is its extent along Y.
 // Throws SetupError if the STL file does not exist or the grid does not fit the memory limit.
 class GeometryScaler {
 public:
-    enum class ReferenceAxis { X, Y, Z, MAX, MIN }; // geometry dimension used for scaling (default Y)
-
     struct Clearances { // in m
         float32_t bottom_m;
         float32_t top_m;
@@ -24,7 +22,6 @@ public:
         uint32_t vram_mb,
         const Clearances& clearances,
         LatticeMemory lattice,
-        ReferenceAxis reference_axis = ReferenceAxis::Y,
         const float3x3& rotation = float3x3(1.0f)
     );
 
@@ -35,7 +32,6 @@ public:
         uint32_t max_vram_mb,
         const Clearances& clearances,
         LatticeMemory lattice,
-        ReferenceAxis reference_axis = ReferenceAxis::Y,
         const float3x3& rotation = float3x3(1.0f)
     );
 
@@ -62,7 +58,6 @@ private:
     float32_t meters_per_cell_;
 
     uint32_t vram_mb_;
-    ReferenceAxis reference_axis_;
     Clearances clearances_;
     LatticeMemory lattice_;
     float3x3 rotation_;
@@ -71,5 +66,5 @@ private:
     void load_stl_and_calculate_scaling(); // VRAM budget mode
     void calculate_from_voxel_size(float32_t voxel_size_m, uint32_t max_vram_mb);
     float32_t calculate_min_voxel_size(uint32_t max_vram_mb) const; // for the error message
-    float32_t get_reference_dimension(const float3& size) const;
+    static float32_t get_reference_dimension(const float3& size) { return size.y; }
 };

@@ -1,12 +1,12 @@
 #pragma once
 
 // Setup API: one include for all components. Typical flow (see porting_guide.md and the examples):
-//   SimulationSetup sim(SimulationConfig("mesh.stl").set_vram_mb(2000u));
+//   SimulationSetup sim(Domain::around(Model("mesh.stl")).clearances(1_m, 2_m, 1_m).vram(2000_mb));
 //   sim.setup();
 //   sim.configure_units(1.0_mps, Fluid::AIR); // reference velocity
 //   LBM lbm = sim.create_lbm(Fluid::AIR);
 //   sim.voxelize(lbm);
-//   BoundaryBuilder(lbm).set_solid_floor().set_open_boundaries().initialize_velocity_y(1.0f).apply();
+//   BoundaryBuilder(lbm).set_solid_floor().set_open_boundaries().initialize_velocity_y(1.0_mps).apply();
 //   GraphicsConfig(lbm).show_surface().show_vortices().apply();
 //   lbm.run();
 
@@ -15,7 +15,6 @@
 #include "setup/core/boundary_utils.hpp"
 
 #include "setup/config/camera_config.hpp"
-#include "setup/config/simulation_config.hpp"
 
 #include "setup/domain/lattice.hpp"
 #include "setup/domain/geometry_scaler.hpp"

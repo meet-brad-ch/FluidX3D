@@ -33,7 +33,7 @@ void main_setup() {
 	// Configure tumbling using MovingPartsManager
 	// Uses the same geometry as the main config, with arbitrary axis rotation
 	MovingPartsManager parts(sim, lbm);
-	parts.add(MovingPart(sim.get_geometry_filename())
+	parts.add(MovingPart(sim.model_file())
 		.set_tumble(float3(0.2f, 1.0f, 0.1f), radians(0.4032f))
 		.set_update_interval(update_interval));
 	parts.initialize();

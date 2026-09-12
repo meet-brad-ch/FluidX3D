@@ -2,7 +2,6 @@
 #include "utilities.hpp"
 #include "setup/core/quantity.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
-#include "setup/config/simulation_config.hpp"
 #include <optional>
 #include <string>
 
@@ -43,6 +42,12 @@ public:
         return *this;
     }
 
+    const std::string& file() const { return file_; } ///< in resources/
+    bool is_sdf() const;                              ///< a binary SDF (".sdf"), not an STL
+
+    /// rotation() and then angle_of_attack(), as the core's voxelizer turns the model
+    float3x3 rotation_matrix(bool with_angle_of_attack = true) const;
+
 private:
     std::string file_;
     Angle rotation_x_{}, rotation_y_{}, rotation_z_{};
@@ -53,6 +58,7 @@ private:
     std::optional<Axis> mirror_;
 
     friend class Domain;
+    friend class DomainPlanner;
 };
 
 // The simulation box in physical units:
@@ -60,7 +66,8 @@ private:
 //   Domain::around(Model("hill.stl")).clearances(2_m, 500_m, 100_m).cell_size(8_m).max_vram(20_gb)
 //   Domain::around(Model("Cow_t.stl").length(2.4_m)).size(1.85_m, 3.7_m, 1.85_m).gap_to_inlet(0.24_m).on_floor().vram(1000_mb)
 //   Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(1.0_m / 256.0f)   // 128 x 256 x 256 cells
-// Conflicting or unused settings are reported with a SetupError when the domain is used.
+// DomainPlanner computes the grid and the model's place from it. Conflicting or unused settings are reported with a
+// SetupError when the domain is used.
 class Domain {
 public:
     static Domain box(Length x, Length y, Length z) { // no model
@@ -125,14 +132,14 @@ public:
         return *this;
     }
 
-    // the planner's input; throws SetupError for conflicting or unused settings
-    SimulationConfig config() const;
+    /// @throws SetupError for conflicting or unused settings (DomainPlanner::plan() checks them too)
+    void validate() const;
+
+    const std::optional<Model>& model() const { return model_; }
 
 private:
     struct Box { Length x, y, z; };
     struct Clearances { Length bottom, top, sides; };
-
-    void set_resolution(SimulationConfig& config) const; // cell_size() and max_vram(), or vram()
 
     std::optional<Model> model_;
     std::optional<Box> size_;
@@ -144,4 +151,10 @@ private:
     std::optional<MemorySize> vram_;
     std::optional<Length> cell_size_;
     std::optional<MemorySize> max_vram_;
+
+    bool has_gaps() const { return gap_to_inlet_ || gap_to_floor_ || on_floor_; }
+    uint32_t vram_mb() const { return vram_ ? vram_->mb() : 2000u; }
+    uint32_t max_vram_mb() const { return max_vram_ ? max_vram_->mb() : 24000u; }
+
+    friend class DomainPlanner;
 };

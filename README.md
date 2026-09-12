@@ -40,7 +40,6 @@ This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for
 | Component | Purpose |
 |-----------|---------|
 | `Domain`, `Model` | The domain in physical units: `Domain::box(1.0_m, 5.0_m, 0.75_m)` or `Domain::around(Model("hill.stl")).clearances(...)`, with `.vram(2000_mb)` or `.cell_size(8_m)` |
-| `SimulationConfig` | The domain planner's input behind `Domain`; used directly only by examples not yet ported (see [porting_guide.md](porting_guide.md#mapping-from-simulationconfig)) |
 | `SimulationSetup` | Domain sizing, unit conversion, LBM creation (plain, thermal, free surface, particles), voxelization (STL converted to a cached SDF) |
 | `BoundaryBuilder` | Solid and open faces, initial velocity, wind profile, lid-driven cavity |
 | `SurfaceBuilder`, `WaveBoundary` | Free surface in metres and m/s: water level and boxes, solid blocks, inflows and outflows; oscillating wave maker (SURFACE) |
