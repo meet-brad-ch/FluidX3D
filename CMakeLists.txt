@@ -38,16 +38,20 @@ FetchContent_Declare(
     GIT_TAG        v2024.10.24
 )
 FetchContent_MakeAvailable(opencl_clhpp)
-# Fetch SDFGen (SDF generation utility)
+# Fetch SDFGen (SDF generation utility), pinned to a release
+set(SDFGEN_TAG v1.0.0)
+# Compile SDFGen's CUDA code only for this machine's GPU (SDFGen's default is every major architecture)
+set(SDFGEN_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures for SDFGen")
 FetchContent_Declare(
     sdfgen
     GIT_REPOSITORY https://github.com/meet-brad-ch/SDFGenFast.git
-    GIT_TAG        master
+    GIT_TAG        ${SDFGEN_TAG}
 )
 FetchContent_MakeAvailable(sdfgen)
 
-# Add SDF cache module (depends on sdfgen)
+# Add SDF cache module (depends on sdfgen); the SDFGen version is part of the SDF cache key
 add_subdirectory(src/sdf_cache)
+target_compile_definitions(sdf_cache PRIVATE SDFGEN_VERSION_TAG="${SDFGEN_TAG}")
 
 
 # Find dependencies - create IMPORTED targets

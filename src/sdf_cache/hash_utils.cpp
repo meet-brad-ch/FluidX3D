@@ -127,9 +127,15 @@ uint64_t xxhash64_stl_file(const char* filename, uint64_t seed) {
 }
 
 // Compute SDF cache key from all parameters affecting SDF output
+// SDFGen version (set by CMake): SDFs made by a different generator version get a different cache key
+#ifndef SDFGEN_VERSION_TAG
+#define SDFGEN_VERSION_TAG "unknown"
+#endif
+
 uint64_t compute_sdf_cache_key(const std::string& stl_path, uint32_t target_nx, uint32_t target_ny, uint32_t target_nz, int32_t padding, bool fix_mesh) {
-    // Start with STL file hash
-    uint64_t hash = xxhash64_stl_file(stl_path.c_str(), 0);
+    // Start with STL file hash, seeded with the SDFGen version
+    const uint64_t version_seed = xxhash64(SDFGEN_VERSION_TAG, sizeof(SDFGEN_VERSION_TAG) - 1, 0);
+    uint64_t hash = xxhash64_stl_file(stl_path.c_str(), version_seed);
 
     // Mix in target dimensions (these determine the SDF resolution)
     hash = xxhash64(&target_nx, sizeof(target_nx), hash);
