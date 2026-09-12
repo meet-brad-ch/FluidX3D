@@ -44,7 +44,7 @@ This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for
 | `SimulationSetup` | Domain sizing, unit conversion, LBM creation (plain, thermal, free surface, particles), voxelization (STL converted to a cached SDF) |
 | `BoundaryBuilder` | Solid and open faces, initial velocity, wind profile, lid-driven cavity |
 | `SurfaceBuilder`, `WaveBoundary` | Free surface in metres and m/s: water level and boxes, solid blocks, inflows and outflows; oscillating wave maker (SURFACE) |
-| `ThermalBuilder` | Hot and cold walls in Kelvin, hydrostatic and perturbed start (TEMPERATURE) |
+| `ThermalBuilder`, `TemperatureScale` | Hot and cold walls in Kelvin, hydrostatic and perturbed start; the lattice temperatures and buoyancy of a temperature range (TEMPERATURE) |
 | `MovingPartsManager`, `MovingPart` | Rotating and tumbling parts, re-voxelized while the simulation runs |
 | `ParticleManager` | Particle seeding in m (PARTICLES) |
 | `ForceAnalyzer` | Force in N and drag coefficient on the tracked object (FORCE_FIELD) |

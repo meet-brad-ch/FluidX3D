@@ -1,6 +1,7 @@
 #pragma once
 #include "setup/core/types.hpp"
 #include "setup/core/unit_scale.hpp"
+#include "setup/core/temperature_scale.hpp"
 #include "units.hpp"
 #include "setup/core/fluids.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
@@ -25,6 +26,7 @@ private:
     SimulationConfig config;
     Results results;
     UnitScale scale_;               // SI <-> lattice units, set by configure_units()
+    std::optional<TemperatureScale> temperature_scale_; // set by configure_temperatures()
     float32_t lbm_u_ref_ = 0.1f;    // reference velocity in LBM units
     bool force_tracking_ = false;   // voxelize with TYPE_S|TYPE_X for ForceAnalyzer
 
@@ -155,6 +157,21 @@ public:
     /// The scale set by configure_units().
     const UnitScale& unit_scale() const { return scale_; }
 
+    /// @brief The scale of the temperatures (TEMPERATURE): cold and hot become the lattice temperatures 0.5 and 1.5.
+    ///
+    /// Call before create_lbm_thermal(), which converts the fluid's thermal expansion with it.
+    SimulationSetup& configure_temperatures(Temperature cold, Temperature hot) {
+        if(!(hot > cold)) print_error("SimulationSetup::configure_temperatures(): the hot temperature must be above the cold one");
+        temperature_scale_ = TemperatureScale::between(cold, hot);
+        return *this;
+    }
+
+    /// The scale set by configure_temperatures(), for ThermalBuilder; exits with a message if it is not set.
+    const TemperatureScale& temperature_scale() const {
+        if(!temperature_scale_) print_error("SimulationSetup: call configure_temperatures() before creating a thermal LBM");
+        return *temperature_scale_;
+    }
+
     /// @name SI to lattice units, with the scale of configure_units()
     /// @{
     float32_t to_lbm_viscosity(KinematicViscosity nu) const { return scale_.viscosity(nu); }
@@ -187,10 +204,7 @@ public:
         const float32_t lbm_nu = to_lbm_viscosity(viscosity);
         const float32_t lbm_alpha = to_lbm_viscosity(thermal_diffusivity); // same conversion as viscosity
 
-        // thermal expansion: beta_lbm = beta_si * T_si / T_lbm with a 300 K reference and T_lbm ~ 1
-        const float32_t T_ref_si = 300.0f;
-        const float32_t T_ref_lbm = 1.0f;
-        const float32_t lbm_beta = thermal_expansion.si() * T_ref_si / T_ref_lbm;
+        const float32_t lbm_beta = temperature_scale().expansion(thermal_expansion); // the buoyancy of the physical temperatures
 
         const float3 f = lbm_gravity_force(gravity, gravity_axis);
         return LBM(results.Nx, results.Ny, results.Nz, 1u, 1u, 1u,
