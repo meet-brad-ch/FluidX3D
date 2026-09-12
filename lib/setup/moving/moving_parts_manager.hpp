@@ -1,9 +1,9 @@
 #pragma once
 
-#include "core/types.hpp"
+#include "setup/core/types.hpp"
 #include "lbm.hpp"
-#include "moving/moving_part.hpp"
-#include "simulation/simulation_setup.hpp"
+#include "setup/moving/moving_part.hpp"
+#include "setup/simulation/simulation_setup.hpp"
 #include <vector>
 #include <memory>
 

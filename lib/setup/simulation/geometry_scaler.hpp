@@ -1,5 +1,5 @@
 #pragma once
-#include "core/types.hpp"
+#include "setup/core/types.hpp"
 #include "utilities.hpp"
 
 // Scale between an STL geometry in m and the lattice: cell size from a VRAM budget (for geometry plus clearances)

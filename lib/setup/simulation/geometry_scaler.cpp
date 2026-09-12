@@ -1,4 +1,4 @@
-#include "simulation/geometry_scaler.hpp"
+#include "setup/simulation/geometry_scaler.hpp"
 #include "lbm.hpp"
 
 GeometryScaler::GeometryScaler(

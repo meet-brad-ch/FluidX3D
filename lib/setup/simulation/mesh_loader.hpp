@@ -1,7 +1,7 @@
 #pragma once
 
-#include "core/types.hpp"
-#include "config/simulation_config.hpp"
+#include "setup/core/types.hpp"
+#include "setup/config/simulation_config.hpp"
 
 // Loads meshes scaled and placed like the SimulationSetup geometry.
 namespace MeshLoader {

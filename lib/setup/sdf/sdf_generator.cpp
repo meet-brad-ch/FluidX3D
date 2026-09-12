@@ -1,4 +1,4 @@
-#include "sdf/sdf_generator.hpp"
+#include "setup/sdf/sdf_generator.hpp"
 #include "sdf_cache/sdf_cache.hpp"
 #include "utilities.hpp"
 

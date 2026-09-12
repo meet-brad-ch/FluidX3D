@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/types.hpp"
+#include "setup/core/types.hpp"
 
 struct FluidProperties {
     float32_t density;              // kg/m³

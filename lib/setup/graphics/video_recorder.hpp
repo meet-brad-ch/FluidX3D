@@ -1,7 +1,7 @@
 #pragma once
 
-#include "core/types.hpp"
-#include "config/camera_config.hpp"
+#include "setup/core/types.hpp"
+#include "setup/config/camera_config.hpp"
 #include "lbm.hpp"
 #include <vector>
 #include <string>

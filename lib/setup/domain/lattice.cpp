@@ -1,4 +1,4 @@
-#include "domain/lattice.hpp"
+#include "setup/domain/lattice.hpp"
 
 #include <algorithm>
 #include <cmath>

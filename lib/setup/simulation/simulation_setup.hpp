@@ -1,14 +1,14 @@
 #pragma once
-#include "core/types.hpp"
-#include "core/unit_scale.hpp"
+#include "setup/core/types.hpp"
+#include "setup/core/unit_scale.hpp"
 #include "units.hpp"
-#include "core/fluids.hpp"
-#include "boundaries/boundary_flags.hpp"
+#include "setup/core/fluids.hpp"
+#include "setup/boundaries/boundary_flags.hpp"
 
-#include "config/simulation_config.hpp"
-#include "simulation/geometry_scaler.hpp"
-#include "sdf/sdf_generator.hpp"
-#include "simulation/mesh_loader.hpp"
+#include "setup/config/simulation_config.hpp"
+#include "setup/simulation/geometry_scaler.hpp"
+#include "setup/sdf/sdf_generator.hpp"
+#include "setup/simulation/mesh_loader.hpp"
 
 extern Units units; // global units object from lbm.cpp
 

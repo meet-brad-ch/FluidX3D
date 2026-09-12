@@ -1,8 +1,8 @@
 #pragma once
 
-#include "core/types.hpp"
-#include "core/boundary_utils.hpp"
-#include "boundaries/boundary_flags.hpp"
+#include "setup/core/types.hpp"
+#include "setup/core/boundary_utils.hpp"
+#include "setup/boundaries/boundary_flags.hpp"
 #include "lbm.hpp"
 #include "units.hpp"
 #include <vector>
