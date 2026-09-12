@@ -29,7 +29,7 @@ void main_setup() { // dam break; required extensions: FP16S, VOLUME_FORCE, SURF
 
 	// water column at the y = 0 wall
 	SurfaceBuilder(lbm)
-		.add_water_box({0_m, 0_m, 0_m}, {domain_x, domain_y/8.0f, water_height})
+		.add_water(Shape::box({0_m, 0_m, 0_m}, {domain_x, domain_y/8.0f, water_height}))
 		.set_solid_walls()
 		.apply(); // uniform density, as the original
 

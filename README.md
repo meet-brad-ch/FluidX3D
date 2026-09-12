@@ -35,14 +35,15 @@ Read the [FluidX3D Documentation](DOCUMENTATION.md)!
 
 ## Setup API
 
-This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for configuring simulations in SI units (meters, m/s, kg/m³) with fluent method chaining. The examples show every feature in use; [porting_guide.md](porting_guide.md) maps the low-level calls to the API.
+This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for configuring simulations in SI units (meters, m/s, kg/m³) with fluent method chaining. Every example except `benchmark` (a speed test of the core) uses it; `poiseuille_flow` and `stokes_drag` compare the flow with analytic solutions in SI units. [porting_guide.md](porting_guide.md) maps the low-level calls to the API, [lib/setup/README.md](lib/setup/README.md) describes its layout and conventions.
 
 | Component | Purpose |
 |-----------|---------|
-| `Domain`, `Model` | The domain in physical units: `Domain::box(1.0_m, 5.0_m, 0.75_m)` or `Domain::around(Model("hill.stl")).clearances(...)`, with `.vram(2000_mb)` or `.cell_size(8_m)` |
-| `SimulationSetup` | Domain sizing, unit conversion, LBM creation (plain, thermal, free surface, particles), voxelization (STL converted to a cached SDF) |
-| `BoundaryBuilder` | Solid and open faces, initial velocity, wind profile, lid-driven cavity |
-| `SurfaceBuilder`, `WaveBoundary` | Free surface in metres and m/s: water level and boxes, solid blocks, inflows and outflows; oscillating wave maker (SURFACE) |
+| `Domain`, `Model` | The domain in physical units: `Domain::box(1.0_m, 5.0_m, 0.75_m)` or `Domain::around(Model("hill.stl")).clearances(...)`, with `.vram(2000_mb)` or `.cell_size(8_m)`; a model is an STL or an SDF file |
+| `SimulationSetup` | Domain sizing, unit conversion, LBM creation (plain, with a body force, thermal, free surface, particles), voxelization (STL converted to a cached SDF) |
+| `Shape` | Regions in metres for objects, water and gas: sphere, cylinder, box, triangle, torus, combined with `!`, `&` and `\|` |
+| `BoundaryBuilder` | Solid, open and periodic faces, solid and moving shapes, initial velocity and pressure (uniform or a field in metres), force field, wind profile, lid-driven cavity |
+| `SurfaceBuilder`, `WaveBoundary` | Free surface in metres and m/s: water level and shapes (columns, drops) with a velocity, gas bubbles, solid objects, inflows, outflows and drains; oscillating wave maker (SURFACE) |
 | `ThermalBuilder`, `TemperatureScale` | Hot and cold walls in Kelvin, hydrostatic and perturbed start; the lattice temperatures and buoyancy of a temperature range (TEMPERATURE) |
 | `MovingPartsManager`, `MovingPart` | Rotating and tumbling parts, re-voxelized while the simulation runs |
 | `ParticleManager` | Particle seeding in m (PARTICLES) |

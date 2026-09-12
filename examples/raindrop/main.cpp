@@ -1,88 +1,66 @@
-#include "defines.hpp"
-#include "info.hpp"
-#include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+// Raindrop impact on sea water, using Setup API
 
-void main_setup() { // raindrop impact; required extensions in defines.hpp: FP16C, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, SURFACE, INTERACTIVE_GRAPHICS or GRAPHICS
-	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint3 lbm_N = resolution(float3(1.0f, 1.0f, 0.85f), 4000u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
-	float lbm_D = (float)lbm_N.x/5.0f;
-	const float lbm_u = 0.05f; // impact velocity in LBM units
-	const float si_T = 0.003f; // simulated time in [s]
-	const float inclination = 20.0f; // impact angle [°], 0 = vertical
+#include "defines.hpp"
+#include "lbm.hpp"
+#include "setup/setup.hpp"
+
+void main_setup() { // raindrop impact; required extensions: FP16C, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, SURFACE, INTERACTIVE_GRAPHICS or GRAPHICS
+	// drop diameters and their impact (terminal) speeds; 13 is for validation
 	const int select_drop_size = 12;
-	//                            0        1        2        3        4        5        6        7        8        9       10       11       12       13 (13 is for validation)
-	const float si_Ds[] = { 1.0E-3f, 1.5E-3f, 2.0E-3f, 2.5E-3f, 3.0E-3f, 3.5E-3f, 4.0E-3f, 4.5E-3f, 5.0E-3f, 5.5E-3f, 6.0E-3f, 6.5E-3f, 7.0E-3f, 4.1E-3f };
-	const float si_us[] = {   4.50f,   5.80f,   6.80f,   7.55f,   8.10f,   8.45f,   8.80f,   9.05f,   9.20f,   9.30f,   9.40f,   9.45f,   9.55f,   7.21f };
-	float const si_nu = 1.0508E-6f; // kinematic shear viscosity [m^2/s] at 20°C and 35g/l salinity
-	const float si_rho = 1024.8103f; // fluid density [kg/m^3] at 20°C and 35g/l salinity
-	const float si_sigma = 73.81E-3f; // fluid surface tension [kg/s^2] at 20°C and 35g/l salinity
-	const float si_g = 9.81f; // gravitational acceleration [m/s^2]
-	const float si_D = si_Ds[select_drop_size]; // drop diameter [m] (1-7mm)
-	const float si_u = si_us[select_drop_size]; // impact velocity [m/s] (4.50-9.55m/s)
-	units.set_m_kg_s(lbm_D, lbm_u, 1.0f, si_D, si_u, si_rho); // calculate 3 independent conversion factors (m, kg, s)
-	const float lbm_nu = units.nu(si_nu);
-	const float lbm_f = units.f(si_rho, si_g);
-	const float lbm_sigma = units.sigma(si_sigma);
-	print_info("D = "+to_string(si_D, 6u));
-	print_info("Re = "+to_string(units.si_Re(si_D, si_u, si_nu), 6u));
-	print_info("We = "+to_string(units.si_We(si_D, si_u, si_rho, si_sigma), 6u));
-	print_info("Fr = "+to_string(units.si_Fr(si_D, si_u, si_g), 6u));
-	print_info("Ca = "+to_string(units.si_Ca(si_u, si_rho, si_nu, si_sigma), 6u));
-	print_info("Bo = "+to_string(units.si_Bo(si_D, si_rho, si_g, si_sigma), 6u));
-	print_info(to_string(to_uint(1000.0f*si_T))+" ms = "+to_string(units.t(si_T))+" LBM time steps");
-	const float lbm_H = 0.4f*(float)lbm_N.x;
-	const float lbm_R = 0.5f*lbm_D; // drop radius
-	LBM lbm(lbm_N, 1u, 1u, 1u, lbm_nu, 0.0f, 0.0f, -lbm_f, lbm_sigma); // calculate values for remaining parameters in simulation units
-	// ###################################################################################### define geometry ######################################################################################
-	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
-		if(sphere(x, y, z, float3(0.5f*(float)Nx, 0.5f*(float)Ny-2.0f*lbm_R*tanf(inclination*pif/180.0f), lbm_H+lbm_R+2.5f)+0.5f, lbm_R+2.0f)) {
-			const float b = sphere_plic(x, y, z, float3(0.5f*(float)Nx, 0.5f*(float)Ny-2.0f*lbm_R*tanf(inclination*pif/180.0f)+0.5f, lbm_H+lbm_R+2.5f), lbm_R);
-			if(b!=-1.0f) {
-				lbm.u.y[n] =  sinf(inclination*pif/180.0f)*lbm_u;
-				lbm.u.z[n] = -cosf(inclination*pif/180.0f)*lbm_u;
-				if(b==1.0f) {
-					lbm.flags[n] = TYPE_F;
-					lbm.phi[n] = 1.0f;
-				} else {
-					lbm.flags[n] = TYPE_I;
-					lbm.phi[n] = b; // initialize cell fill level phi directly instead of just flags, this way the raindrop sphere is smooth already at initialization
-				}
-			}
-		}
-		if(z==0) lbm.flags[n] = TYPE_S;
-		else if(z==to_uint(lbm_H)) {
-			lbm.flags[n] = TYPE_I;
-			lbm.phi[n] = 0.5f; // not strictly necessary, but should be clearer (phi is automatically initialized to 0.5f for TYPE_I if not initialized)
-		} else if((float)z<lbm_H) lbm.flags[n] = TYPE_F;
-		else if((x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==Nz-1u)&&(float)z>lbm_H+0.5f*lbm_R) { // make drops that hit the simulation box ceiling disappear
-			lbm.rho[n] = 0.5f;
-			lbm.flags[n] = TYPE_E;
-		}
-	}); // ####################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = lbm.get_D()==1u ? VIS_PHI_RAYTRACE : VIS_PHI_RASTERIZE;
-#if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS) && !defined(INTERACTIVE_GRAPHICS_ASCII)
-	const ulong lbm_T = units.t(si_T);
-	lbm.run(0u, lbm_T); // initialize simulation
-	while(lbm.get_t()<=lbm_T) { // main simulation loop
-		if(lbm.graphics.next_frame(lbm_T, 20.0f)) { // generate video
-			lbm.graphics.set_camera_centered(-30.0f, 20.0f, 100.0f, 1.0f);
-			lbm.graphics.write_frame(get_exe_path()+"export/n/");
-			lbm.graphics.set_camera_centered(10.0f, 40.0f, 100.0f, 1.0f);
-			lbm.graphics.write_frame(get_exe_path()+"export/p/");
-			lbm.graphics.set_camera_centered(0.0f, 0.0f, 45.0f, 1.0f);
-			lbm.graphics.write_frame(get_exe_path()+"export/o/");
-			lbm.graphics.set_camera_centered(0.0f, 90.0f, 45.0f, 1.0f);
-			lbm.graphics.write_frame(get_exe_path()+"export/t/");
-		}
-		lbm.run(1u, lbm_T);
-	}
-	//lbm.run(lbm_T); // only generate one image
-	//lbm.graphics.set_camera_centered(-30.0f, 20.0f, 100.0f, 1.0f);
-	//lbm.graphics.write_frame();
-#else // GRAPHICS && !INTERACTIVE_GRAPHICS
+	//                              0      1      2      3      4      5      6      7      8      9     10     11     12     13
+	const float diameters_mm[] = { 1.0f,  1.5f,  2.0f,  2.5f,  3.0f,  3.5f,  4.0f,  4.5f,  5.0f,  5.5f,  6.0f,  6.5f,  7.0f,  4.1f  };
+	const float speeds_mps[] =   { 4.50f, 5.80f, 6.80f, 7.55f, 8.10f, 8.45f, 8.80f, 9.05f, 9.20f, 9.30f, 9.40f, 9.45f, 9.55f, 7.21f };
+	const Length D = Length::from_si(1E-3f * diameters_mm[select_drop_size]);
+	const Speed impact_speed = Speed::from_si(speeds_mps[select_drop_size]);
+	const Angle inclination = 20_deg; // of the impact, 0 = vertical
+	const Duration simulation_time = 0.003_s;
+	const Acceleration gravity = 9.81_mps2;
+	const FluidProperties sea_water = { 1024.8103_kgpm3, 1.0508E-6_m2ps, {}, {} }; // at 20 °C and 35 g/l salinity
+	const SurfaceTension surface_tension = 73.81E-3_Npm;
+
+	SimulationSetup sim(Domain::box(5.0f * D, 5.0f * D, 4.25f * D).vram(4000_mb)); // 419 x 419 x 356 cells, as the original
+	sim.setup();
+	sim.configure_units(impact_speed, sea_water, 0.05f);
+
+	const float d = D.si(), u = impact_speed.si(), nu = sea_water.kinematic_viscosity.si(), rho = sea_water.density.si();
+	const float sigma = surface_tension.si(), g = gravity.si();
+	print_info("D = " + to_string(d, 6u));
+	print_info("Re = " + to_string(units.si_Re(d, u, nu), 6u));
+	print_info("We = " + to_string(units.si_We(d, u, rho, sigma), 6u));
+	print_info("Fr = " + to_string(units.si_Fr(d, u, g), 6u));
+	print_info("Ca = " + to_string(units.si_Ca(u, rho, nu, sigma), 6u));
+	print_info("Bo = " + to_string(units.si_Bo(d, rho, g, sigma), 6u));
+	print_info(to_string(to_uint(1000.0f * simulation_time.si())) + " ms = " + to_string(sim.to_lbm_timesteps(simulation_time)) + " LBM time steps");
+
+	LBM lbm = sim.create_lbm_surface(sea_water.kinematic_viscosity, gravity, surface_tension);
+
+	// a pool 2 diameters deep; the drop 3 cells above it, falling at the inclination toward the domain's center
+	const Length depth = 2.0f * D, cell = sim.unit_scale().cell_size();
+	const Length width = 5.0f * D, height = 4.25f * D;
+	const float s = sinf(inclination.rad()), c = cosf(inclination.rad());
+	const Position drop { 0.5f * width, 0.5f * width - D * (s / c), depth + 0.5f * D + 3.0f * cell };
+	SurfaceBuilder(lbm)
+		.set_water_level(depth)
+		.add_water(Shape::sphere(drop, 0.5f * D), { Speed{}, s * impact_speed, -c * impact_speed })
+		.set_solid_faces({ Face::Z_MIN })
+		// the sides and the top, above the pool: splashes reaching them leave the domain
+		.add_drain(!Shape::box({ cell, cell, 0_m }, { width - cell, width - cell, height - cell }) &
+		           Shape::box({ 0_m, 0_m, depth + 0.25f * D }, { width, width, height }))
+		.apply();
+
+	GraphicsConfig(lbm)
+		.show_free_surface()
+		.apply();
+
+#if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
+	VideoRecorder()
+		.add("n", CameraView::orbit(-30_deg, 20_deg))
+		.add("p", CameraView::orbit(10_deg, 40_deg))
+		.add("o", CameraView::orbit(0_deg, 0_deg).field_of_view(45_deg))
+		.add("t", CameraView::orbit(0_deg, 90_deg).field_of_view(45_deg))
+		.set_video_length(20.0_s)
+		.record(lbm, simulation_time);
+#else
 	lbm.run();
-#endif // GRAPHICS && !INTERACTIVE_GRAPHICS
+#endif
 } /**/
