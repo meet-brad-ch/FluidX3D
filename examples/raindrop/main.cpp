@@ -20,7 +20,7 @@ void main_setup() { // raindrop impact; required extensions: FP16C, VOLUME_FORCE
 
 	SimulationSetup sim(Domain::box(5.0f * D, 5.0f * D, 4.25f * D).vram(4000_mb)); // 419 x 419 x 356 cells, as the original
 	sim.setup();
-	sim.configure_units(impact_speed, sea_water, 0.05f);
+	sim.configure_units(impact_speed, sea_water, LatticeMach(0.0866f)); // the original's lattice speed 0.05
 
 	const float d = D.si(), u = impact_speed.si(), nu = sea_water.kinematic_viscosity.si(), rho = sea_water.density.si();
 	const float sigma = surface_tension.si(), g = gravity.si();
@@ -30,7 +30,6 @@ void main_setup() { // raindrop impact; required extensions: FP16C, VOLUME_FORCE
 	print_info("Fr = " + to_string(units.si_Fr(d, u, g), 6u));
 	print_info("Ca = " + to_string(units.si_Ca(u, rho, nu, sigma), 6u));
 	print_info("Bo = " + to_string(units.si_Bo(d, rho, g, sigma), 6u));
-	print_info(to_string(to_uint(1000.0f * simulation_time.si())) + " ms = " + to_string(sim.to_lbm_timesteps(simulation_time)) + " LBM time steps");
 
 	LBM lbm = sim.create_lbm_surface(sea_water.kinematic_viscosity, gravity, surface_tension);
 

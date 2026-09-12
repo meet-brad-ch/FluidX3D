@@ -12,7 +12,7 @@ void main_setup() { // 2D Karman vortex street; required extensions: D2Q9, FP16S
 
 	SimulationSetup sim(Domain::box(8.0f * diameter, 16.0f * diameter, cell).cell_size(cell)); // one cell high: 2D
 	sim.setup();
-	sim.configure_units(flow_speed, Fluid::WATER, 0.1f);
+	sim.configure_units(flow_speed, Fluid::WATER);
 
 	LBM lbm = sim.create_lbm(Fluid::WATER);
 

@@ -56,6 +56,7 @@ fluidx3d_add_test(fluidx3d_setup_tests
         unit/model_placement_test.cpp
         unit/camera_view_test.cpp
         unit/shape_test.cpp
+        unit/step_schedule_test.cpp
     LINK
         fluidx3d::setup
         fluidx3d_test_core_shapes

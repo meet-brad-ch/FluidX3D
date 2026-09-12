@@ -19,7 +19,7 @@ void main_setup() { // liquid metal on a speaker; required extensions: FP16S, VO
 
 	SimulationSetup sim(Domain::box(width, width, height).cell_size(cell));
 	sim.setup();
-	sim.configure_units(peak_speed, density, 0.09f);
+	sim.configure_units(peak_speed, density, LatticeMach(0.156f)); // the original's lattice speed 0.09
 
 	LBM lbm = sim.create_lbm_surface(peak_speed * depth / reynolds, gravity, sim.unit_scale().si_surface_tension(0.005f)); // the original lattice setup's
 
@@ -41,16 +41,14 @@ void main_setup() { // liquid metal on a speaker; required extensions: FP16S, VO
 
 	// the membrane oscillates up and down
 	const uint Nx = lbm.get_Nx(), Ny = lbm.get_Ny();
-	const float lbm_peak_speed = sim.to_lbm_velocity(peak_speed);
-	const float lbm_frequency = frequency * sim.unit_scale().time_step(); // per time step
-	lbm.run(0u); // initialize simulation
-	while(true) { // main simulation loop
-		lbm.u.read_from_device();
-		const float uz = lbm_peak_speed * sinf(2.0f * pif * lbm_frequency * (float)lbm.get_t());
-		for(uint y = 1u; y < Ny - 1u; y++) {
-			for(uint x = 1u; x < Nx - 1u; x++) lbm.u.z[x + y * Nx] = uz;
-		}
-		lbm.u.write_to_device();
-		lbm.run(1u);
-	}
+	Runner(lbm)
+		.every_step([&](Duration t) {
+			lbm.u.read_from_device();
+			const float uz = sim.to_lbm_velocity(peak_speed * sinf(2.0f * pif * (frequency * t)));
+			for(uint y = 1u; y < Ny - 1u; y++) {
+				for(uint x = 1u; x < Nx - 1u; x++) lbm.u.z[x + y * Nx] = uz;
+			}
+			lbm.u.write_to_device();
+		})
+		.run();
 } /**/

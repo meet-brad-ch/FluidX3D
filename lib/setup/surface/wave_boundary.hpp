@@ -11,7 +11,7 @@
 extern Units units; // global units object from lbm.cpp
 
 // Oscillating wave maker on an X or Y inlet face (SURFACE and EQUILIBRIUM_BOUNDARIES extensions).
-// Call initialize() once, then update(lbm.get_t()) in the run loop.
+// Call initialize() once, then update() as the simulation runs: Runner(lbm).every(0.1_s, [&](Duration t) { wave.update(t); }).run()
 class WaveBoundary {
 public:
     explicit WaveBoundary(LBM& lbm) : lbm_(lbm) {}
@@ -42,7 +42,6 @@ public:
 
         u_wave_lbm_ = units.u(peak_velocity_mps_);
         omega_ = 2.0f * pif * frequency_hz_;
-        dt_si_ = units.si_t(1ull); // SI seconds per LBM time step (units.t() would round to whole time steps)
         if (inlet_face_ == Face::Z_MIN || inlet_face_ == Face::Z_MAX) {
             print_warning("WaveBoundary: Z inlet faces are not supported; the wave is not driven");
         }
@@ -66,15 +65,15 @@ public:
         initialized_ = true;
     }
 
-    // set the inlet velocities for this LBM time step (reads and writes the velocity field on the device)
-    void update(uint64_t timestep) {
+    // set the inlet velocities for this simulated time since the start (reads and writes the velocity field on the device)
+    void update(Duration time) {
         if (!initialized_) return;
 
         const uint32_t Nx = lbm_.get_Nx();
         const uint32_t Ny = lbm_.get_Ny();
         const uint32_t Nz = lbm_.get_Nz();
 
-        const float32_t t_si = (float32_t)timestep * dt_si_;
+        const float32_t t_si = time.si();
         const float32_t u_primary = u_wave_lbm_ * sinf(omega_ * t_si);
         const float32_t u_vertical = vertical_factor_ * u_wave_lbm_ * cosf(omega_ * t_si);
 
@@ -112,7 +111,6 @@ private:
 
     float32_t u_wave_lbm_ = 0.0f;
     float32_t omega_ = 0.0f; // rad/s
-    float32_t dt_si_ = 0.0f; // s per LBM time step
 
     Face inlet_face_ = Face::Y_MIN;
     float32_t vertical_factor_ = 0.5f;

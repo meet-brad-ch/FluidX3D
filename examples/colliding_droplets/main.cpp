@@ -13,7 +13,7 @@ void main_setup() { // two colliding droplets in force field; required extension
 
 	SimulationSetup sim(Domain::box(width, width, 0.5f * width).cell_size(cell));
 	sim.setup();
-	sim.configure_units(small_speed, Fluid::WATER, 0.2f);
+	sim.configure_units(small_speed, Fluid::WATER, LatticeMach(0.346f)); // the original's lattice speed 0.2
 
 	LBM lbm = sim.create_lbm_surface(small_speed * (2.0f * small_radius) / reynolds, 0_mps2,
 	                                 sim.unit_scale().si_surface_tension(0.0001f)); // the original lattice setup's

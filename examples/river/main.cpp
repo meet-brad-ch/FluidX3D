@@ -18,7 +18,7 @@ void main_setup() { // river; required extensions: FP16S, VOLUME_FORCE, SURFACE,
 
 	SimulationSetup sim(Domain::box(width, length, height).cell_size(cell));
 	sim.setup();
-	sim.configure_units(flow_speed, Fluid::WATER, 0.1f);
+	sim.configure_units(flow_speed, Fluid::WATER);
 
 	LBM lbm = sim.create_lbm_surface(flow_speed * depth / reynolds, { Acceleration{}, -slope * gravity, -gravity },
 	                                 sim.unit_scale().si_surface_tension(0.01f)); // the original lattice setup's

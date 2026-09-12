@@ -17,7 +17,7 @@ void main_setup() { // dam break; required extensions: FP16S, VOLUME_FORCE, SURF
 
 	sim.setup();
 	const Speed front_speed = sqrt(2.0f*9.81_mps2*water_height); // dam-break front speed, the fastest velocity in the flow
-	sim.configure_units(front_speed, Fluid::WATER, sqrt(2.0f*0.0002f*192.0f)); // front speed in LBM units as in the original lattice setup (0.28)
+	sim.configure_units(front_speed, Fluid::WATER, LatticeMach(0.48f)); // the front speed as in the original lattice setup (0.28 cells per time step)
 
 	// create LBM for free surface simulation
 	// Reynolds number of the original lattice setup (front speed, water height 192 cells, viscosity 0.005);

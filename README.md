@@ -46,6 +46,7 @@ This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for
 | `SurfaceBuilder`, `WaveBoundary` | Free surface in metres and m/s: water level and shapes (columns, drops) with a velocity, gas bubbles, solid objects, inflows, outflows and drains; oscillating wave maker (SURFACE) |
 | `ThermalBuilder`, `TemperatureScale` | Hot and cold walls in Kelvin, hydrostatic and perturbed start; the lattice temperatures and buoyancy of a temperature range (TEMPERATURE) |
 | `MovingPartsManager`, `MovingPart` | Rotating and tumbling parts, re-voxelized while the simulation runs |
+| `Runner` | Runs the simulation for a simulated time, with tasks every interval of simulated time (wave makers, moving walls, convergence checks) |
 | `ParticleManager` | Particle seeding in m (PARTICLES) |
 | `ForceAnalyzer` | Force in N and drag coefficient on the tracked object (FORCE_FIELD) |
 | `GraphicsConfig`, `VideoRecorder`, `CameraView` | Visualization modes; video frames from several cameras, placed in metres and degrees, fixed or moving |
@@ -67,7 +68,7 @@ void main_setup() { // required extensions in defines.hpp: FP16S, EQUILIBRIUM_BO
         .vram(1000_mb));                 // resolution from the VRAM budget
 
     sim.setup();
-    sim.configure_units(flow_velocity, Fluid::AIR, 0.075f);
+    sim.configure_units(flow_velocity, Fluid::AIR, LatticeMach(0.13f)); // optional: how compressible the flow is simulated
     sim.print_reynolds_number(Fluid::AIR);
 
     LBM lbm = sim.create_lbm(Fluid::AIR);

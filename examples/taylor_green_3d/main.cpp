@@ -12,7 +12,7 @@ void main_setup() { // 3D Taylor-Green vortices; required extensions: INTERACTIV
 
 	SimulationSetup sim(Domain::box(size, size, size).cell_size(size / 128.0f)); // 128³ cells, as the original
 	sim.setup();
-	sim.configure_units(amplitude, Fluid::WATER, 0.25f);
+	sim.configure_units(amplitude, Fluid::WATER, LatticeMach(0.433f)); // the original's lattice speed 0.25
 
 	LBM lbm = sim.create_lbm(Fluid::WATER);
 

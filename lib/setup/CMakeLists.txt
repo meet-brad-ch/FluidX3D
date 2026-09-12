@@ -10,6 +10,7 @@ add_library(fluidx3d_setup STATIC
     domain/model_placement.cpp
     domain/shape.cpp
     graphics/camera_view.cpp
+    simulation/step_schedule.cpp
     sdf/sdf_generator.cpp
 )
 add_library(fluidx3d::setup ALIAS fluidx3d_setup)

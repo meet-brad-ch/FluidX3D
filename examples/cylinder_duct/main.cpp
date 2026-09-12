@@ -13,7 +13,7 @@ void main_setup() { // cylinder in rectangular duct; required extensions: VOLUME
 
 	SimulationSetup sim(Domain::box(width, length, height).cell_size(diameter / 64.0f)); // 64 x 768 x 192 cells
 	sim.setup();
-	sim.configure_units(center_speed, Fluid::WATER, 0.57735027f); // the lattice speed of sound, as the original
+	sim.configure_units(center_speed, Fluid::WATER, LatticeMach(1.0f)); // the lattice speed of sound, as the original
 
 	// the pressure gradient (per density) of laminar flow at this center speed through a square duct as wide as the
 	// cylinder, as the original

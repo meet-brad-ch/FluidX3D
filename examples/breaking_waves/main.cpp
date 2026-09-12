@@ -26,7 +26,7 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).cell_size(domain_x / 128.0f)); // 128 x 640 x 96 cells, as the original
 
 	sim.setup();
-	sim.configure_units(shallow_wave_speed, Fluid::WATER, sqrt(0.001f*48.0f)); // wave speed in LBM units as in the original lattice setup (0.22)
+	sim.configure_units(shallow_wave_speed, Fluid::WATER, LatticeMach(sqrtf(3.0f*0.001f*48.0f))); // the wave speed as in the original lattice setup (0.22 cells per time step)
 
 	// create LBM for free surface simulation
 	// Reynolds number of the original lattice setup (wave speed, water depth 48 cells, viscosity 0.01);
@@ -70,10 +70,9 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 		.show_free_surface()
 		.apply();
 
-	// wave generation loop (time-varying boundary condition)
-	lbm.run(0u);
-	while (true) {
-		wave.update(lbm.get_t());
-		lbm.run(100u);
-	}
+	// the wave maker, updated 14 times per wave period (every 100 time steps, as the original)
+	const Duration wave_period = 1.0f/wave_frequency;
+	Runner(lbm)
+		.every(wave_period/14.0f, [&](Duration t) { wave.update(t); })
+		.run();
 } /**/

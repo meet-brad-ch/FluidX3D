@@ -132,18 +132,20 @@ public:
     /// Also sets the core's global units (used by the builders, the graphics and the file output).
     /// @param velocity  the reference velocity, usually the fastest in the flow
     /// @param density   the fluid's density: lattice density 1
-    /// @param lbm_u     the reference velocity in lattice units (at most about 0.3; lower is more accurate)
-    SimulationSetup& configure_units(Speed velocity, Density density, float32_t lbm_u = 0.1f) {
-        lbm_u_ref_ = lbm_u;
+    /// @param mach      how compressible the simulation makes the flow; it sets the time step (see LatticeMach)
+    SimulationSetup& configure_units(Speed velocity, Density density, LatticeMach mach = LatticeMach()) {
+        lbm_u_ref_ = mach.lattice_speed();
         scale_ = UnitScale::from_reference(Length::from_si(results.si_reference_size), results.lbm_reference_size,
-                                           velocity, lbm_u, density);
+                                           velocity, lbm_u_ref_, density);
         units.set_m_kg_s(scale_.cell_size().si(), scale_.mass_unit().si(), scale_.time_step().si());
+        print_info("Lattice Mach number " + to_string(mach.value(), 4u) + " (compressibility error ~" +
+                   to_string(100.0f * sq(mach.value()), 2u) + " %)");
         return *this;
     }
 
-    /// As configure_units(Speed, Density, float), with the density of this fluid.
-    SimulationSetup& configure_units(Speed velocity, const FluidProperties& fluid, float32_t lbm_u = 0.1f) {
-        return configure_units(velocity, fluid.density, lbm_u);
+    /// As configure_units(Speed, Density, LatticeMach), with the density of this fluid.
+    SimulationSetup& configure_units(Speed velocity, const FluidProperties& fluid, LatticeMach mach = LatticeMach()) {
+        return configure_units(velocity, fluid.density, mach);
     }
 
     /// The scale set by configure_units().
@@ -241,16 +243,15 @@ public:
         return create_lbm_surface(fluid.kinematic_viscosity, gravity, surface_tension, gravity_axis);
     }
 
-    /// @brief An LBM with particles (PARTICLES), its viscosity from a Reynolds number over the domain width Nx and lbm_u.
+    /// @brief An LBM with particles (PARTICLES), its viscosity from a Reynolds number of the reference velocity over the
+    /// domain width (Nx cells).
     /// @param particle_density the particles' density relative to the fluid's
     LBM create_lbm_particles_reynolds(float32_t reynolds,
                                        uint32_t particle_count,
                                        float32_t particle_density = 1.0f,
                                        Acceleration gravity = {},
-                                       Axis gravity_axis = Axis::Z,
-                                       float32_t lbm_u = 0.1f) {
-        const float32_t lbm_nu = units.nu_from_Re(reynolds, (float32_t)results.Nx, lbm_u);
-        lbm_u_ref_ = lbm_u;
+                                       Axis gravity_axis = Axis::Z) {
+        const float32_t lbm_nu = units.nu_from_Re(reynolds, (float32_t)results.Nx, lbm_u_ref_);
         const float3 f = lbm_gravity_force(gravity, gravity_axis);
         return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, f.x, f.y, f.z,
                    particle_count, particle_density);

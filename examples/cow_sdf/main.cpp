@@ -28,7 +28,7 @@ void main_setup() { // aerodynamics of a cow using SDF; required extensions: FP1
 		.vram(1000_mb));
 
 	sim.setup();
-	sim.configure_units(flow_velocity, Fluid::AIR, 0.075f);
+	sim.configure_units(flow_velocity, Fluid::AIR, LatticeMach(0.13f)); // the original's lattice speed 0.075
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);

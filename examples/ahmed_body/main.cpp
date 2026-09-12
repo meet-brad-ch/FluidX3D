@@ -25,7 +25,7 @@ void main_setup() {
 		.vram(10000_mb));
 
 	sim.setup();
-	sim.configure_units(flow_velocity, Fluid::AIR, 0.05f);
+	sim.configure_units(flow_velocity, Fluid::AIR, LatticeMach(0.0866f)); // the original's lattice speed 0.05
 	sim.enable_force_tracking();
 	sim.print_reynolds_number(Fluid::AIR);
 
@@ -57,14 +57,12 @@ void main_setup() {
 	           to_string(forces.get_center_of_mass_lbm().z, 2u));
 #endif
 
-	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time);
-	lbm.run(0u, lbm_T);
-
-	while(lbm.get_t() <= lbm_T) {
+	Runner runner(lbm);
 #ifdef FORCE_FIELD
+	runner.every_step([&](Duration) {
 		Clock clock;
 		print_info("Cd = " + to_string(forces.get_drag_coefficient(), 3u) + ", t = " + to_string(clock.stop(), 3u));
+	});
 #endif
-		lbm.run(1u, lbm_T);
-	}
+	runner.run_for(simulation_time);
 }

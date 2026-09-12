@@ -11,7 +11,7 @@ void main_setup() { // delta wing; required extensions: FP16S, EQUILIBRIUM_BOUND
 
 	SimulationSetup sim(Domain::box(width, 4.0f * width, width).cell_size(width / 128.0f)); // 128 x 512 x 128 cells
 	sim.setup();
-	sim.configure_units(flow_speed, Fluid::AIR, 0.075f);
+	sim.configure_units(flow_speed, Fluid::AIR, LatticeMach(0.13f)); // the original's lattice speed 0.075
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
 

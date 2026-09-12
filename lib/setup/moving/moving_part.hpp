@@ -8,12 +8,12 @@ enum class RotationAxis { X, Y, Z };
 
 enum class MotionType {
     ROTATION, // fixed axis (propellers, rotors): re-voxelized with angular velocity
-    TUMBLING  // arbitrary axis, fixed angle per update: unvoxelized and re-voxelized
+    TUMBLING  // arbitrary axis, turned in steps: unvoxelized and re-voxelized
 };
 
 // One moving part for MovingPartsManager; the STL (in resources/) gets the transform of the SimulationSetup model.
-//   MovingPart("rotor.stl").set_rotation_axis(RotationAxis::Z).set_tip_speed(100.0_mps).set_update_interval(4)
-//   MovingPart("tie_fighter.stl").set_tumble(float3(0.2f, 1.0f, 0.1f), radians(0.4032f)).set_update_interval(28)
+//   MovingPart("rotor.stl").set_rotation_axis(RotationAxis::Z).set_tip_speed(100.0_mps)
+//   MovingPart("tie_fighter.stl").set_tumble(float3(0.2f, 1.0f, 0.1f), 180_deg / 1.0_s).set_update_interval(2.2_ms)
 class MovingPart {
 public:
     explicit MovingPart(const string& stl_filename) : stl_filename_(stl_filename) {}
@@ -40,19 +40,19 @@ public:
         return *this;
     }
 
-    // tumble around axis (normalized) by angle_per_update radians every update interval
-    MovingPart& set_tumble(float3 axis, float32_t angle_per_update) {
+    /// Tumbles around this axis (in the domain's coordinates) at this rate, turned in steps at each update.
+    MovingPart& set_tumble(float3 axis, AngularSpeed rate) {
         motion_type_ = MotionType::TUMBLING;
         const float len = sqrt(axis.x*axis.x + axis.y*axis.y + axis.z*axis.z);
         rotation_axis_ = float3(axis.x/len, axis.y/len, axis.z/len);
-        tumble_angle_ = angle_per_update;
-        use_tumble_angle_ = true;
+        tumble_rate_ = rate;
         return *this;
     }
 
-    // LBM time steps between re-voxelizations (default 4)
-    MovingPart& set_update_interval(uint32_t timesteps) {
-        update_interval_ = timesteps;
+    /// @brief The simulated time between re-voxelizations. By default the part is re-voxelized whenever its tip has
+    /// moved half a cell.
+    MovingPart& set_update_interval(Duration interval) {
+        update_interval_ = interval;
         return *this;
     }
 
@@ -64,24 +64,21 @@ public:
     const string& get_stl_filename() const { return stl_filename_; }
     const float3& get_rotation_axis() const { return rotation_axis_; }
     MotionType get_motion_type() const { return motion_type_; }
-    uint32_t get_update_interval() const { return update_interval_; }
+    const std::optional<Duration>& get_update_interval() const { return update_interval_; } ///< set by set_update_interval()
     float32_t get_direction_multiplier() const { return direction_multiplier_; }
     const std::optional<Position>& get_centered_offset() const { return centered_offset_; } ///< set by centered_on_model()
     Speed get_tip_speed() const { return tip_speed_; }
-    bool uses_tumble_angle() const { return use_tumble_angle_; }
-    float32_t get_tumble_angle() const { return tumble_angle_; }
+    AngularSpeed get_tumble_rate() const { return tumble_rate_; }
 
 private:
     string stl_filename_;
     float3 rotation_axis_{0.0f, 1.0f, 0.0f};
     Speed tip_speed_{};
+    AngularSpeed tumble_rate_{};
 
     MotionType motion_type_{MotionType::ROTATION};
-    uint32_t update_interval_{4};
+    std::optional<Duration> update_interval_;
     float32_t direction_multiplier_{1.0f};
 
     std::optional<Position> centered_offset_;
-
-    bool use_tumble_angle_{false};
-    float32_t tumble_angle_{0.0f};
 };

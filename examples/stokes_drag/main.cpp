@@ -15,7 +15,7 @@ void main_setup() { // Stokes drag validation; required extensions: FORCE_FIELD,
 
 	SimulationSetup sim(Domain::box(8.0f * radius, 8.0f * radius, 8.0f * radius).cell_size(cell));
 	sim.setup();
-	sim.configure_units(flow_speed, Fluid::WATER, reynolds / 64.0f); // lattice viscosity 1 (relaxation time 3.5), as the original
+	sim.configure_units(flow_speed, Fluid::WATER, LatticeMach(sqrtf(3.0f) * reynolds / 64.0f)); // lattice viscosity 1 (relaxation time 3.5), as the original
 
 	LBM lbm = sim.create_lbm(viscosity);
 
@@ -39,17 +39,19 @@ void main_setup() { // Stokes drag validation; required extensions: FORCE_FIELD,
 	ForceAnalyzer drag(lbm);
 	const double F_theory = units.F_Stokes(density.si(), flow_speed.si(), viscosity.si(), radius.si()); // N
 	double E1 = 1000.0, E2 = 1000.0;
-	while(true) { // main simulation loop
-		lbm.run(100u); // check the error every 100 time steps
+	Runner runner(lbm);
+	runner.every(0.1_s, [&](Duration t) { // the error about every 100 time steps, as the original
+		if(t == Duration{}) return; // no flow has developed at the start
 		const double F_simulated = (double)length(drag.get_force_si()); // N
 		const double E0 = fabs(F_simulated - F_theory) / F_theory;
-		print_info(to_string(lbm.get_t()) + ", expected: " + to_string(1E9 * F_theory, 6u) + " nN, measured: " + to_string(1E9 * F_simulated, 6u) + " nN, error = " + to_string((float)(100.0 * E0), 1u) + "%");
+		print_info(to_string(t.si(), 1u) + " s, expected: " + to_string(1E9 * F_theory, 6u) + " nN, measured: " + to_string(1E9 * F_simulated, 6u) + " nN, error = " + to_string((float)(100.0 * E0), 1u) + "%");
 		if(converged(E2, E1, E0, 1E-4)) { // stop when error has sufficiently converged
-			print_info("Error converged after " + to_string(lbm.get_t()) + " steps to " + to_string(100.0 * E0, 1u) + "%");
+			print_info("Error converged after " + to_string(t.si(), 1u) + " s (" + to_string(lbm.get_t()) + " time steps) to " + to_string(100.0 * E0, 1u) + "%");
 			wait();
-			break;
+			runner.stop();
 		}
 		E2 = E1;
 		E1 = E0;
-	}
+	});
+	runner.run();
 } /**/

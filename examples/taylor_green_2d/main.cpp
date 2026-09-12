@@ -14,7 +14,7 @@ void main_setup() { // 2D Taylor-Green vortices; required extensions: D2Q9, INTE
 
 	SimulationSetup sim(Domain::box(size, size, cell).cell_size(cell)); // one cell high: 2D
 	sim.setup();
-	sim.configure_units(amplitude, Fluid::WATER, 0.2f);
+	sim.configure_units(amplitude, Fluid::WATER, LatticeMach(0.346f)); // the original's lattice speed 0.2
 
 	LBM lbm = sim.create_lbm(Fluid::WATER);
 

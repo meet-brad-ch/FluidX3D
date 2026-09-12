@@ -12,7 +12,6 @@ void main_setup() {
 	const Length wingspan = 11.0_m;
 	const Speed flight_speed = 226.0_kmh;
 	const Duration simulation_time = 1.0_s;
-	const uint32_t update_interval = 4u;
 
 	// Check for required STL files
 	const string body_path = get_resource_path("Cessna-172-Skyhawk-body.stl");
@@ -55,8 +54,7 @@ void main_setup() {
 	parts.add(MovingPart("Cessna-172-Skyhawk-rotor.stl")
 		.set_rotation_axis(RotationAxis::Y)
 		.set_tip_speed(flight_speed)
-		.reverse_direction()
-		.set_update_interval(update_interval));
+		.reverse_direction());
 	parts.initialize();
 
 	// Configure graphics
@@ -66,9 +64,6 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time);
-	print_info(to_string(simulation_time.si(), 3u) + " seconds = " + to_string(lbm_T) + " time steps");
-
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	const Length W = domain_width; // camera positions from the domain's origin corner
 	VideoRecorder()

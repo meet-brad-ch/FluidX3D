@@ -14,7 +14,7 @@ void main_setup() {
 	const Speed tip_speed = 100.0_mps;           // Blade tip speed
 	const Speed inlet_velocity = 30.0_mps;       // 30% of tip speed
 	const Duration simulation_time = 0.5_s;
-	const uint32_t update_interval = 4u;
+	const Duration update_interval = 0.8_us; // 4 time steps, as the original
 
 	// the stator's diameter (X and Z) is 98 % of the domain width; the domain is 1.5 widths long (Y)
 	const Length domain_width = fan_diameter / 0.98f;
@@ -56,9 +56,6 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time);
-	print_info(to_string(simulation_time.si(), 2u) + " seconds = " + to_string(total_timesteps) + " time steps");
-
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	VideoRecorder()
 		.add([domain_width](float progress) { // pans around the fan during the video
