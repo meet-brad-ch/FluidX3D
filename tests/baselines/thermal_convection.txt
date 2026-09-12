@@ -13,9 +13,10 @@ BASELINE cells_G 0
 BASELINE cells_X 0
 BASELINE cells_Y 0
 BASELINE object_cells 0
+BASELINE u_solid_mean 0 0 0
 BASELINE u_mean 0 0 0
 BASELINE rho_mean 1.00075
-BASELINE force_per_volume 0 0 -0.000178873
+BASELINE force_per_volume 0 0 -0.00021912
 BASELINE alpha 0.004813
 BASELINE beta 1.023
 BASELINE T_mean 1

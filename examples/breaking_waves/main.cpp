@@ -11,9 +11,14 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 	const float domain_y_m = 5.0f;
 	const float domain_z_m = 0.75f;
 
-	const float wave_amplitude_m = 0.05f;
-	const float wave_frequency_hz = 0.5f;
-	const float wave_velocity_mps = wave_amplitude_m * 2.0f * pif * wave_frequency_hz;
+	const float water_depth_m = 0.5f*domain_z_m; // initial water level at 50% height
+	const float shallow_wave_speed_mps = sqrt(9.81f*water_depth_m); // shallow-water wave speed sqrt(g*h), the fastest velocity in the flow
+
+	// wave maker as in the original lattice setup (peak velocity 0.12, frequency 0.0007 per step, water depth 48 cells,
+	// gravity 0.001), scaled to this water depth with the same Froude number
+	const float wave_velocity_mps = 0.12f/sqrt(0.001f*48.0f)*shallow_wave_speed_mps; // about 1.05 m/s
+	const float wave_frequency_hz = 0.0007f*sqrt(48.0f/0.001f)*sqrt(9.81f/water_depth_m); // about 0.78 Hz
+	const float wave_amplitude_m = wave_velocity_mps/(2.0f*pif*wave_frequency_hz); // about 0.21 m
 
 	const float beach_position_m = 1.0f;  // beach starts at 1m from inlet
 
@@ -23,10 +28,14 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 		.set_vram_mb(2000u));
 
 	sim.setup();
-	sim.configure_units(wave_velocity_mps, Fluid::WATER);
+	sim.configure_units(shallow_wave_speed_mps, Fluid::WATER, 0.22f); // wave speed in LBM units as in the original lattice setup: sqrt(0.001*48)
 
 	// create LBM for free surface simulation
-	LBM lbm = sim.create_lbm_surface(Fluid::WATER, 9.81f);
+	// Reynolds number of the original lattice setup (wave speed, water depth 48 cells, viscosity 0.01);
+	// water's own viscosity would need a much finer grid
+	const float reynolds = sqrt(0.001f*48.0f)*48.0f/0.01f; // about 1050
+	const float kinematic_viscosity_m2ps = shallow_wave_speed_mps*water_depth_m/reynolds;
+	LBM lbm = sim.create_lbm_surface(kinematic_viscosity_m2ps, 9.81f);
 
 	// get domain dimensions for beach geometry
 	const uint Nx = lbm.get_Nx();
@@ -36,7 +45,7 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 	SurfaceBuilder(lbm)
 		// initial water level at 50% height
 		.set_water_level(0.5f)
-		.set_gravity_lbm(sim.to_lbm_force_per_volume(9.81f))
+		.set_gravity_lbm(sim.to_lbm_acceleration(9.81f))
 		.initialize_hydrostatic()
 		// solid walls on all sides (wave inlet will override Y_MIN)
 		.set_solid_walls()

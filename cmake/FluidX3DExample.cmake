@@ -50,6 +50,7 @@ function(_fluidx3d_add_baseline NAME)
             -DWORKDIR=${PROJECT_SOURCE_DIR}/bin
             -DEXPECTED=${PROJECT_SOURCE_DIR}/tests/baselines/${NAME}.txt
             -DACTUAL=${BASELINE_DIR}/${NAME}.actual.txt
+            -DCOMPARE=$<TARGET_FILE:fluidx3d_baseline_compare>
             -P ${PROJECT_SOURCE_DIR}/tests/baseline/run_baseline.cmake
     )
     set_tests_properties(baseline_${NAME} PROPERTIES

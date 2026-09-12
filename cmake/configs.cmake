@@ -1,9 +1,30 @@
-# Build policy as INTERFACE targets:
+# FluidX3D build configuration: project options, build type, and build policy as INTERFACE targets
 #   fluidx3d::build_options  C++ standard, optimization and platform flags for every FluidX3D executable
 #   fluidx3d::warnings       warnings for first-party code (examples, Setup API, tests), linked PRIVATE;
 #                            third-party and core headers are SYSTEM includes and stay quiet
 # (The MSVC runtime library and debug-information flags come from CMake itself.)
 
+# ==============================================================================
+# Options (set with -D<OPTION>=<value> when configuring)
+# ==============================================================================
+option(FLUIDX3D_BUILD_TESTS "Build tests: a baseline build of every example, and unit tests" ON)
+option(FLUIDX3D_WERROR "Treat warnings in first-party code (examples, Setup API, tests) as errors" OFF)
+set(SDFGEN_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures for SDFGen (default: this machine's GPU)")
+
+# Build type (single-configuration generators): the configurations defined below
+if(NOT CMAKE_CONFIGURATION_TYPES)
+    if(NOT CMAKE_BUILD_TYPE)
+        set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    endif()
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo)
+    if(NOT CMAKE_BUILD_TYPE MATCHES "^(Debug|Release|RelWithDebInfo)$")
+        message(FATAL_ERROR "CMAKE_BUILD_TYPE must be Debug, Release or RelWithDebInfo, not '${CMAKE_BUILD_TYPE}'")
+    endif()
+endif()
+
+# ==============================================================================
+# Compiler and linker options
+# ==============================================================================
 set(_fluidx3d_gcc_like "$<CXX_COMPILER_ID:GNU,Clang,AppleClang>")
 set(_fluidx3d_msvc "$<CXX_COMPILER_ID:MSVC>")
 

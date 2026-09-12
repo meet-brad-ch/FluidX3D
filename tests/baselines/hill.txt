@@ -15,6 +15,7 @@ BASELINE cells_Y 0
 BASELINE object_cells 2760929
 BASELINE object_min 69 77 1
 BASELINE object_max 443 466 87
+BASELINE u_solid_mean 0 0 0
 BASELINE u_mean 0 0.106472 0
 BASELINE rho_mean 1
 BASELINE vis_modes 18

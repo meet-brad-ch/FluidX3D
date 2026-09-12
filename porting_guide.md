@@ -224,7 +224,7 @@ GraphicsConfig(lbm)
 // For video recording:
 VideoRecorder()
     .add(CameraConfig().set_angles(-40.0f, 20.0f).set_fov(78.0f).set_zoom(1.25f))
-    .set_fps(10.0f)
+    .set_video_length_s(10.0f)
     .record(lbm, 10.0f, units);  // 10 seconds
 ```
 

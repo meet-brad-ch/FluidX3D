@@ -378,9 +378,8 @@ public:
                                float32_t zoom = CameraPresets::DEFAULT_ZOOM,
                                float32_t fov = CameraPresets::DEFAULT_FOV) {
 #ifdef GRAPHICS
-        // Convert degrees to radians
-        camera_rx_ = pitch_deg * CameraPresets::DEG_TO_RAD;
-        camera_ry_ = yaw_deg * CameraPresets::DEG_TO_RAD;
+        camera_rx_ = pitch_deg; // degrees, as set_camera_centered() expects
+        camera_ry_ = yaw_deg;
         camera_zoom_ = zoom;
         camera_fov_ = fov;
         camera_mode_ = CameraMode::CENTERED;

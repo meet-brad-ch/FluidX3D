@@ -515,15 +515,13 @@ public:
     /**
      * @brief Set gravitational acceleration (SI units, default downward -Z)
      * @param si_gravity Gravitational acceleration magnitude in m/s² (default: 9.81)
-     * @param si_density Fluid density in kg/m³ (default: 1000 for water)
      * @return Reference for method chaining
      *
-     * @note Gravity is applied in the -Z direction by default.
-     *       Use set_gravity_direction() for custom directions.
+     * @note Gravity acts on the simulated fluid (the density of configure_units()).
+     *       It is applied in the -Z direction by default; use set_gravity_direction() for custom directions.
      */
-    BoundaryBuilder& set_gravity(float32_t si_gravity = 9.81f, float32_t si_density = 1000.0f) {
+    BoundaryBuilder& set_gravity(float32_t si_gravity = 9.81f) {
         gravity_magnitude_ = si_gravity;
-        gravity_density_ = si_density;
         gravity_direction_ = float3(0.0f, 0.0f, -1.0f);  // Default: -Z
         has_gravity_ = true;
         return *this;
@@ -559,7 +557,7 @@ public:
      *
      * @par Example:
      * @code
-     * builder.set_gravity(9.81f, 1000.0f)   // Water with gravity
+     * builder.set_gravity(9.81f)            // gravity on the fluid
      *        .initialize_hydrostatic_pressure(10.0f)  // 10m water column
      *        .apply();
      * @endcode
@@ -636,7 +634,7 @@ public:
 
         // Apply gravity force via lbm.set_f()
         if (has_gravity_) {
-            const float32_t lbm_f = units.f(gravity_density_, gravity_magnitude_);
+            const float32_t lbm_f = units.g(gravity_magnitude_); // volume force rho*g with the LBM density 1
             lbm_.set_f(
                 gravity_direction_.x * lbm_f,
                 gravity_direction_.y * lbm_f,
@@ -645,7 +643,7 @@ public:
         }
 
         // Pre-calculate hydrostatic parameters
-        const float32_t lbm_hydro_f = has_hydrostatic_ ? units.f(gravity_density_, gravity_magnitude_) : 0.0f;
+        const float32_t lbm_hydro_f = has_hydrostatic_ ? units.g(gravity_magnitude_) : 0.0f;
         const float32_t lbm_hydro_height = has_hydrostatic_ ? units.x(hydrostatic_height_) : 0.0f;
 
         // Pre-calculate wind profile parameters
@@ -711,14 +709,14 @@ public:
             }
 
             // Initialize velocity in fluid cells (not solid)
-            if (lbm_.flags[n] != TYPE_S) {
+            if (!(lbm_.flags[n] & TYPE_S)) {
                 if (has_init_u_x_) lbm_.u.x[n] = lbm_init_u_x;
                 if (has_init_u_y_) lbm_.u.y[n] = lbm_init_u_y;
                 if (has_init_u_z_) lbm_.u.z[n] = lbm_init_u_z;
             }
 
             // Apply inlet velocity on specified face
-            if (has_inlet_ && lbm_.flags[n] != TYPE_S) {
+            if (has_inlet_ && !(lbm_.flags[n] & TYPE_S)) {
                 bool is_inlet = false;
                 switch (inlet_face_) {
                     case Face::X_MIN: is_inlet = (x == 0u); break;
@@ -742,12 +740,12 @@ public:
             }
 
             // Initialize hydrostatic pressure (density gradient)
-            if (has_hydrostatic_ && lbm_.flags[n] != TYPE_S) {
+            if (has_hydrostatic_ && !(lbm_.flags[n] & TYPE_S)) {
                 lbm_.rho[n] = units.rho_hydrostatic(lbm_hydro_f, (float32_t)z, lbm_hydro_height);
             }
 
             // Apply wind profile (atmospheric boundary layer)
-            if (has_wind_profile_ && lbm_.flags[n] != TYPE_S && z > 0u) {
+            if (has_wind_profile_ && !(lbm_.flags[n] & TYPE_S) && z > 0u) {
                 const float32_t height_ratio = (float32_t)z / lbm_wind_ref_height;
                 const float32_t wind_velocity = lbm_wind_ref_velocity * pow(height_ratio, wind_profile_alpha_);
 
@@ -847,7 +845,6 @@ private:
     // Gravity configuration
     bool has_gravity_ = false;
     float32_t gravity_magnitude_ = 9.81f;
-    float32_t gravity_density_ = 1000.0f;
     float3 gravity_direction_ = float3(0.0f, 0.0f, -1.0f);
 
     // Hydrostatic pressure configuration

@@ -22,7 +22,7 @@
  * @code
  * VideoRecorder()
  *     .add(CameraConfig().set_angles(-40.0f, 20.0f).set_fov(78.0f))
- *     .set_fps(10.0f)
+ *     .set_video_length_s(10.0f)
  *     .record(lbm, 10000ull);
  * @endcode
  *
@@ -35,7 +35,7 @@
  *     .add("side", CameraConfig()
  *         .set_free_position(1.7f, 0.4f, 0.1f)
  *         .set_angles(24.0f, 2.0f).set_fov(92.0f))
- *     .set_fps(20.0f)
+ *     .set_video_length_s(20.0f)
  *     .record(lbm, 108000ull);
  * @endcode
  */
@@ -79,7 +79,7 @@ public:
      * @code
      * VideoRecorder()
      *     .add_standard_views()
-     *     .set_fps(10.0f)
+     *     .set_video_length_s(10.0f)
      *     .record(lbm, 10000ull);
      * @endcode
      */
@@ -109,7 +109,7 @@ public:
      * @code
      * VideoRecorder()
      *     .add_orbit("orbit", 30.0f, 1.0f, 0.0f, 360.0f)  // Full 360° orbit
-     *     .set_fps(30.0f)
+     *     .set_video_length_s(30.0f)
      *     .record(lbm, 10000ull);
      * @endcode
      */
@@ -126,12 +126,12 @@ public:
     }
 
     /**
-     * @brief Set frames per second for recording
-     * @param fps Frames per second
+     * @brief Set the length of the rendered video (frames are rendered for 60 fps playback)
+     * @param seconds Video length in seconds
      * @return Reference for method chaining
      */
-    VideoRecorder& set_fps(float32_t fps) {
-        fps_ = fps;
+    VideoRecorder& set_video_length_s(float32_t seconds) {
+        video_length_s_ = seconds;
         return *this;
     }
 
@@ -166,7 +166,7 @@ public:
 
         lbm.run(0u, total_steps);
         while (lbm.get_t() <= total_steps) {
-            if (lbm.graphics.next_frame(total_steps, fps_)) {
+            if (lbm.graphics.next_frame(total_steps, video_length_s_)) {
                 // Render static cameras
                 for (const auto& camera : cameras_) {
                     apply_camera(lbm, camera, Nx, Ny, Nz);
@@ -216,7 +216,7 @@ public:
      *
      * VideoRecorder()
      *     .add("front", CameraConfig().set_angles(-40.0f, 20.0f))
-     *     .set_fps(10.0f)
+     *     .set_video_length_s(10.0f)
      *     .record(lbm, 1.0f, units, [&]() { parts.update(); }, 4);
      * @endcode
      */
@@ -267,7 +267,7 @@ public:
         while (lbm.get_t() <= total_steps) {
             update_callback();
 
-            if (lbm.graphics.next_frame(total_steps, fps_)) {
+            if (lbm.graphics.next_frame(total_steps, video_length_s_)) {
                 // Render static cameras
                 for (const auto& camera : cameras_) {
                     apply_camera(lbm, camera, Nx, Ny, Nz);
@@ -298,14 +298,14 @@ public:
     size_t camera_count() const { return cameras_.size(); }
 
     /**
-     * @brief Get current FPS setting
-     * @return Frames per second
+     * @brief Get the video length
+     * @return Video length in seconds
      */
-    float32_t fps() const { return fps_; }
+    float32_t video_length_s() const { return video_length_s_; }
 
 private:
     std::vector<CameraConfig> cameras_;
-    float32_t fps_ = 10.0f;
+    float32_t video_length_s_ = 10.0f;
     std::string output_dir_ = "export/";
 
     // Orbit camera configuration
