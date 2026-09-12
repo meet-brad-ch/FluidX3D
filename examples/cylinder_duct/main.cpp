@@ -1,25 +1,35 @@
-#include "defines.hpp"
-#include "info.hpp"
-#include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+// Cylinder in a rectangular duct, driven by a pressure gradient, using Setup API
 
-void main_setup() { // cylinder in rectangular duct; required extensions in defines.hpp: VOLUME_FORCE, INTERACTIVE_GRAPHICS
-	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const float Re = 25000.0f;
-	const float D = 64.0f;
-	const float u = rsqrt(3.0f);
-	const float w=D, l=12.0f*D, h=3.0f*D;
-	const float nu = units.nu_from_Re(Re, D, u);
-	const float f = units.f_from_u_rectangular_duct(w, D, 1.0f, nu, u);
-	LBM lbm(to_uint(w), to_uint(l), to_uint(h), nu, 0.0f, f, 0.0f);
-	// ###################################################################################### define geometry ######################################################################################
-	const uint Nx=lbm.get_Nx(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
-		lbm.u.y[n] = 0.1f*u;
-		if(cylinder(x, y, z, float3(lbm.center().x, 2.0f*D, lbm.center().z), float3(Nx, 0u, 0u), 0.5f*D)) lbm.flags[n] = TYPE_S;
-		if(x==0u||x==Nx-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_S; // x and z non periodic
-	}); // ####################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = VIS_FLAG_LATTICE|VIS_Q_CRITERION;
+#include "defines.hpp"
+#include "lbm.hpp"
+#include "setup/setup.hpp"
+
+void main_setup() { // cylinder in rectangular duct; required extensions: VOLUME_FORCE, INTERACTIVE_GRAPHICS
+	const Length diameter = 1.0_cm; // the cylinder's, also the duct's width
+	const Length width = diameter, length = 12.0f * diameter, height = 3.0f * diameter;
+	const float reynolds = 25000.0f;
+	const KinematicViscosity viscosity = Fluid::WATER.kinematic_viscosity;
+	const Speed center_speed = reynolds * viscosity / diameter; // 2.5 m/s in water
+
+	SimulationSetup sim(Domain::box(width, length, height).cell_size(diameter / 64.0f)); // 64 x 768 x 192 cells
+	sim.setup();
+	sim.configure_units(center_speed, Fluid::WATER, 0.57735027f); // the lattice speed of sound, as the original
+
+	// the pressure gradient (per density) of laminar flow at this center speed through a square duct as wide as the
+	// cylinder, as the original
+	const Acceleration drive = Acceleration::from_si(units.f_from_u_rectangular_duct(width.si(), diameter.si(), 1.0f, viscosity.si(), center_speed.si()));
+	LBM lbm = sim.create_lbm(viscosity, { Acceleration{}, drive, Acceleration{} });
+
+	BoundaryBuilder(lbm)
+		.set_solid_faces({ Face::X_MIN, Face::X_MAX, Face::Z_MIN, Face::Z_MAX }) // periodic along Y
+		.add_solid(Shape::cylinder({ 0.5f * width, 2.0f * diameter, 0.5f * height }, Axis::X, 0.5f * diameter, width))
+		.initialize_velocity_y(0.1f * center_speed)
+		.apply();
+
+	GraphicsConfig(lbm)
+		.show_flags()
+		.show_vortices()
+		.apply();
+
 	lbm.run();
 } /**/

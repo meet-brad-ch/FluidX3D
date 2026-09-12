@@ -1,10 +1,10 @@
 BASELINE grid 128 512 128
 BASELINE domains 1 1 1
 BASELINE nu 9.6e-05
-BASELINE unit_m 0.0078125
-BASELINE unit_s 0.000395904
-BASELINE unit_kg 5.84126e-07
-BASELINE cells_S 9432
+BASELINE unit_m 1
+BASELINE unit_s 1
+BASELINE unit_kg 1
+BASELINE cells_S 9380
 BASELINE cells_E 291848
 BASELINE cells_T 0
 BASELINE cells_F 0
@@ -12,9 +12,9 @@ BASELINE cells_I 0
 BASELINE cells_G 0
 BASELINE cells_X 0
 BASELINE cells_Y 0
-BASELINE object_cells 9432
-BASELINE object_min 24 12 44
-BASELINE object_max 103 179 103
+BASELINE object_cells 9380
+BASELINE object_min 24 13 44
+BASELINE object_max 103 180 103
 BASELINE u_solid_mean 0 0 0
 BASELINE u_mean 0 0.075 0
 BASELINE rho_mean 1

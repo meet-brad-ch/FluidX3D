@@ -1,27 +1,38 @@
-#include "defines.hpp"
-#include "info.hpp"
-#include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+// 3D Taylor-Green vortices, using Setup API
 
-void main_setup() { // 3D Taylor-Green vortices; required extensions in defines.hpp: INTERACTIVE_GRAPHICS
-	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	LBM lbm(128u, 128u, 128u, 1u, 1u, 1u, 0.01f);
-	// ###################################################################################### define geometry ######################################################################################
-	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
-		const float A = 0.25f;
-		const uint periodicity = 1u;
-		const float a=(float)Nx/(float)periodicity, b=(float)Ny/(float)periodicity, c=(float)Nz/(float)periodicity;
-		const float fx = (float)x+0.5f-0.5f*(float)Nx;
-		const float fy = (float)y+0.5f-0.5f*(float)Ny;
-		const float fz = (float)z+0.5f-0.5f*(float)Nz;
-		lbm.u.x[n] =  A*cosf(2.0f*pif*fx/a)*sinf(2.0f*pif*fy/b)*sinf(2.0f*pif*fz/c);
-		lbm.u.y[n] = -A*sinf(2.0f*pif*fx/a)*cosf(2.0f*pif*fy/b)*sinf(2.0f*pif*fz/c);
-		lbm.u.z[n] =  A*sinf(2.0f*pif*fx/a)*sinf(2.0f*pif*fy/b)*cosf(2.0f*pif*fz/c);
-		lbm.rho[n] = 1.0f-sq(A)*3.0f/4.0f*(cosf(4.0f*pif*fx/a)+cosf(4.0f*pif*fy/b));
-	}); // ####################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = VIS_STREAMLINES;
+#include "defines.hpp"
+#include "lbm.hpp"
+#include "setup/setup.hpp"
+
+void main_setup() { // 3D Taylor-Green vortices; required extensions: INTERACTIVE_GRAPHICS
+	const Length size = 1.0_m;         // cube, periodic: one vortex wavelength
+	const float reynolds = 0.25f * 128.0f / 0.01f; // 3200: the original lattice setup (amplitude 0.25, 128 cells, viscosity 0.01)
+	const Speed amplitude = reynolds * Fluid::WATER.kinematic_viscosity / size; // 3.2 mm/s in water
+	const Density density = Fluid::WATER.density;
+
+	SimulationSetup sim(Domain::box(size, size, size).cell_size(size / 128.0f)); // 128³ cells, as the original
+	sim.setup();
+	sim.configure_units(amplitude, Fluid::WATER, 0.25f);
+
+	LBM lbm = sim.create_lbm(Fluid::WATER);
+
+	// the classic Taylor-Green vortex (no flow along Z, its pressure), with phases from the domain's center; the
+	// original's Z velocity made the start compressible and its pressure was that of the 2D vortices
+	const auto phase = [=](Length position) { return 2.0f * pif * ((position - 0.5f * size) / size); };
+	BoundaryBuilder(lbm)
+		.initialize_velocity([=](Position p) {
+			const float x = phase(p.x), y = phase(p.y), z = phase(p.z);
+			return Velocity{ amplitude * (cosf(x) * sinf(y) * sinf(z)), -amplitude * (sinf(x) * cosf(y) * sinf(z)), Speed{} };
+		})
+		.initialize_pressure([=](Position p) {
+			const float x = phase(p.x), y = phase(p.y), z = phase(p.z);
+			return -density * amplitude * amplitude * ((cosf(2.0f * x) + cosf(2.0f * y)) * (2.0f - cosf(2.0f * z)) / 16.0f);
+		})
+		.apply();
+
+	GraphicsConfig(lbm)
+		.show_streamlines()
+		.apply();
+
 	lbm.run();
-	//lbm.run(1000u); lbm.u.read_from_device(); println(lbm.u.x[lbm.index(Nx/2u, Ny/2u, Nz/2u)]); wait(); // test for binary identity
-}
+} /**/

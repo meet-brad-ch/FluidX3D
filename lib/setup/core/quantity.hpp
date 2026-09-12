@@ -82,12 +82,23 @@ using Temperature        = Quantity< 0, 0,  0, 1>; // K
 using ThermalExpansion   = Quantity< 0, 0,  0, -1>; // 1/K
 using VolumeFlowRate     = Quantity< 3, 0, -1>;    // m³/s
 
-/// A point in the domain in metres, measured from its origin corner (the cell at 0, 0, 0): {0.5_m, 1.0_m, 0.2_m}.
-struct Position {
-    Length x; ///< along X
-    Length y; ///< along Y
-    Length z; ///< along Z, the height
+/// Three components of a quantity along X, Y and Z (Z is the height), such as a position or a velocity.
+template<typename Q>
+struct Vector3 {
+    Q x{}; ///< along X
+    Q y{}; ///< along Y
+    Q z{}; ///< along Z, the height
+
+    friend constexpr Vector3 operator+(Vector3 a, Vector3 b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+    friend constexpr Vector3 operator-(Vector3 a, Vector3 b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+    friend constexpr Vector3 operator*(Vector3 v, float factor) { return { v.x * factor, v.y * factor, v.z * factor }; }
+    friend constexpr Vector3 operator*(float factor, Vector3 v) { return v * factor; }
 };
+
+/// A point in the domain in metres, measured from its origin corner (the cell at 0, 0, 0): {0.5_m, 1.0_m, 0.2_m}.
+using Position = Vector3<Length>;
+using Velocity = Vector3<Speed>;             ///< m/s
+using AccelerationVector = Vector3<Acceleration>; ///< m/s², e.g. gravity {0_mps2, 0_mps2, -9.81_mps2}
 
 // Plane angle: dimensionless, but a distinct type so that degrees cannot be passed where radians are meant.
 class Angle {

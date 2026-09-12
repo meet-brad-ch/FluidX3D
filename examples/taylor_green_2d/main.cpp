@@ -1,25 +1,39 @@
-#include "defines.hpp"
-#include "info.hpp"
-#include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+// 2D Taylor-Green vortices, using Setup API
 
-void main_setup() { // 2D Taylor-Green vortices (use D2Q9); required extensions in defines.hpp: INTERACTIVE_GRAPHICS
-	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	LBM lbm(1024u, 1024u, 1u, 0.02f);
-	// ###################################################################################### define geometry ######################################################################################
-	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
-		const float A = 0.2f;
-		const uint periodicity = 5u;
-		const float a=(float)Nx/(float)periodicity, b=(float)Ny/(float)periodicity;
-		const float fx = (float)x+0.5f-0.5f*(float)Nx;
-		const float fy = (float)y+0.5f-0.5f*(float)Ny;
-		lbm.u.x[n] =  A*cosf(2.0f*pif*fx/a)*sinf(2.0f*pif*fy/b);
-		lbm.u.y[n] = -A*sinf(2.0f*pif*fx/a)*cosf(2.0f*pif*fy/b);
-		lbm.rho[n] = 1.0f-sq(A)*3.0f/4.0f*(cosf(4.0f*pif*fx/a)+cosf(4.0f*pif*fy/b));
-	}); // ####################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = VIS_FIELD;
-	lbm.graphics.slice_mode = 3;
+#include "defines.hpp"
+#include "lbm.hpp"
+#include "setup/setup.hpp"
+
+void main_setup() { // 2D Taylor-Green vortices; required extensions: D2Q9, INTERACTIVE_GRAPHICS
+	const Length size = 1.0_m;             // square, periodic
+	const Length cell = size / 1024.0f;    // 1024 x 1024 cells, as the original
+	const Length wavelength = size / 5.0f; // 5 x 5 vortex pairs
+	const float reynolds = 0.2f * 204.8f / 0.02f; // 2048: the original lattice setup (amplitude 0.2, wavelength 204.8 cells, viscosity 0.02)
+	const Speed amplitude = reynolds * Fluid::WATER.kinematic_viscosity / wavelength; // 1 cm/s in water
+	const Density density = Fluid::WATER.density;
+
+	SimulationSetup sim(Domain::box(size, size, cell).cell_size(cell)); // one cell high: 2D
+	sim.setup();
+	sim.configure_units(amplitude, Fluid::WATER, 0.2f);
+
+	LBM lbm = sim.create_lbm(Fluid::WATER);
+
+	// phases from the domain's center
+	const auto phase = [=](Length position) { return 2.0f * pif * ((position - 0.5f * size) / wavelength); };
+	BoundaryBuilder(lbm)
+		.initialize_velocity([=](Position p) {
+			const float x = phase(p.x), y = phase(p.y);
+			return Velocity{ amplitude * (cosf(x) * sinf(y)), -amplitude * (sinf(x) * cosf(y)), Speed{} };
+		})
+		.initialize_pressure([=](Position p) {
+			return -0.25f * density * amplitude * amplitude * (cosf(2.0f * phase(p.x)) + cosf(2.0f * phase(p.y)));
+		})
+		.apply();
+
+	GraphicsConfig(lbm)
+		.show_velocity_field()
+		.set_slice_mode(SliceMode::Z)
+		.apply();
+
 	lbm.run();
 } /**/
