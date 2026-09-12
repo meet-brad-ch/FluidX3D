@@ -7,8 +7,8 @@
 #include "setup/setup.hpp"
 
 void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS or GRAPHICS
-	const float32_t wind_speed_mps = 10.0f/3.6f; // reference wind speed (10 km/h) at the reference height
-	const float32_t wind_reference_height_m = 100.0f;
+	const Speed wind_speed = 10.0_kmh; // reference wind speed at the reference height
+	const Length wind_reference_height = 100.0_m;
 	const float32_t wind_profile_alpha = 0.25f; // power-law exponent for suburban terrain
 
 	SimulationSetup sim(Domain::around(Model("hill.stl")) // sized around the terrain; SDF voxelization by default
@@ -17,7 +17,7 @@ void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGR
 		.max_vram(20000_mb));
 
 	sim.setup();
-	sim.configure_units(wind_speed_mps, Fluid::AIR, 0.07f);
+	sim.configure_units(wind_speed, Fluid::AIR, 0.07f);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -26,7 +26,7 @@ void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGR
 	BoundaryBuilder(lbm)
 		.set_solid_floor()
 		.set_open_boundaries()
-		.set_wind_profile_power_law(wind_speed_mps, wind_reference_height_m, wind_profile_alpha)
+		.set_wind_profile_power_law(wind_speed, wind_reference_height, wind_profile_alpha)
 		.set_wind_direction(Face::Y_MIN)
 		.apply();
 

@@ -56,7 +56,7 @@ This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for
 #include "setup/setup.hpp"
 
 void main_setup() { // required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
-    const float flow_velocity_mps = 1.0f;
+    const Speed flow_velocity = 1.0_mps;
     const Length cow_length = 2.4_m;
     const Length domain_length = cow_length / 0.65f; // the cow is 65 % of the domain length
 
@@ -67,7 +67,7 @@ void main_setup() { // required extensions in defines.hpp: FP16S, EQUILIBRIUM_BO
         .vram(1000_mb));                   // resolution from the VRAM budget
 
     sim.setup();
-    sim.configure_units(flow_velocity_mps, Fluid::AIR, 0.075f);
+    sim.configure_units(flow_velocity, Fluid::AIR, 0.075f);
     sim.print_reynolds_number(Fluid::AIR);
 
     LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -76,7 +76,7 @@ void main_setup() { // required extensions in defines.hpp: FP16S, EQUILIBRIUM_BO
     BoundaryBuilder(lbm)
         .set_solid_floor()
         .set_open_boundaries()
-        .initialize_velocity_y(flow_velocity_mps)
+        .initialize_velocity_y(flow_velocity)
         .apply();
 
     GraphicsConfig(lbm)

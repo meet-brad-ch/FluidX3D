@@ -8,7 +8,7 @@
 void main_setup() { // particle test; required extensions: VOLUME_FORCE, FORCE_FIELD, MOVING_BOUNDARIES, PARTICLES, INTERACTIVE_GRAPHICS
 	// physical parameters (SI units)
 	const Length domain_size = 1.0_m;   // cube domain
-	const float velocity_mps = 1.0f;    // 1 m/s lid velocity
+	const Speed lid_velocity = 1.0_mps;
 	const float Re = 1000.0f;           // Reynolds number
 	const uint particle_count = 32768u;
 	const float particle_density = 2.0f;
@@ -18,7 +18,7 @@ void main_setup() { // particle test; required extensions: VOLUME_FORCE, FORCE_F
 	SimulationSetup sim(Domain::box(domain_size, domain_size, domain_size).vram(2000_mb));
 
 	sim.setup();
-	sim.configure_units(velocity_mps, Fluid::WATER);
+	sim.configure_units(lid_velocity, Fluid::WATER);
 
 	// create LBM with particles (Reynolds-based viscosity)
 	LBM lbm = sim.create_lbm_particles_reynolds(Re, particle_count, particle_density, settling_acceleration_mps2);
@@ -35,7 +35,7 @@ void main_setup() { // particle test; required extensions: VOLUME_FORCE, FORCE_F
 
 	// boundary conditions (SI units)
 	BoundaryBuilder(lbm)
-		.preset_lid_driven_cavity(Face::Z_MAX, velocity_mps)
+		.preset_lid_driven_cavity(Face::Z_MAX, lid_velocity)
 		.apply();
 
 	// graphics

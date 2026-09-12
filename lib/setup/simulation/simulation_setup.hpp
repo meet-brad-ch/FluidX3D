@@ -133,33 +133,27 @@ public:
     // Units (call after setup())
     // ========================================================================
 
-    // reference velocity in m/s, fluid density in kg/m³; lbm_u is the reference velocity in LBM units.
-    // Also sets the core's global units (used by the builders, the graphics and the file output).
-    SimulationSetup& configure_units(float32_t si_velocity, float32_t si_density = 1.225f, float32_t lbm_u = 0.1f) {
+    /// @brief The scale between SI and lattice units, from the reference velocity and the fluid's density.
+    ///
+    /// Also sets the core's global units (used by the builders, the graphics and the file output).
+    /// @param velocity  the reference velocity, usually the fastest in the flow
+    /// @param density   the fluid's density: lattice density 1
+    /// @param lbm_u     the reference velocity in lattice units (at most about 0.3; lower is more accurate)
+    SimulationSetup& configure_units(Speed velocity, Density density, float32_t lbm_u = 0.1f) {
         lbm_u_ref_ = lbm_u;
         scale_ = UnitScale::from_reference(Length::from_si(results.si_reference_size), results.lbm_reference_size,
-                                           Speed::from_si(si_velocity), lbm_u, Density::from_si(si_density));
+                                           velocity, lbm_u, density);
         units.set_m_kg_s(scale_.cell_size().si(), scale_.mass_unit().si(), scale_.time_step().si());
         return *this;
     }
 
+    /// As configure_units(Speed, Density, float), with the density of this fluid.
+    SimulationSetup& configure_units(Speed velocity, const FluidProperties& fluid, float32_t lbm_u = 0.1f) {
+        return configure_units(velocity, Density::from_si(fluid.density), lbm_u);
+    }
+
+    /// The scale set by configure_units().
     const UnitScale& unit_scale() const { return scale_; }
-
-    SimulationSetup& configure_units(float32_t si_velocity, const FluidProperties& fluid, float32_t lbm_u = 0.1f) {
-        return configure_units(si_velocity, fluid.density, lbm_u);
-    }
-
-    // as configure_units(), with the reference length in m (for ASPECT_RATIO mode, which has no SI size)
-    SimulationSetup& configure_units_with_length(float32_t si_reference_length, float32_t si_velocity,
-                                                  float32_t si_density = 1.225f, float32_t lbm_u = 0.1f) {
-        results.si_reference_size = si_reference_length;
-        return configure_units(si_velocity, si_density, lbm_u);
-    }
-
-    SimulationSetup& configure_units_with_length(float32_t si_reference_length, float32_t si_velocity,
-                                                  const FluidProperties& fluid, float32_t lbm_u = 0.1f) {
-        return configure_units_with_length(si_reference_length, si_velocity, fluid.density, lbm_u);
-    }
 
     float32_t to_lbm_viscosity(float32_t si_viscosity) const { return scale_.viscosity(KinematicViscosity::from_si(si_viscosity)); } // m²/s
     float32_t to_lbm_velocity(float32_t si_velocity) const { return scale_.velocity(Speed::from_si(si_velocity)); }              // m/s

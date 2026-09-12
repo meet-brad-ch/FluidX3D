@@ -12,8 +12,9 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 	const Length domain_z = 0.75_m;
 
 	const Length water_depth = 0.5f*domain_z; // initial water level at 50% height
+	const Speed shallow_wave_speed = sqrt(9.81_mps2*water_depth); // shallow-water wave speed sqrt(g*h), the fastest velocity in the flow
 	const float water_depth_m = water_depth.si();
-	const float shallow_wave_speed_mps = sqrt(9.81f*water_depth_m); // shallow-water wave speed sqrt(g*h), the fastest velocity in the flow
+	const float shallow_wave_speed_mps = shallow_wave_speed.si();
 
 	// wave maker as in the original lattice setup (peak velocity 0.12, frequency 0.0007 per step, water depth 48 cells,
 	// gravity 0.001), scaled to this water depth with the same Froude number
@@ -27,7 +28,7 @@ void main_setup() { // breaking waves on beach; required extensions: FP16S, VOLU
 	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).vram(2000_mb));
 
 	sim.setup();
-	sim.configure_units(shallow_wave_speed_mps, Fluid::WATER, 0.22f); // wave speed in LBM units as in the original lattice setup: sqrt(0.001*48)
+	sim.configure_units(shallow_wave_speed, Fluid::WATER, 0.22f); // wave speed in LBM units as in the original lattice setup: sqrt(0.001*48)
 
 	// create LBM for free surface simulation
 	// Reynolds number of the original lattice setup (wave speed, water depth 48 cells, viscosity 0.01);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <compare>
 #include <concepts>
 // no <numbers>: the core's utilities.hpp defines a macro named pi, which breaks std::numbers::pi
@@ -28,6 +29,11 @@ public:
     friend constexpr Quantity operator*(Quantity q, float factor) { return q *= factor; }
     friend constexpr Quantity operator*(float factor, Quantity q) { return q *= factor; }
     friend constexpr Quantity operator/(Quantity q, float divisor) { return q /= divisor; }
+
+    /// Square root of a quantity whose dimension exponents are all even: sqrt(9.81_mps2*2.0_m) is a Speed.
+    friend auto sqrt(Quantity q) requires(L % 2 == 0 && M % 2 == 0 && T % 2 == 0 && K % 2 == 0) {
+        return Quantity<L / 2, M / 2, T / 2, K / 2>::from_si(std::sqrt(q.si_));
+    }
 
 private:
     float si_ = 0.0f;
@@ -127,15 +133,17 @@ private:
     unsigned int mb_ = 0u;
 };
 
-constexpr ModelLengths operator""_lengths(long double v) { return ModelLengths::of(static_cast<float>(v)); }
-constexpr ModelLengths operator""_lengths(unsigned long long v) { return ModelLengths::of(static_cast<float>(v)); }
-constexpr MemorySize operator""_mb(unsigned long long v) { return MemorySize::from_mb(static_cast<unsigned int>(v)); }
-constexpr MemorySize operator""_gb(unsigned long long v) { return MemorySize::from_mb(static_cast<unsigned int>(v * 1024ull)); }
+consteval ModelLengths operator""_lengths(long double v) { return ModelLengths::of(static_cast<float>(v)); }
+consteval ModelLengths operator""_lengths(unsigned long long v) { return ModelLengths::of(static_cast<float>(v)); }
+consteval MemorySize operator""_mb(unsigned long long v) { return MemorySize::from_mb(static_cast<unsigned int>(v)); }
+consteval MemorySize operator""_gb(unsigned long long v) { return MemorySize::from_mb(static_cast<unsigned int>(v * 1024ull)); }
 
 // Literals, e.g. 2.0_m, 36_kmh, 20.0_C (absolute temperature); integer and floating-point forms.
+// consteval: always computed by the compiler, so /fp:fast cannot change a literal's value (x/3.6f evaluated at run time
+// becomes x*(1/3.6f), one ulp off).
 #define FLUIDX3D_QUANTITY_LITERAL(suffix, Type, factor, offset) \
-    constexpr Type operator""suffix(long double v) { return Type::from_si(static_cast<float>(v) * (factor) + (offset)); } \
-    constexpr Type operator""suffix(unsigned long long v) { return Type::from_si(static_cast<float>(v) * (factor) + (offset)); }
+    consteval Type operator""suffix(long double v) { return Type::from_si(static_cast<float>(v) * (factor) + (offset)); } \
+    consteval Type operator""suffix(unsigned long long v) { return Type::from_si(static_cast<float>(v) * (factor) + (offset)); }
 
 FLUIDX3D_QUANTITY_LITERAL(_m,     Length,             1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_cm,    Length,             0.01f,       0.0f)
@@ -145,7 +153,6 @@ FLUIDX3D_QUANTITY_LITERAL(_s,     Duration,           1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_min,   Duration,           60.0f,       0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_Hz,    Frequency,          1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_mps,   Speed,              1.0f,        0.0f)
-FLUIDX3D_QUANTITY_LITERAL(_kmh,   Speed,              1.0f / 3.6f, 0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_mps2,  Acceleration,       1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_kg,    Mass,               1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_kgpm3, Density,            1.0f,        0.0f)
@@ -159,7 +166,11 @@ FLUIDX3D_QUANTITY_LITERAL(_C,     Temperature,        1.0f,        273.15f)
 
 #undef FLUIDX3D_QUANTITY_LITERAL
 
-constexpr Angle operator""_deg(long double v) { return Angle::from_deg(static_cast<float>(v)); }
-constexpr Angle operator""_deg(unsigned long long v) { return Angle::from_deg(static_cast<float>(v)); }
-constexpr Angle operator""_rad(long double v) { return Angle::from_rad(static_cast<float>(v)); }
-constexpr Angle operator""_rad(unsigned long long v) { return Angle::from_rad(static_cast<float>(v)); }
+// km/h divided by 3.6 (not multiplied by 1/3.6), which is how speeds in km/h are usually written: 300.0_kmh == 300.0f/3.6f
+consteval Speed operator""_kmh(long double v) { return Speed::from_si(static_cast<float>(v) / 3.6f); }
+consteval Speed operator""_kmh(unsigned long long v) { return Speed::from_si(static_cast<float>(v) / 3.6f); }
+
+consteval Angle operator""_deg(long double v) { return Angle::from_deg(static_cast<float>(v)); }
+consteval Angle operator""_deg(unsigned long long v) { return Angle::from_deg(static_cast<float>(v)); }
+consteval Angle operator""_rad(long double v) { return Angle::from_rad(static_cast<float>(v)); }
+consteval Angle operator""_rad(unsigned long long v) { return Angle::from_rad(static_cast<float>(v)); }

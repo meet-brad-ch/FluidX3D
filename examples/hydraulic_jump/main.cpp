@@ -23,7 +23,7 @@ void main_setup() { // hydraulic jump; required extensions: FP16S, VOLUME_FORCE,
 	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).vram(208_mb));
 
 	sim.setup();
-	sim.configure_units(inlet_velocity.si(), Fluid::WATER);
+	sim.configure_units(inlet_velocity, Fluid::WATER);
 
 	// create LBM for free surface simulation
 	LBM lbm = sim.create_lbm_surface(Fluid::WATER, 9.81f);

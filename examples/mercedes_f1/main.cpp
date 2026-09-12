@@ -14,7 +14,7 @@
 void main_setup() {
 	const Length car_length = 5.5_m;
 	const float32_t car_width_m = 2.0f;
-	const float32_t car_speed_mps = 100.0f / 3.6f;  // 100 km/h
+	const Speed car_speed = 100.0_kmh;
 	const float32_t simulation_time_s = 0.25f;
 
 	// Check for required STL files
@@ -42,10 +42,10 @@ void main_setup() {
 		.vram(4000_mb));
 
 	sim.setup();
-	sim.configure_units(car_speed_mps, Fluid::AIR);
+	sim.configure_units(car_speed, Fluid::AIR);
 
 	// Print Reynolds number based on car width
-	const float32_t Re = units.si_Re(car_width_m, car_speed_mps, Fluid::AIR.kinematic_viscosity);
+	const float32_t Re = units.si_Re(car_width_m, car_speed.si(), Fluid::AIR.kinematic_viscosity);
 	print_info("Re = " + to_string(to_uint(Re)));
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
@@ -76,7 +76,7 @@ void main_setup() {
 	back_wheels->set_center(back_wheels->get_center_of_mass());
 
 	// Calculate wheel angular velocity (omega = v / r)
-	const float32_t lbm_u = sim.to_lbm_velocity(car_speed_mps);
+	const float32_t lbm_u = sim.to_lbm_velocity(car_speed.si());
 	const float32_t lbm_radius = 0.5f * back_wheels->get_min_size();
 	const float32_t omega = lbm_u / lbm_radius;
 
@@ -89,7 +89,7 @@ void main_setup() {
 	BoundaryBuilder(lbm)
 		.set_solid_floor()
 		.set_open_boundaries()
-		.initialize_velocity_y(car_speed_mps)
+		.initialize_velocity_y(car_speed)
 		.apply();
 
 	// Configure graphics

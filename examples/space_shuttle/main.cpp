@@ -8,7 +8,7 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t flight_speed_mps = 100.0f;
+	const Speed flight_speed = 100.0_mps;
 
 	SimulationSetup sim(SimulationConfig("Full_Shuttle.stl")
 		.set_domain_aspect_ratio(1.0f, 4.0f, 0.8f)
@@ -20,7 +20,7 @@ void main_setup() {
 		.set_reference_axis(SimulationConfig::ReferenceAxis::X));
 
 	sim.setup();
-	sim.configure_units(flight_speed_mps, Fluid::AIR);
+	sim.configure_units(flight_speed, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	const auto& r = sim.get_results();
@@ -30,7 +30,7 @@ void main_setup() {
 
 	BoundaryBuilder(lbm)
 		.set_open_boundaries()
-		.initialize_velocity_y(flight_speed_mps)
+		.initialize_velocity_y(flight_speed)
 		.apply();
 
 	GraphicsConfig(lbm)

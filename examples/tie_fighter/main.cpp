@@ -12,7 +12,7 @@
 
 void main_setup() {
 	const Length wingspan = 6.0_m;               // TIE Fighter wingspan
-	const float32_t flow_velocity_mps = 50.0f;   // Flow velocity
+	const Speed flow_velocity = 50.0_mps;        // Flow velocity
 	const float32_t simulation_time_s = 5.0f;    // 5 seconds of tumbling
 	const uint32_t update_interval = 28u;
 
@@ -24,7 +24,7 @@ void main_setup() {
 		.vram(1760_mb));
 
 	sim.setup();
-	sim.configure_units(flow_velocity_mps, Fluid::AIR);
+	sim.configure_units(flow_velocity, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM
@@ -41,7 +41,7 @@ void main_setup() {
 	// Configure boundaries - open with inlet velocity
 	BoundaryBuilder(lbm)
 		.set_all_open()
-		.initialize_velocity_y(flow_velocity_mps)
+		.initialize_velocity_y(flow_velocity)
 		.apply();
 
 	// Configure graphics (includes lattice visualization for tumbling effect)
