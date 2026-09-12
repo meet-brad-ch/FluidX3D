@@ -78,7 +78,8 @@ DomainPlan DomainPlanner::plan_aspect_ratio(const SimulationConfig& config, Latt
     plan.Ny = lbm_N.y;
     plan.Nz = lbm_N.z;
     plan.lbm_reference_size = config.geometry_scale_ * (float32_t)reference_dimension(config, lbm_N);
-    plan.si_reference_size = 1.0f; // no SI size in this mode; configure_units_with_length() sets it
+    // the geometry's real length if the config has it (Model::length()); otherwise 1 m until configure_units_with_length()
+    plan.si_reference_size = config.reference_length_m_ > 0.0f ? config.reference_length_m_ : 1.0f;
     plan.rotation_matrix = rotation(config);
     plan.stl_path = get_resource_path(config.geometry_filename);
     plan.voxel_size = plan.lbm_reference_size; // geometry_scale * domain reference axis
