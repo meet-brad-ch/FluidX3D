@@ -8,6 +8,8 @@ if(FLUIDX3D_BUILD_ORIGINALS)
     add_subdirectory(originals)
 endif()
 
+add_subdirectory(physics) # simulations against analytic solutions: ctest -L physics
+
 # --- Unit tests (GoogleTest, CPU only: ctest -L unit) ---------------------------------
 
 include(FetchContent)
