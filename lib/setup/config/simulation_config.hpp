@@ -56,6 +56,7 @@ private:
     bool fix_mesh_ { false };
     MirrorPlane mirror_plane_ { MirrorPlane::NONE };
 
+    friend class DomainPlanner;
     friend class SimulationSetup;
 
 public:

@@ -19,6 +19,7 @@
 
 #include "setup/domain/lattice.hpp"
 #include "setup/domain/geometry_scaler.hpp"
+#include "setup/domain/domain_plan.hpp"
 #include "setup/simulation/mesh_loader.hpp"
 #include "setup/simulation/simulation_setup.hpp"
 
