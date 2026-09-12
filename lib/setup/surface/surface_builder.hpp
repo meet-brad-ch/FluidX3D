@@ -1,143 +1,144 @@
 #pragma once
 
 #include "setup/core/types.hpp"
+#include "setup/core/quantity.hpp"
 #include "setup/core/boundary_utils.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
+#include "setup/domain/lattice.hpp"
 #include "lbm.hpp"
 #include "units.hpp"
+#include <array>
+#include <optional>
 #include <vector>
-#include <functional>
 
 extern Units units; // global units object from lbm.cpp
 
-// Free surface setup (SURFACE extension): fluid regions, solid walls and blocks, inlets and outlets; apply() writes them to the grid.
-// Positions are in cells, velocities and gravity in LBM units.
+/// @brief Free surface setup (SURFACE extension) in physical units: water, solid walls and blocks, inflows and outflows.
+///
+/// Positions are in metres from the domain's origin corner and speeds in m/s, converted with the global units
+/// (SimulationSetup::configure_units() first). Lengths become whole cells as CellSpan describes. apply() writes the
+/// setup to the grid in this order: water, solid faces and blocks, inflows, outflows.
+/// @code
+/// SurfaceBuilder(lbm)
+///     .set_water_level(0.576_m)
+///     .initialize_hydrostatic()
+///     .set_solid_faces({Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Z_MIN})
+///     .add_solid_block({0_m, 0_m, 0_m}, {0.96_m, 0.53_m, 0.38_m})
+///     .add_inflow(Face::Y_MIN, 1.36_mps, 0.38_m, 0.576_m)
+///     .add_outflow(Face::Y_MAX, 0.68_mps)
+///     .apply();
+/// @endcode
 class SurfaceBuilder {
 public:
-    using CellPredicate = std::function<bool(uint32_t, uint32_t, uint32_t)>;
-
+    /// @param lbm the free surface LBM, created with its gravity (SimulationSetup::create_lbm_surface())
     explicit SurfaceBuilder(LBM& lbm) : lbm_(lbm) {}
 
-    // fluid below this fraction of the domain height
-    SurfaceBuilder& set_water_level(float32_t height_fraction) {
-        water_level_fraction_ = height_fraction;
-        use_water_level_ = true;
+    /// Water in the whole domain below this height.
+    SurfaceBuilder& set_water_level(Length height) {
+        water_level_ = height;
         return *this;
     }
 
-    SurfaceBuilder& set_water_level_cells(uint32_t height_cells) {
-        water_level_cells_ = height_cells;
-        use_water_level_cells_ = true;
+    /// Water in the box between two corners, in addition to the water level.
+    SurfaceBuilder& add_water_box(Position from, Position to) {
+        water_boxes_.push_back({ from, to });
         return *this;
     }
 
-    // fluid where predicate(x, y, z) is true, in addition to the water level
-    SurfaceBuilder& set_fluid_region(CellPredicate predicate) {
-        fluid_predicate_ = predicate;
-        use_predicate_ = true;
+    /// Solid walls on all six faces.
+    SurfaceBuilder& set_solid_walls() {
+        solid_faces_.fill(true);
         return *this;
     }
 
-    // gravity in LBM units for the hydrostatic initialization (the LBM's own volume force is set when it is created)
-    SurfaceBuilder& set_gravity_lbm(float32_t g) {
-        gravity_lbm_ = g;
-        return *this;
-    }
-
-    SurfaceBuilder& set_solid_walls() { // all six faces
-        solid_walls_ = true;
-        return *this;
-    }
-
+    /// Solid walls on these faces.
     SurfaceBuilder& set_solid_faces(const std::vector<Face>& faces) {
-        for (Face f : faces) {
-            solid_faces_.push_back(f);
+        for(const Face face : faces) solid_faces_[static_cast<std::size_t>(face)] = true;
+        return *this;
+    }
+
+    /// A solid box between two corners.
+    SurfaceBuilder& add_solid_block(Position from, Position to) {
+        solid_blocks_.push_back({ from, to });
+        return *this;
+    }
+
+    /// @brief Water flowing in through an X or Y face at a speed, between two heights.
+    ///
+    /// The inflow is the cell layer one inward from the face, so the face itself can stay a wall; cells on solid
+    /// faces are left out.
+    SurfaceBuilder& add_inflow(Face face, Speed speed, Length from_height, Length to_height) {
+        if(face == Face::Z_MIN || face == Face::Z_MAX) {
+            print_warning("SurfaceBuilder: an inflow needs an X or Y face; this one is left out");
+            return *this;
         }
+        inflows_.push_back({ face, speed, from_height, to_height });
         return *this;
     }
 
-    // solid box [min, max) in cells
-    SurfaceBuilder& add_solid_block_cells(uint32_t min_x, uint32_t max_x,
-                                           uint32_t min_y, uint32_t max_y,
-                                           uint32_t min_z, uint32_t max_z) {
-        solid_blocks_.push_back({min_x, max_x, min_y, max_y, min_z, max_z});
+    /// Outflow through a face at a speed: its cells become equilibrium boundaries (TYPE_E), except those on solid faces.
+    SurfaceBuilder& add_outflow(Face face, Speed speed) {
+        outflows_.push_back({ face, speed });
         return *this;
     }
 
-    // fluid cells with a velocity (LBM units) along axis where predicate is true
-    SurfaceBuilder& add_velocity_inlet(CellPredicate predicate, float32_t velocity_lbm, Axis axis) {
-        velocity_inlets_.push_back({predicate, velocity_lbm, axis});
-        return *this;
-    }
-
-    // equilibrium (TYPE_E) cells where predicate is true, with an optional velocity (LBM units) along axis
-    SurfaceBuilder& add_equilibrium_outlet(CellPredicate predicate, float32_t velocity_lbm = 0.0f, Axis axis = Axis::Y) {
-        equilibrium_outlets_.push_back({predicate, velocity_lbm, axis});
-        return *this;
-    }
-
-    // initial density from the hydrostatic pressure below the water level (or below Nz/2)
+    /// Initial density from the hydrostatic pressure of the LBM's gravity, below the water level (without one,
+    /// below half the domain height).
     SurfaceBuilder& initialize_hydrostatic() {
         init_hydrostatic_ = true;
         return *this;
     }
 
+    /// Writes the setup to the grid.
     void apply() {
-        const uint32_t Nx = lbm_.get_Nx();
-        const uint32_t Ny = lbm_.get_Ny();
         const uint32_t Nz = lbm_.get_Nz();
+        const uint32_t water_height = water_level_ ? CellSpan::of(0.0f, units.x(water_level_->si()), Nz).end : 0u;
+        const uint32_t reference_height = water_height != 0u ? water_height : Nz / 2u; // of the hydrostatic pressure
+        const float32_t gravity = -lbm_.get_fz(); // the LBM's gravity along -z, in lattice units
 
-        uint32_t water_height = 0;
-        if (use_water_level_) {
-            water_height = (uint32_t)(water_level_fraction_ * (float32_t)Nz);
-        } else if (use_water_level_cells_) {
-            water_height = water_level_cells_;
+        std::vector<CellBox> water, solid;
+        for(const Box& box : water_boxes_) water.push_back(cells_of(box));
+        for(const Box& box : solid_blocks_) solid.push_back(cells_of(box));
+        std::vector<CellFlow> inflows, outflows;
+        for(const Inflow& inflow : inflows_) {
+            const float32_t velocity = units.u(inflow.speed.si());
+            inflows.push_back({ inflow.face, is_min_face(inflow.face) ? velocity : -velocity, // into the domain
+                                CellSpan::of(units.x(inflow.from_height.si()), units.x(inflow.to_height.si()), Nz), 1u });
         }
-        const uint32_t ref_height = water_height != 0 ? water_height : Nz / 2; // hydrostatic reference height
+        for(const Outflow& outflow : outflows_) {
+            const float32_t velocity = units.u(outflow.speed.si());
+            outflows.push_back({ outflow.face, is_min_face(outflow.face) ? -velocity : velocity, // out of the domain
+                                 CellSpan::of(0.0f, (float32_t)Nz, Nz), 0u });
+        }
 
         parallel_for(lbm_.get_N(), [&](uint64_t n) {
-            uint32_t x = 0, y = 0, z = 0;
+            uint32_t x = 0u, y = 0u, z = 0u;
             lbm_.coordinates(n, x, y, z);
 
-            const bool below_water_level = (use_water_level_ || use_water_level_cells_) && z < water_height;
-            const bool in_fluid_region = use_predicate_ && fluid_predicate_ && fluid_predicate_(x, y, z);
-            if (below_water_level || in_fluid_region) {
+            if(z < water_height || contains(water, x, y, z)) {
                 lbm_.flags[n] = TYPE_F;
-                if (init_hydrostatic_) {
-                    lbm_.rho[n] = units.rho_hydrostatic(gravity_lbm_, (float32_t)z, (float32_t)ref_height);
-                }
+                if(init_hydrostatic_) lbm_.rho[n] = units.rho_hydrostatic(gravity, (float32_t)z, (float32_t)reference_height);
             }
+            if(on_solid_face(x, y, z) || contains(solid, x, y, z)) lbm_.flags[n] = TYPE_S;
 
-            if (solid_walls_ && (x == 0 || x == Nx - 1 || y == 0 || y == Ny - 1 || z == 0 || z == Nz - 1)) {
-                lbm_.flags[n] = TYPE_S;
-            }
-            for (Face f : solid_faces_) {
-                if (boundary_utils::is_on_face(x, y, z, Nx, Ny, Nz, f)) lbm_.flags[n] = TYPE_S;
-            }
-            for (const auto& block : solid_blocks_) {
-                if (x >= block.min_x && x < block.max_x && y >= block.min_y && y < block.max_y && z >= block.min_z && z < block.max_z) {
-                    lbm_.flags[n] = TYPE_S;
-                }
-            }
-
-            for (const auto& inlet : velocity_inlets_) {
-                if (inlet.predicate && inlet.predicate(x, y, z)) {
+            for(const CellFlow& inflow : inflows) {
+                if(in_flow(inflow, x, y, z)) {
                     lbm_.flags[n] = TYPE_F;
-                    set_velocity(n, inlet.axis, inlet.velocity);
+                    set_normal_velocity(n, inflow);
                 }
             }
-            for (const auto& outlet : equilibrium_outlets_) {
-                if (outlet.predicate && outlet.predicate(x, y, z)) {
+            for(const CellFlow& outflow : outflows) {
+                if(in_flow(outflow, x, y, z)) {
                     lbm_.flags[n] = TYPE_E;
-                    if (outlet.velocity != 0.0f) set_velocity(n, outlet.axis, outlet.velocity);
+                    set_normal_velocity(n, outflow);
                 }
             }
         });
     }
 
-    // raytraced free surface on one GPU, rasterized on several
+    /// Raytraced free surface on one GPU, rasterized on several.
     void configure_visualization() {
-        if (lbm_.get_D() == 1u) {
+        if(lbm_.get_D() == 1u) {
             lbm_.graphics.visualization_modes = VIS_PHI_RAYTRACE;
         } else {
             lbm_.graphics.visualization_modes = VIS_PHI_RASTERIZE;
@@ -145,41 +146,66 @@ public:
     }
 
 private:
+    struct Box { Position from, to; };                                ///< in metres
+    struct Inflow { Face face; Speed speed; Length from_height, to_height; };
+    struct Outflow { Face face; Speed speed; };
+
+    struct CellBox { ///< a Box in whole cells
+        CellSpan x, y, z;
+        bool contains(uint32_t cx, uint32_t cy, uint32_t cz) const { return x.contains(cx) && y.contains(cy) && z.contains(cz); }
+    };
+
+    struct CellFlow { ///< an inflow or outflow in lattice units
+        Face face;
+        float32_t velocity; ///< along the face normal's axis, signed
+        CellSpan height;    ///< cells along z
+        uint32_t layer;     ///< cells inward from the face
+    };
+
     LBM& lbm_;
-
-    bool use_water_level_ = false;
-    bool use_water_level_cells_ = false;
-    float32_t water_level_fraction_ = 0.5f;
-    uint32_t water_level_cells_ = 0;
-
-    bool use_predicate_ = false;
-    CellPredicate fluid_predicate_;
-
-    float32_t gravity_lbm_ = 0.0002f;
-
-    bool solid_walls_ = false;
-    std::vector<Face> solid_faces_;
-
-    struct SolidBlock {
-        uint32_t min_x, max_x, min_y, max_y, min_z, max_z;
-    };
-    std::vector<SolidBlock> solid_blocks_;
-
-    struct CellVelocity {
-        CellPredicate predicate;
-        float32_t velocity; // LBM units
-        Axis axis;
-    };
-    std::vector<CellVelocity> velocity_inlets_;
-    std::vector<CellVelocity> equilibrium_outlets_;
-
+    std::optional<Length> water_level_;
+    std::vector<Box> water_boxes_;
+    std::array<bool, 6> solid_faces_{}; ///< indexed by Face
+    std::vector<Box> solid_blocks_;
+    std::vector<Inflow> inflows_;
+    std::vector<Outflow> outflows_;
     bool init_hydrostatic_ = false;
 
-    void set_velocity(uint64_t n, Axis axis, float32_t velocity) {
-        switch (axis) {
-            case Axis::X: lbm_.u.x[n] = velocity; break;
-            case Axis::Y: lbm_.u.y[n] = velocity; break;
-            case Axis::Z: lbm_.u.z[n] = velocity; break;
+    static bool is_min_face(Face face) { return face == Face::X_MIN || face == Face::Y_MIN || face == Face::Z_MIN; }
+
+    static bool contains(const std::vector<CellBox>& boxes, uint32_t x, uint32_t y, uint32_t z) {
+        for(const CellBox& box : boxes) {
+            if(box.contains(x, y, z)) return true;
+        }
+        return false;
+    }
+
+    CellBox cells_of(const Box& box) const {
+        return { CellSpan::of(units.x(box.from.x.si()), units.x(box.to.x.si()), lbm_.get_Nx()),
+                 CellSpan::of(units.x(box.from.y.si()), units.x(box.to.y.si()), lbm_.get_Ny()),
+                 CellSpan::of(units.x(box.from.z.si()), units.x(box.to.z.si()), lbm_.get_Nz()) };
+    }
+
+    bool on_face(Face face, uint32_t x, uint32_t y, uint32_t z, uint32_t layer = 0u) const {
+        return boundary_utils::is_on_face(x, y, z, lbm_.get_Nx(), lbm_.get_Ny(), lbm_.get_Nz(), face, layer);
+    }
+
+    bool on_solid_face(uint32_t x, uint32_t y, uint32_t z) const {
+        for(std::size_t face = 0u; face < solid_faces_.size(); face++) {
+            if(solid_faces_[face] && on_face(static_cast<Face>(face), x, y, z)) return true;
+        }
+        return false;
+    }
+
+    bool in_flow(const CellFlow& flow, uint32_t x, uint32_t y, uint32_t z) const {
+        return on_face(flow.face, x, y, z, flow.layer) && flow.height.contains(z) && !on_solid_face(x, y, z);
+    }
+
+    void set_normal_velocity(uint64_t n, const CellFlow& flow) {
+        switch(flow.face) {
+            case Face::X_MIN: case Face::X_MAX: lbm_.u.x[n] = flow.velocity; break;
+            case Face::Y_MIN: case Face::Y_MAX: lbm_.u.y[n] = flow.velocity; break;
+            case Face::Z_MIN: case Face::Z_MAX: lbm_.u.z[n] = flow.velocity; break;
         }
     }
 };

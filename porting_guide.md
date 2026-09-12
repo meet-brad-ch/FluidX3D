@@ -201,7 +201,20 @@ BoundaryBuilder(lbm)
     .initialize_velocity_y(flow_velocity_mps)
     .apply();
 ```
-Free surfaces use `SurfaceBuilder`, thermal walls `ThermalBuilder` (temperatures in Kelvin), wave makers `WaveBoundary`, rotating parts `MovingPartsManager`.
+Free surfaces use `SurfaceBuilder`, in metres and m/s (`hydraulic_jump`):
+```cpp
+SurfaceBuilder(lbm)
+    .set_water_level(water_height)
+    .initialize_hydrostatic() // with the LBM's own gravity
+    .set_solid_faces({Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Z_MIN})
+    .add_solid_block({0_m, 0_m, 0_m}, {domain_x, socket_length, socket_height})
+    .add_inflow(Face::Y_MIN, inlet_velocity, socket_height, water_height)
+    .add_outflow(Face::Y_MAX, outlet_velocity)
+    .apply();
+```
+Positions are measured from the domain's origin corner and truncated to whole cells, as `(uint)units.x(...)` did; a bound in the last cell reaches the domain's end.
+
+Thermal walls use `ThermalBuilder` (temperatures in Kelvin), wave makers `WaveBoundary`, rotating parts `MovingPartsManager`.
 
 ### 5. Graphics and Video
 
@@ -229,6 +242,7 @@ VideoRecorder()
 | Duration, frequency | `_s`, `_min`, `_Hz` |
 | Speed, acceleration | `_mps`, `_kmh`, `_mps2` |
 | Mass, density, viscosity | `_kg`, `_kgpm3`, `_m2ps` |
+| Volume flow rate | `_m3ps` |
 | Force, pressure, surface tension | `_N`, `_Pa`, `_Npm` |
 | Temperature (absolute) | `_K`, `_C` |
 | Angle | `_deg`, `_rad` |

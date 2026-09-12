@@ -74,6 +74,14 @@ using Pressure           = Quantity<-1, 1, -2>;    // Pa
 using SurfaceTension     = Quantity< 0, 1, -2>;    // N/m
 using Temperature        = Quantity< 0, 0,  0, 1>; // K
 using ThermalExpansion   = Quantity< 0, 0,  0, -1>; // 1/K
+using VolumeFlowRate     = Quantity< 3, 0, -1>;    // m³/s
+
+/// A point in the domain in metres, measured from its origin corner (the cell at 0, 0, 0): {0.5_m, 1.0_m, 0.2_m}.
+struct Position {
+    Length x; ///< along X
+    Length y; ///< along Y
+    Length z; ///< along Z, the height
+};
 
 // Plane angle: dimensionless, but a distinct type so that degrees cannot be passed where radians are meant.
 class Angle {
@@ -142,6 +150,7 @@ FLUIDX3D_QUANTITY_LITERAL(_mps2,  Acceleration,       1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_kg,    Mass,               1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_kgpm3, Density,            1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_m2ps,  KinematicViscosity, 1.0f,        0.0f)
+FLUIDX3D_QUANTITY_LITERAL(_m3ps,  VolumeFlowRate,     1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_N,     Force,              1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_Pa,    Pressure,           1.0f,        0.0f)
 FLUIDX3D_QUANTITY_LITERAL(_Npm,   SurfaceTension,     1.0f,        0.0f)

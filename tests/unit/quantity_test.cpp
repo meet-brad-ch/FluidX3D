@@ -17,6 +17,7 @@ static_assert(std::is_same_v<decltype(1.0_m * 1.0_m), Area>);
 static_assert(std::is_same_v<decltype(1.0_kgpm3 * 1.0_mps2 * 1.0_m), Pressure>);
 static_assert(std::is_same_v<decltype(1.0_m / 1.0_m), float>);
 static_assert(std::is_same_v<decltype(1.0f / 1.0_s), Frequency>);
+static_assert(std::is_same_v<decltype(1.0_m3ps / (1.0_m * 1.0_m)), Speed>); // flow rate through an area
 
 static_assert(Addable<Length, Length>);
 static_assert(!Addable<Length, Speed>);
@@ -41,6 +42,7 @@ TEST(Quantity, LiteralsAreStoredInSiUnits) {
     EXPECT_FLOAT_EQ((9.81_mps2).si(), 9.81f);
     EXPECT_FLOAT_EQ((998.2_kgpm3).si(), 998.2f);
     EXPECT_FLOAT_EQ((0.072_Npm).si(), 0.072f);
+    EXPECT_FLOAT_EQ((0.25_m3ps).si(), 0.25f);
 }
 
 TEST(Quantity, CelsiusIsAnAbsoluteTemperature) {
