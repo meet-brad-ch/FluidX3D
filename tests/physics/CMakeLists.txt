@@ -1,0 +1,33 @@
+# Physics tests: simulations against analytic solutions, in physical units with the Setup API (ctest -L physics; GPU).
+# Each test builds like an example (the core with its own defines.hpp, generated from defines.hpp.in with the
+# extensions it needs) and prints "PHYSICS <check>: ... PASSED" or "... FAILED" (physics_check.hpp).
+
+# fluidx3d_add_physics_test(<name> [EXTENSIONS <defines...>] [TIMEOUT <seconds>])
+#   Builds tests/physics/<name>.cpp into bin/physics_<name> and registers the CTest test physics_<name>.
+function(fluidx3d_add_physics_test name)
+    cmake_parse_arguments(PARSE_ARGV 1 ARG "" "TIMEOUT" "EXTENSIONS")
+    if(NOT ARG_TIMEOUT)
+        set(ARG_TIMEOUT 300)
+    endif()
+    set(defines_dir ${CMAKE_CURRENT_BINARY_DIR}/${name})
+    list(TRANSFORM ARG_EXTENSIONS PREPEND "#define " OUTPUT_VARIABLE extension_lines)
+    list(JOIN extension_lines "\n" FLUIDX3D_PHYSICS_EXTENSIONS)
+    configure_file(defines.hpp.in ${defines_dir}/defines.hpp @ONLY)
+
+    _fluidx3d_add_executable(physics_${name} ${defines_dir} ${CMAKE_CURRENT_SOURCE_DIR}/${name}.cpp)
+    target_include_directories(physics_${name}_setup PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}) # physics_check.hpp
+
+    add_test(NAME physics_${name} COMMAND physics_${name} WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
+    set_tests_properties(physics_${name} PROPERTIES
+        LABELS "physics;gpu"
+        PASS_REGULAR_EXPRESSION "PHYSICS [^\n]* PASSED"
+        FAIL_REGULAR_EXPRESSION "PHYSICS [^\n]* FAILED"
+        TIMEOUT ${ARG_TIMEOUT}
+        RUN_SERIAL TRUE
+    )
+endfunction()
+
+fluidx3d_add_physics_test(poiseuille EXTENSIONS VOLUME_FORCE)
+fluidx3d_add_physics_test(stokes_drag EXTENSIONS FORCE_FIELD EQUILIBRIUM_BOUNDARIES)
+fluidx3d_add_physics_test(taylor_green)
+fluidx3d_add_physics_test(hydrostatic EXTENSIONS VOLUME_FORCE)

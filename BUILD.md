@@ -150,6 +150,7 @@ Then run the tests (from the build directory, e.g. `build-Release`):
 ```bash
 ctest -L unit                            # Setup API unit tests (CPU only)
 ctest -L baseline                        # every example's setup state against tests/baselines/
+ctest -L physics                         # simulations against analytic solutions (Poiseuille, Stokes, Taylor-Green, hydrostatic)
 FLUIDX3D_BLESS=1 ctest -L baseline       # after an intended change: record the new baselines
 ```
 

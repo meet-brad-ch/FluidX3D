@@ -34,5 +34,6 @@ are compiled with the example.
 ## Tests
 
 `ctest -L unit` runs the library's unit tests (GoogleTest), `ctest -L baseline` checks each example's setup against
-`tests/baselines/`, and `ctest -L original` the original examples (configured with `-DFLUIDX3D_BUILD_ORIGINALS=ON`).
+`tests/baselines/`, `ctest -L physics` runs simulations set up with the API against analytic solutions (`tests/physics/`),
+and `ctest -L original` the original examples (configured with `-DFLUIDX3D_BUILD_ORIGINALS=ON`).
 See [CMAKE.md](../../CMAKE.md#tests).

@@ -33,7 +33,8 @@ FluidX3D/
 │   ├── CMakeLists.txt         # GoogleTest, fluidx3d_add_test(), unit tests
 │   ├── unit/                  # CPU unit tests (ctest -L unit)
 │   ├── baseline/              # Baseline dump, comparison and runner
-│   └── baselines/             # Expected baseline output per example
+│   ├── baselines/             # Expected baseline output per example
+│   └── physics/               # Simulations against analytic solutions (ctest -L physics)
 ├── third_party/               # Bundled third-party binaries
 │   ├── OpenCL/lib/           # OpenCL ICD loaders
 │   └── X11/                  # X11/Xrandr libraries
@@ -246,17 +247,19 @@ Tests are built when `FLUIDX3D_BUILD_TESTS` is on (the default) and run with CTe
 |-------|----------------|-------|
 | `unit` | Setup API library (quantities, unit scaling, lattice and geometry sizing), one CTest test per GoogleTest `TEST` | CPU only |
 | `baseline` | Each example's setup state (grid, units, cell flag counts, velocities, graphics settings) against `tests/baselines/<name>.txt`, with a relative tolerance of 1e-4 | OpenCL device |
+| `physics` | Simulations in physical units against analytic solutions: Poiseuille profile (L2 error < 1 %), Stokes drag (< 5 %), Taylor-Green decay (viscosity within 1 %), hydrostatic pressure (< 1 %); about 15 s in total | OpenCL device |
 
 ```bash
 ctest --test-dir build -L unit
 ctest --test-dir build -L baseline
+ctest --test-dir build -L physics
 FLUIDX3D_BLESS=1 ctest --test-dir build -L baseline       # accept intended changes as the new baselines
 FLUIDX3D_BASELINE_STEPS=3000 ./bin/dam_break_baseline     # stability check: run 3000 steps, report the largest velocity
 ```
 
 Examples whose STL files are missing report their baseline test as skipped.
 
-Unit tests are added with `fluidx3d_add_test(<name> SOURCES <files...> LINK <targets...>)` in `tests/CMakeLists.txt`.
+Unit tests are added with `fluidx3d_add_test(<name> SOURCES <files...> LINK <targets...>)` in `tests/CMakeLists.txt`. A physics test is a `main_setup()` in `tests/physics/<name>.cpp` that ends with `PhysicsCheck::report()`, added with `fluidx3d_add_physics_test(<name> EXTENSIONS <defines...>)` in `tests/physics/CMakeLists.txt`; its `defines.hpp` is generated from `tests/physics/defines.hpp.in` with those extensions.
 
 ---
 
