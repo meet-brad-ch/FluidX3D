@@ -12,14 +12,14 @@ class VideoRecorder {
 public:
     VideoRecorder() = default;
 
-    VideoRecorder& add(const CameraConfig& camera) {
-        cameras_.push_back(camera);
+    VideoRecorder& add(const CameraConfig& view) {
+        views_.push_back(view);
         return *this;
     }
 
-    VideoRecorder& add(const std::string& name, CameraConfig camera) {
-        camera.set_name(name);
-        cameras_.push_back(camera);
+    VideoRecorder& add(const std::string& name, CameraConfig view) {
+        view.set_name(name);
+        views_.push_back(view);
         return *this;
     }
 
@@ -29,26 +29,26 @@ public:
     }
 
     void record(LBM& lbm, uint64_t total_steps) {
-        if (cameras_.empty()) {
+        if (views_.empty()) {
             lbm.run(total_steps);
             return;
         }
         record_with_callback(lbm, total_steps, []() {}, 1u);
     }
 
-    void record(LBM& lbm, float32_t seconds, const Units& units) {
-        record(lbm, units.t(seconds));
+    void record(LBM& lbm, float32_t seconds, const Units& unit_conversion) {
+        record(lbm, unit_conversion.t(seconds));
     }
 
     // update_callback() runs every update_interval time steps (e.g. MovingPartsManager::update)
     template<typename Callback>
-    void record(LBM& lbm, float32_t seconds, const Units& units,
+    void record(LBM& lbm, float32_t seconds, const Units& unit_conversion,
                 Callback update_callback, uint32_t update_interval) {
-        record_with_callback(lbm, units.t(seconds), update_callback, update_interval);
+        record_with_callback(lbm, unit_conversion.t(seconds), update_callback, update_interval);
     }
 
 private:
-    std::vector<CameraConfig> cameras_;
+    std::vector<CameraConfig> views_;
     float32_t video_length_s_ = 10.0f;
 
     template<typename Callback>
@@ -57,11 +57,11 @@ private:
         lbm.run(0u, total_steps);
         while (lbm.get_t() <= total_steps) {
             update_callback();
-            if (!cameras_.empty() && lbm.graphics.next_frame(total_steps, video_length_s_)) {
-                for (const auto& camera : cameras_) {
-                    apply_camera(lbm, camera);
-                    if (camera.has_name()) {
-                        lbm.graphics.write_frame(get_exe_path() + "export/" + camera.name() + "/");
+            if (!views_.empty() && lbm.graphics.next_frame(total_steps, video_length_s_)) {
+                for (const auto& view : views_) {
+                    apply_view(lbm, view);
+                    if (view.has_name()) {
+                        lbm.graphics.write_frame(get_exe_path() + "export/" + view.name() + "/");
                     } else {
                         lbm.graphics.write_frame();
                     }
@@ -71,16 +71,16 @@ private:
         }
     }
 
-    static void apply_camera(LBM& lbm, const CameraConfig& camera) {
-        if (camera.is_free_mode()) {
+    static void apply_view(LBM& lbm, const CameraConfig& view) {
+        if (view.is_free_mode()) {
             const float3 pos(
-                camera.pos_x() * (float)lbm.get_Nx(),
-                camera.pos_y() * (float)lbm.get_Ny(),
-                camera.pos_z() * (float)lbm.get_Nz()
+                view.pos_x() * (float)lbm.get_Nx(),
+                view.pos_y() * (float)lbm.get_Ny(),
+                view.pos_z() * (float)lbm.get_Nz()
             );
-            lbm.graphics.set_camera_free(pos, camera.pitch(), camera.yaw(), camera.fov());
+            lbm.graphics.set_camera_free(pos, view.pitch(), view.yaw(), view.fov());
         } else {
-            lbm.graphics.set_camera_centered(camera.pitch(), camera.yaw(), camera.fov(), camera.zoom());
+            lbm.graphics.set_camera_centered(view.pitch(), view.yaw(), view.fov(), view.zoom());
         }
     }
 };

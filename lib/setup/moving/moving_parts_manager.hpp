@@ -128,8 +128,8 @@ public:
         }
     }
 
-    void run(float32_t seconds, const Units& units) {
-        run(units.t(seconds));
+    void run(float32_t seconds, const Units& unit_conversion) {
+        run(unit_conversion.t(seconds));
     }
 
 private:
