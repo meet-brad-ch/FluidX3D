@@ -12,7 +12,7 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t aircraft_length_m = 62.0f;   // Full-scale CRM length
+	const Length aircraft_length = 62.0_m;       // full-scale CRM length
 	const float32_t flow_velocity_mps = 80.0f;   // Approach speed (~155 knots)
 
 	// Check for required STL file
@@ -27,16 +27,14 @@ void main_setup() {
 		return;
 	}
 
-	// Configure simulation with half-model mirroring
-	SimulationSetup sim(SimulationConfig("crm-hl_reference_ldg.stl")
-		.set_domain_aspect_ratio(1.0f, 1.5f, 1.0f / 3.0f)
-		.set_vram_mb(2000u)
-		.set_rotation_deg(0.0f, 0.0f, 90.0f)
-		.set_mirror_plane(SimulationConfig::MirrorPlane::X)
-		.set_angle_of_attack_deg(-10.0f));
+	// half model, mirrored into the full aircraft; the aircraft (Y) is as long as the domain
+	SimulationSetup sim(Domain::around(Model("crm-hl_reference_ldg.stl").rotation(0_deg, 0_deg, 90_deg).angle_of_attack(-10_deg)
+			.length(aircraft_length).mirrored(Axis::X))
+		.size(aircraft_length / 1.5f, aircraft_length, aircraft_length / 4.5f)
+		.vram(2000_mb));
 
 	sim.setup();
-	sim.configure_units_with_length(aircraft_length_m, flow_velocity_mps, Fluid::AIR);
+	sim.configure_units(flow_velocity_mps, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM

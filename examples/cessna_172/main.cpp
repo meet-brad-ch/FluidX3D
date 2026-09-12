@@ -9,7 +9,7 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t wingspan_m = 11.0f;
+	const Length wingspan = 11.0_m;
 	const float32_t flight_speed_mps = 226.0f / 3.6f;  // 226 km/h
 	const float32_t simulation_time_s = 1.0f;
 	const uint32_t update_interval = 4u;
@@ -29,15 +29,14 @@ void main_setup() {
 		return;
 	}
 
-	// Configure static body
-	SimulationSetup sim(SimulationConfig("Cessna-172-Skyhawk-body.stl")
-		.set_domain_aspect_ratio(1.0f, 0.8f, 0.25f)
-		.set_vram_mb(8000u)
-		.set_geometry_scale(0.95f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::X));
+	// static body: the wingspan (X) is 95 % of the domain width
+	const Length domain_width = wingspan / 0.95f;
+	SimulationSetup sim(Domain::around(Model("Cessna-172-Skyhawk-body.stl").length(wingspan, Axis::X))
+		.size(domain_width, 0.8f * domain_width, 0.25f * domain_width)
+		.vram(8000_mb));
 
 	sim.setup();
-	sim.configure_units_with_length(wingspan_m, flight_speed_mps, Fluid::AIR);
+	sim.configure_units(flight_speed_mps, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);

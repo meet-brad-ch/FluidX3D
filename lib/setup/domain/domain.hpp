@@ -36,6 +36,12 @@ public:
         return *this;
     }
 
+    // half model: completed by its mirror image across the plane through the mesh origin normal to axis
+    Model& mirrored(Axis axis) {
+        mirror_ = axis;
+        return *this;
+    }
+
 private:
     std::string file_;
     Angle rotation_x_{}, rotation_y_{}, rotation_z_{};
@@ -43,6 +49,7 @@ private:
     std::optional<Length> length_;
     Axis length_axis_ = Axis::Y;
     bool repair_mesh_ = false;
+    std::optional<Axis> mirror_;
 
     friend class Domain;
 };

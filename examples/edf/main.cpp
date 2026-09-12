@@ -11,22 +11,21 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t fan_diameter_m = 0.09f;      // 90mm EDF
+	const Length fan_diameter = 0.09_m;          // 90 mm EDF
 	const float32_t tip_speed_mps = 100.0f;      // Blade tip speed
 	const float32_t inlet_velocity_mps = 30.0f;  // 30% of tip speed
 	const float32_t simulation_time_s = 0.5f;
 	const uint32_t update_interval = 4u;
 
-	// Configure domain using stator geometry with 180° Z rotation
-	SimulationSetup sim(SimulationConfig("edf_v39.stl")
-		.set_domain_aspect_ratio(1.0f, 1.5f, 1.0f)
-		.set_vram_mb(8000u)
-		.set_geometry_scale(0.98f)
-		.set_rotation_deg(0.0f, 0.0f, 180.0f)
-		.set_center_offset_ratio(0.0f, -0.2f, 0.0f));  // Stator position
+	// the stator (its size along Y) is 98 % of the domain length
+	const Length domain_length = fan_diameter / 0.98f;
+	SimulationSetup sim(Domain::around(Model("edf_v39.stl").rotation(0_deg, 0_deg, 180_deg).length(fan_diameter))
+		.size(domain_length / 1.5f, domain_length, domain_length / 1.5f)
+		.model_offset(0_m, -0.2f * fan_diameter, 0_m) // stator position
+		.vram(8000_mb));
 
 	sim.setup();
-	sim.configure_units_with_length(fan_diameter_m, tip_speed_mps, Fluid::AIR);
+	sim.configure_units(tip_speed_mps, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM

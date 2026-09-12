@@ -11,23 +11,20 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t fighter_size_m = 6.0f;       // TIE Fighter wingspan
+	const Length wingspan = 6.0_m;               // TIE Fighter wingspan
 	const float32_t flow_velocity_mps = 50.0f;   // Flow velocity
 	const float32_t simulation_time_s = 5.0f;    // 5 seconds of tumbling
 	const uint32_t update_interval = 28u;
 
-	// Configure domain using mesh geometry with 90° X rotation
-	// Note: offset of -0.94 places mesh at 0.6 * reference_size from inlet (for tumbling)
-	SimulationSetup sim(SimulationConfig("DWG_Tie_Fighter_Assembled_02.stl")
-		.set_domain_aspect_ratio(1.0f, 2.0f, 1.0f)
-		.set_vram_mb(1760u)
-		.set_geometry_scale(0.65f)
-		.set_rotation_deg(90.0f, 0.0f, 0.0f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::X)
-		.set_center_offset_ratio(0.0f, -0.94f, 0.0f));  // Position for tumbling through domain
+	// the wingspan (X) is 65 % of the domain width; the fighter's center is about 0.6 wingspans from the inlet
+	const Length domain_width = wingspan / 0.65f;
+	SimulationSetup sim(Domain::around(Model("DWG_Tie_Fighter_Assembled_02.stl").rotation(90_deg, 0_deg, 0_deg).length(wingspan, Axis::X))
+		.size(domain_width, 2.0f * domain_width, domain_width)
+		.model_offset(0_m, -0.94f * wingspan, 0_m)
+		.vram(1760_mb));
 
 	sim.setup();
-	sim.configure_units_with_length(fighter_size_m, flow_velocity_mps, Fluid::AIR);
+	sim.configure_units(flow_velocity_mps, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM

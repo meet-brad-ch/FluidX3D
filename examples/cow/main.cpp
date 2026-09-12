@@ -6,18 +6,17 @@
 
 void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS or GRAPHICS
 	const float32_t flow_velocity_mps = 1.0f;
-	const float32_t cow_size_m = 2.4f;
+	const Length cow_length = 2.4_m;
+	const Length domain_length = cow_length / 0.65f; // the cow is 65 % of the domain length
 
-	SimulationSetup sim(SimulationConfig("Cow_t.stl")
-		.set_domain_aspect_ratio(1.0f, 2.0f, 1.0f)
-		.set_vram_mb(1000u)
-		.set_geometry_scale(0.65f)
-		.set_rotation_deg(180.0f, 0.0f, 180.0f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::Y)
-		.set_pmin_offset_ratio(0.0f, 0.1f, 0.006f));
+	SimulationSetup sim(Domain::around(Model("Cow_t.stl").rotation(180_deg, 0_deg, 180_deg).length(cow_length))
+		.size(0.5f * domain_length, domain_length, 0.5f * domain_length)
+		.gap_to_inlet(0.1f * cow_length)   // the cow's nose
+		.gap_to_floor(0.006f * cow_length) // about one cell
+		.vram(1000_mb));
 
 	sim.setup();
-	sim.configure_units_with_length(cow_size_m, flow_velocity_mps, Fluid::AIR, 0.075f);
+	sim.configure_units(flow_velocity_mps, Fluid::AIR, 0.075f);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);

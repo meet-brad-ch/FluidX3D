@@ -57,16 +57,17 @@ This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for
 
 void main_setup() { // required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
     const float flow_velocity_mps = 1.0f;
+    const Length cow_length = 2.4_m;
+    const Length domain_length = cow_length / 0.65f; // the cow is 65 % of the domain length
 
-    SimulationSetup sim(SimulationConfig("Cow_t.stl")
-        .set_domain_aspect_ratio(1.0f, 2.0f, 1.0f) // domain proportions
-        .set_vram_mb(1000u)                        // resolution from the VRAM budget
-        .set_geometry_scale(0.65f)                 // cow length: 65% of the domain length (Y)
-        .set_rotation_deg(180.0f, 0.0f, 180.0f)
-        .set_pmin_offset_ratio(0.0f, 0.1f, 0.006f)); // gap to the inlet and to the floor, in cow lengths
+    SimulationSetup sim(Domain::around(Model("Cow_t.stl").rotation(180_deg, 0_deg, 180_deg).length(cow_length))
+        .size(0.5f * domain_length, domain_length, 0.5f * domain_length)
+        .gap_to_inlet(0.1f * cow_length)   // the cow's nose
+        .gap_to_floor(0.006f * cow_length) // about one cell
+        .vram(1000_mb));                   // resolution from the VRAM budget
 
     sim.setup();
-    sim.configure_units_with_length(2.4f, flow_velocity_mps, Fluid::AIR, 0.075f); // cow length 2.4 m
+    sim.configure_units(flow_velocity_mps, Fluid::AIR, 0.075f);
     sim.print_reynolds_number(Fluid::AIR);
 
     LBM lbm = sim.create_lbm(Fluid::AIR);

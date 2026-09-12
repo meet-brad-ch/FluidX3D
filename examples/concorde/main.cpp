@@ -8,20 +8,18 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t fuselage_length_m = 62.0f;
+	const Length fuselage_length = 62.0_m;
 	const float32_t cruise_speed_mps = 300.0f / 3.6f;
 
-	SimulationSetup sim(SimulationConfig("concord_cut_large.stl")
-		.set_domain_aspect_ratio(1.0f, 3.0f, 0.5f)
-		.set_vram_mb(6084u)
-		.set_geometry_scale(0.56f)
-		.set_rotation_deg(90.0f, 0.0f, 90.0f)
-		.set_angle_of_attack_deg(-10.0f)
-		.set_center_offset_ratio(0.0f, -0.373f, 0.03f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::Y));
+	// the fuselage (Y) is 56 % of the domain length
+	const Length domain_length = fuselage_length / 0.56f;
+	SimulationSetup sim(Domain::around(Model("concord_cut_large.stl").rotation(90_deg, 0_deg, 90_deg).angle_of_attack(-10_deg).length(fuselage_length))
+		.size(domain_length / 3.0f, domain_length, domain_length / 6.0f)
+		.model_offset(0_m, -0.373f * fuselage_length, 0.03f * fuselage_length)
+		.vram(6084_mb));
 
 	sim.setup();
-	sim.configure_units_with_length(fuselage_length_m, cruise_speed_mps, Fluid::AIR);
+	sim.configure_units(cruise_speed_mps, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);

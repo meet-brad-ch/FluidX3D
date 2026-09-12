@@ -12,7 +12,7 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t car_length_m = 5.5f;
+	const Length car_length = 5.5_m;
 	const float32_t car_width_m = 2.0f;
 	const float32_t car_speed_mps = 100.0f / 3.6f;  // 100 km/h
 	const float32_t simulation_time_s = 0.25f;
@@ -35,15 +35,14 @@ void main_setup() {
 		return;
 	}
 
-	// Configure domain using body geometry (Y axis = car length)
-	SimulationSetup sim(SimulationConfig("mercedesf1-body.stl")
-		.set_domain_aspect_ratio(1.0f, 2.0f, 0.5f)
-		.set_vram_mb(4000u)
-		.set_geometry_scale(0.8f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::Y));
+	// the car (its length along Y) is 80 % of the domain length
+	const Length domain_length = car_length / 0.8f;
+	SimulationSetup sim(Domain::around(Model("mercedesf1-body.stl").length(car_length))
+		.size(0.5f * domain_length, domain_length, 0.25f * domain_length)
+		.vram(4000_mb));
 
 	sim.setup();
-	sim.configure_units_with_length(car_length_m, car_speed_mps, Fluid::AIR);
+	sim.configure_units(car_speed_mps, Fluid::AIR);
 
 	// Print Reynolds number based on car width
 	const float32_t Re = units.si_Re(car_width_m, car_speed_mps, Fluid::AIR.kinematic_viscosity);

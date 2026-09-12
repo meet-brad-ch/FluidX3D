@@ -8,20 +8,17 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t fuselage_length_m = 70.7f;
+	const Length fuselage_length = 70.7_m;
 	const float32_t cruise_speed_mps = 250.0f;
 
-	SimulationSetup sim(SimulationConfig("techtris_airplane.stl")
-		.set_domain_aspect_ratio(1.0f, 2.0f, 0.5f)
-		.set_vram_mb(880u)
-		.set_geometry_scale(1.0f)
-		.set_angle_of_attack_deg(-15.0f)
-		.set_center_offset_ratio(0.0f, -0.45f, 0.0f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::X)
-		.set_fix_mesh(true));
+	// the aircraft (its size along X) is as wide as the domain
+	SimulationSetup sim(Domain::around(Model("techtris_airplane.stl").angle_of_attack(-15_deg).length(fuselage_length, Axis::X).repair_mesh())
+		.size(fuselage_length, 2.0f * fuselage_length, 0.5f * fuselage_length)
+		.model_offset(0_m, -0.45f * fuselage_length, 0_m)
+		.vram(880_mb));
 
 	sim.setup();
-	sim.configure_units_with_length(fuselage_length_m, cruise_speed_mps, Fluid::AIR);
+	sim.configure_units(cruise_speed_mps, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
