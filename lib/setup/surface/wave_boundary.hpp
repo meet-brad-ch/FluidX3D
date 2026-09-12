@@ -1,6 +1,7 @@
 #pragma once
 
 #include "setup/core/types.hpp"
+#include "setup/core/quantity.hpp"
 #include "setup/core/boundary_utils.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
 #include "lbm.hpp"
@@ -15,10 +16,10 @@ class WaveBoundary {
 public:
     explicit WaveBoundary(LBM& lbm) : lbm_(lbm) {}
 
-    // wave amplitude in m and frequency in Hz; peak velocity 2*pi*f*amplitude
-    WaveBoundary& set_wave_parameters_si(float32_t amplitude_m, float32_t frequency_hz) {
-        frequency_hz_ = frequency_hz;
-        peak_velocity_mps_ = amplitude_m * 2.0f * pif * frequency_hz;
+    /// The wave's amplitude and frequency; its peak velocity is 2*pi*frequency*amplitude.
+    WaveBoundary& set_wave(Length amplitude, Frequency frequency) {
+        frequency_hz_ = frequency.si();
+        peak_velocity_mps_ = amplitude.si() * 2.0f * pif * frequency.si();
         return *this;
     }
 

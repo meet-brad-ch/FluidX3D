@@ -23,8 +23,8 @@ void main_setup() { // dam break; required extensions: FP16S, VOLUME_FORCE, SURF
 	// Reynolds number of the original lattice setup (front speed, water height 192 cells, viscosity 0.005);
 	// water's own viscosity (Reynolds number about 3E6) would need a much finer grid
 	const float reynolds = sqrt(2.0f*0.0002f*192.0f)*192.0f/0.005f; // about 10600
-	const float kinematic_viscosity_m2ps = front_speed.si()*water_height.si()/reynolds;
-	LBM lbm = sim.create_lbm_surface(kinematic_viscosity_m2ps, 9.81f);
+	const KinematicViscosity kinematic_viscosity = front_speed*water_height/reynolds;
+	LBM lbm = sim.create_lbm_surface(kinematic_viscosity, 9.81_mps2);
 
 	// water column at the y = 0 wall
 	SurfaceBuilder(lbm)

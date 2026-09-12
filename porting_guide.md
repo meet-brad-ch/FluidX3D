@@ -178,7 +178,7 @@ LBM lbm = sim.create_lbm(Fluid::AIR);               // or create_lbm_surface / c
 ```
 The reference length comes from the domain (the box's longest side, or the model's `length()`), so there is no separate length to pass.
 
-Gravity and other volume forces are given in m/s²: `sim.create_lbm_surface(Fluid::WATER, 9.81f)`. For free-surface cases with a sub-cell water depth, see `dam_break` and `breaking_waves`: they match the original's Reynolds number, because real water viscosity would need a much finer grid.
+Gravity and other volume forces are given in m/s²: `sim.create_lbm_surface(Fluid::WATER, 9.81_mps2)`. Times are durations (`sim.to_lbm_timesteps(0.5_s)`, `parts.run(1.0_min)`), temperatures absolute (`ThermalBuilder(lbm).set_hot_wall(Face::Z_MIN, 330.0_K)`, or `57.0_C`). For free-surface cases with a sub-cell water depth, see `dam_break` and `breaking_waves`: they match the original's Reynolds number, because real water viscosity would need a much finer grid.
 
 ### 4. Boundary Conditions
 
@@ -227,8 +227,8 @@ GraphicsConfig(lbm)
 // headless video (GRAPHICS without INTERACTIVE_GRAPHICS)
 VideoRecorder()
     .add(CameraConfig().set_angles(-40.0f, 20.0f).set_fov(78.0f).set_zoom(1.25f))
-    .set_video_length_s(10.0f)
-    .record(lbm, 10.0f, units); // 10 simulated seconds
+    .set_video_length(10.0_s)
+    .record(lbm, 10.0_s); // 10 simulated seconds
 ```
 
 ---

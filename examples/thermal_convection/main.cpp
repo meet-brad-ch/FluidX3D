@@ -11,9 +11,9 @@ void main_setup() { // thermal convection; required extensions: FP16S, VOLUME_FO
 	const Length domain_y = 0.6_m;     // long (flow direction)
 	const Length domain_z = 0.2_m;     // tall
 
-	const float T_hot_K = 350.0f;      // hot wall: 350K (77°C)
-	const float T_cold_K = 300.0f;     // cold wall: 300K (27°C)
-	const float delta_T = T_hot_K - T_cold_K;
+	const Temperature T_hot = 350.0_K;  // hot wall (77°C)
+	const Temperature T_cold = 300.0_K; // cold wall (27°C)
+	const Temperature delta_T = T_hot - T_cold;
 
 	// buoyancy velocity scale for natural convection: u ~ sqrt(g * beta * dT * L)
 	const Speed u_buoyancy = sqrt(9.81_mps2 * Fluid::AIR.thermal_expansion * delta_T * domain_z);
@@ -25,12 +25,12 @@ void main_setup() { // thermal convection; required extensions: FP16S, VOLUME_FO
 	sim.configure_units(u_buoyancy, Fluid::AIR);
 
 	// create LBM with thermal parameters (air properties, gravity in -Z)
-	LBM lbm = sim.create_lbm_thermal(Fluid::AIR, 9.81f, Axis::Z);
+	LBM lbm = sim.create_lbm_thermal(Fluid::AIR, 9.81_mps2, Axis::Z);
 
 	// thermal boundary conditions (SI temperatures in Kelvin)
 	ThermalBuilder(lbm)
-		.set_hot_wall(Face::Y_MIN, T_hot_K)
-		.set_cold_wall(Face::Y_MAX, T_cold_K)
+		.set_hot_wall(Face::Y_MIN, T_hot)
+		.set_cold_wall(Face::Y_MAX, T_cold)
 		.set_gravity_axis(Axis::Z)
 		.initialize_hydrostatic_pressure()
 		.apply();

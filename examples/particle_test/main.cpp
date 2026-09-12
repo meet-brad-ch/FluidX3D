@@ -12,7 +12,7 @@ void main_setup() { // particle test; required extensions: VOLUME_FORCE, FORCE_F
 	const float Re = 1000.0f;           // Reynolds number
 	const uint particle_count = 32768u;
 	const float particle_density = 2.0f;
-	const float settling_acceleration_mps2 = 0.27f; // makes the heavy particles settle; the original lattice setup used 1E-5 (LBM units)
+	const Acceleration settling_acceleration = 0.27_mps2; // makes the heavy particles settle; the original lattice setup used 1E-5 (LBM units)
 
 	// simulation setup
 	SimulationSetup sim(Domain::box(domain_size, domain_size, domain_size).vram(2000_mb));
@@ -21,7 +21,7 @@ void main_setup() { // particle test; required extensions: VOLUME_FORCE, FORCE_F
 	sim.configure_units(lid_velocity, Fluid::WATER);
 
 	// create LBM with particles (Reynolds-based viscosity)
-	LBM lbm = sim.create_lbm_particles_reynolds(Re, particle_count, particle_density, settling_acceleration_mps2);
+	LBM lbm = sim.create_lbm_particles_reynolds(Re, particle_count, particle_density, settling_acceleration);
 
 	// particle seeding (SI units)
 	const float center = domain_size.si() / 2.0f;

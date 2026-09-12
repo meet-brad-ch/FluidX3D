@@ -29,8 +29,8 @@ private:
     bool force_tracking_ = false;   // voxelize with TYPE_S|TYPE_X for ForceAnalyzer
 
     // gravity as LBM volume force along -gravity_axis (rho*g with the LBM density 1)
-    float3 lbm_gravity_force(float32_t si_gravity, Axis gravity_axis) const {
-        const float32_t g = to_lbm_acceleration(si_gravity);
+    float3 lbm_gravity_force(Acceleration gravity, Axis gravity_axis) const {
+        const float32_t g = to_lbm_acceleration(gravity);
         return float3(gravity_axis == Axis::X ? -g : 0.0f, gravity_axis == Axis::Y ? -g : 0.0f, gravity_axis == Axis::Z ? -g : 0.0f);
     }
 
@@ -149,81 +149,89 @@ public:
 
     /// As configure_units(Speed, Density, float), with the density of this fluid.
     SimulationSetup& configure_units(Speed velocity, const FluidProperties& fluid, float32_t lbm_u = 0.1f) {
-        return configure_units(velocity, Density::from_si(fluid.density), lbm_u);
+        return configure_units(velocity, fluid.density, lbm_u);
     }
 
     /// The scale set by configure_units().
     const UnitScale& unit_scale() const { return scale_; }
 
-    float32_t to_lbm_viscosity(float32_t si_viscosity) const { return scale_.viscosity(KinematicViscosity::from_si(si_viscosity)); } // m²/s
-    float32_t to_lbm_velocity(float32_t si_velocity) const { return scale_.velocity(Speed::from_si(si_velocity)); }              // m/s
-    float32_t to_lbm_length(float32_t si_length) const { return scale_.length(Length::from_si(si_length)); }                     // m
-    float32_t to_lbm_acceleration(float32_t si_acceleration) const { return scale_.acceleration(Acceleration::from_si(si_acceleration)); } // m/s²; for gravity also the volume force rho*g (LBM density 1)
-    uint64_t to_lbm_timesteps(float32_t si_seconds) const { return scale_.time_steps(Duration::from_si(si_seconds)); }          // s
+    /// @name SI to lattice units, with the scale of configure_units()
+    /// @{
+    float32_t to_lbm_viscosity(KinematicViscosity nu) const { return scale_.viscosity(nu); }
+    float32_t to_lbm_velocity(Speed u) const { return scale_.velocity(u); }
+    float32_t to_lbm_length(Length x) const { return scale_.length(x); } ///< in cells
+    float32_t to_lbm_acceleration(Acceleration a) const { return scale_.acceleration(a); } ///< for gravity also the volume force rho*g (lattice density 1)
+    uint64_t to_lbm_timesteps(Duration t) const { return scale_.time_steps(t); }
+    /// @}
 
     // ========================================================================
     // LBM creation (call after configure_units())
     // ========================================================================
 
-    LBM create_lbm(float32_t si_kinematic_viscosity) { // m²/s
-        return LBM(results.Nx, results.Ny, results.Nz, to_lbm_viscosity(si_kinematic_viscosity));
+    /// An LBM of the planned grid with this viscosity.
+    LBM create_lbm(KinematicViscosity viscosity) {
+        return LBM(results.Nx, results.Ny, results.Nz, to_lbm_viscosity(viscosity));
     }
 
+    /// An LBM of the planned grid with this fluid's viscosity.
     LBM create_lbm(const FluidProperties& fluid) {
         return create_lbm(fluid.kinematic_viscosity);
     }
 
-    // TEMPERATURE + VOLUME_FORCE: viscosity and thermal diffusivity in m²/s, expansion in 1/K, gravity in m/s² along -gravity_axis
-    LBM create_lbm_thermal(float32_t si_kinematic_viscosity,
-                           float32_t si_thermal_diffusivity,
-                           float32_t si_thermal_expansion,
-                           float32_t si_gravity,
+    /// An LBM with heat transport and buoyancy (TEMPERATURE and VOLUME_FORCE); gravity acts along -gravity_axis.
+    LBM create_lbm_thermal(KinematicViscosity viscosity,
+                           KinematicViscosity thermal_diffusivity,
+                           ThermalExpansion thermal_expansion,
+                           Acceleration gravity,
                            Axis gravity_axis = Axis::Z) {
-        const float32_t lbm_nu = to_lbm_viscosity(si_kinematic_viscosity);
-        const float32_t lbm_alpha = to_lbm_viscosity(si_thermal_diffusivity); // same conversion as viscosity
+        const float32_t lbm_nu = to_lbm_viscosity(viscosity);
+        const float32_t lbm_alpha = to_lbm_viscosity(thermal_diffusivity); // same conversion as viscosity
 
         // thermal expansion: beta_lbm = beta_si * T_si / T_lbm with a 300 K reference and T_lbm ~ 1
         const float32_t T_ref_si = 300.0f;
         const float32_t T_ref_lbm = 1.0f;
-        const float32_t lbm_beta = si_thermal_expansion * T_ref_si / T_ref_lbm;
+        const float32_t lbm_beta = thermal_expansion.si() * T_ref_si / T_ref_lbm;
 
-        const float3 f = lbm_gravity_force(si_gravity, gravity_axis);
+        const float3 f = lbm_gravity_force(gravity, gravity_axis);
         return LBM(results.Nx, results.Ny, results.Nz, 1u, 1u, 1u,
                    lbm_nu, f.x, f.y, f.z, 0.0f, lbm_alpha, lbm_beta);
     }
 
-    LBM create_lbm_thermal(const FluidProperties& fluid, float32_t si_gravity = 9.81f, Axis gravity_axis = Axis::Z) {
-        return create_lbm_thermal(fluid.kinematic_viscosity, fluid.thermal_diffusivity, fluid.thermal_expansion, si_gravity, gravity_axis);
+    /// As create_lbm_thermal() above, with this fluid's properties.
+    LBM create_lbm_thermal(const FluidProperties& fluid, Acceleration gravity = 9.81_mps2, Axis gravity_axis = Axis::Z) {
+        return create_lbm_thermal(fluid.kinematic_viscosity, fluid.thermal_diffusivity, fluid.thermal_expansion, gravity, gravity_axis);
     }
 
-    // SURFACE + VOLUME_FORCE: viscosity in m²/s, gravity in m/s² along -gravity_axis, surface tension in N/m (0: none)
-    LBM create_lbm_surface(float32_t si_kinematic_viscosity,
-                           float32_t si_gravity = 9.81f,
-                           float32_t si_surface_tension = 0.0f,
+    /// A free surface LBM (SURFACE and VOLUME_FORCE); gravity acts along -gravity_axis, surface tension 0 is none.
+    LBM create_lbm_surface(KinematicViscosity viscosity,
+                           Acceleration gravity = 9.81_mps2,
+                           SurfaceTension surface_tension = {},
                            Axis gravity_axis = Axis::Z) {
-        const float32_t lbm_nu = to_lbm_viscosity(si_kinematic_viscosity);
-        const float32_t lbm_sigma = scale_.surface_tension(SurfaceTension::from_si(si_surface_tension));
-        const float3 f = lbm_gravity_force(si_gravity, gravity_axis);
+        const float32_t lbm_nu = to_lbm_viscosity(viscosity);
+        const float32_t lbm_sigma = scale_.surface_tension(surface_tension);
+        const float3 f = lbm_gravity_force(gravity, gravity_axis);
         return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, f.x, f.y, f.z, lbm_sigma);
     }
 
+    /// As create_lbm_surface() above, with this fluid's viscosity.
     LBM create_lbm_surface(const FluidProperties& fluid,
-                           float32_t si_gravity = 9.81f,
-                           float32_t si_surface_tension = 0.0f,
+                           Acceleration gravity = 9.81_mps2,
+                           SurfaceTension surface_tension = {},
                            Axis gravity_axis = Axis::Z) {
-        return create_lbm_surface(fluid.kinematic_viscosity, si_gravity, si_surface_tension, gravity_axis);
+        return create_lbm_surface(fluid.kinematic_viscosity, gravity, surface_tension, gravity_axis);
     }
 
-    // PARTICLES: viscosity from the Reynolds number (domain width Nx, lbm_u); particle_density relative to the fluid; gravity in m/s²
+    /// @brief An LBM with particles (PARTICLES), its viscosity from a Reynolds number over the domain width Nx and lbm_u.
+    /// @param particle_density the particles' density relative to the fluid's
     LBM create_lbm_particles_reynolds(float32_t reynolds,
                                        uint32_t particle_count,
                                        float32_t particle_density = 1.0f,
-                                       float32_t si_gravity = 0.0f,
+                                       Acceleration gravity = {},
                                        Axis gravity_axis = Axis::Z,
                                        float32_t lbm_u = 0.1f) {
         const float32_t lbm_nu = units.nu_from_Re(reynolds, (float32_t)results.Nx, lbm_u);
         lbm_u_ref_ = lbm_u;
-        const float3 f = lbm_gravity_force(si_gravity, gravity_axis);
+        const float3 f = lbm_gravity_force(gravity, gravity_axis);
         return LBM(results.Nx, results.Ny, results.Nz, lbm_nu, f.x, f.y, f.z,
                    particle_count, particle_density);
     }
@@ -250,12 +258,14 @@ public:
     // Reynolds number (after setup() and configure_units())
     // ========================================================================
 
-    float32_t reynolds_number(float32_t si_kinematic_viscosity) const {
-        return results.si_reference_size * scale_.si_velocity(lbm_u_ref_).si() / si_kinematic_viscosity;
+    /// The Reynolds number of the reference length and velocity with this viscosity.
+    float32_t reynolds_number(KinematicViscosity viscosity) const {
+        return results.si_reference_size * scale_.si_velocity(lbm_u_ref_).si() / viscosity.si();
     }
 
-    void print_reynolds_number(float32_t si_kinematic_viscosity) const {
-        print_info("Re = " + to_string(static_cast<uint32_t>(reynolds_number(si_kinematic_viscosity))));
+    /// Prints the Reynolds number of the reference length and velocity with this viscosity.
+    void print_reynolds_number(KinematicViscosity viscosity) const {
+        print_info("Re = " + to_string(static_cast<uint32_t>(reynolds_number(viscosity))));
     }
 
     void print_reynolds_number(const FluidProperties& fluid) const {

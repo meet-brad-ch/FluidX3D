@@ -26,7 +26,7 @@ void main_setup() { // hydraulic jump; required extensions: FP16S, VOLUME_FORCE,
 	sim.configure_units(inlet_velocity, Fluid::WATER);
 
 	// create LBM for free surface simulation
-	LBM lbm = sim.create_lbm_surface(Fluid::WATER, 9.81f);
+	LBM lbm = sim.create_lbm_surface(Fluid::WATER, 9.81_mps2);
 
 	SurfaceBuilder(lbm)
 		.set_water_level(water_height)

@@ -36,8 +36,8 @@ void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGR
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	VideoRecorder()
 		.add(CameraConfig().set_angles(-40.0f, 20.0f).set_fov(78.0f).set_zoom(1.25f))
-		.set_video_length_s(10.0f)
-		.record(lbm, 10.0f, units);
+		.set_video_length(10.0_s)
+		.record(lbm, 10.0_s);
 #else
 	lbm.run();
 #endif

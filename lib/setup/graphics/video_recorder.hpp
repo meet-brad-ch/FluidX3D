@@ -1,13 +1,17 @@
 #pragma once
 
 #include "setup/core/types.hpp"
+#include "setup/core/quantity.hpp"
 #include "setup/config/camera_config.hpp"
 #include "lbm.hpp"
+#include "units.hpp"
 #include <vector>
 #include <string>
 
+extern Units units; // global units object from lbm.cpp
+
 // Runs the simulation and renders every frame from each camera; named cameras write to export/<name>/.
-// Frames are rendered for 60 fps playback of set_video_length_s() seconds.
+// Frames are rendered for 60 fps playback of a video set_video_length() long.
 class VideoRecorder {
 public:
     VideoRecorder() = default;
@@ -23,8 +27,9 @@ public:
         return *this;
     }
 
-    VideoRecorder& set_video_length_s(float32_t seconds) {
-        video_length_s_ = seconds;
+    /// The length of the video (default 10 s).
+    VideoRecorder& set_video_length(Duration length) {
+        video_length_s_ = length.si();
         return *this;
     }
 
@@ -36,15 +41,15 @@ public:
         record_with_callback(lbm, total_steps, []() {}, 1u);
     }
 
-    void record(LBM& lbm, float32_t seconds, const Units& unit_conversion) {
-        record(lbm, unit_conversion.t(seconds));
+    /// Runs this much simulated time (converted with the global units) and records it.
+    void record(LBM& lbm, Duration time) {
+        record(lbm, units.t(time.si()));
     }
 
-    // update_callback() runs every update_interval time steps (e.g. MovingPartsManager::update)
+    /// As record(LBM&, Duration); update_callback() runs every update_interval time steps (e.g. MovingPartsManager::update).
     template<typename Callback>
-    void record(LBM& lbm, float32_t seconds, const Units& unit_conversion,
-                Callback update_callback, uint32_t update_interval) {
-        record_with_callback(lbm, unit_conversion.t(seconds), update_callback, update_interval);
+    void record(LBM& lbm, Duration time, Callback update_callback, uint32_t update_interval) {
+        record_with_callback(lbm, units.t(time.si()), update_callback, update_interval);
     }
 
 private:

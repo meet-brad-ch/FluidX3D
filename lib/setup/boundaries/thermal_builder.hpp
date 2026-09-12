@@ -1,6 +1,7 @@
 #pragma once
 
 #include "setup/core/types.hpp"
+#include "setup/core/quantity.hpp"
 #include "setup/core/boundary_utils.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
 #include "setup/boundaries/thermal_utils.hpp"
@@ -17,16 +18,18 @@ class ThermalBuilder {
 public:
     explicit ThermalBuilder(LBM& lbm) : lbm_(lbm) {}
 
-    ThermalBuilder& set_hot_wall(Face face, float32_t temperature_K) {
+    /// A wall at this temperature, one cell inward from the face.
+    ThermalBuilder& set_hot_wall(Face face, Temperature temperature) {
         hot_face_ = face;
-        hot_temperature_K_ = temperature_K;
+        hot_temperature_K_ = temperature.si();
         has_hot_wall_ = true;
         return *this;
     }
 
-    ThermalBuilder& set_cold_wall(Face face, float32_t temperature_K) {
+    /// A wall at this temperature, one cell inward from the face.
+    ThermalBuilder& set_cold_wall(Face face, Temperature temperature) {
         cold_face_ = face;
-        cold_temperature_K_ = temperature_K;
+        cold_temperature_K_ = temperature.si();
         has_cold_wall_ = true;
         return *this;
     }

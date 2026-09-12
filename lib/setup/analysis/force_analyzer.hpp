@@ -30,7 +30,7 @@ public:
 
     /// The fluid, for its density (default: air).
     ForceAnalyzer& set_fluid(const FluidProperties& fluid) {
-        fluid_density_ = fluid.density;
+        fluid_density_ = fluid.density.si();
         return *this;
     }
 

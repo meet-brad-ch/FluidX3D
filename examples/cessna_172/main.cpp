@@ -11,7 +11,7 @@
 void main_setup() {
 	const Length wingspan = 11.0_m;
 	const Speed flight_speed = 226.0_kmh;
-	const float32_t simulation_time_s = 1.0f;
+	const Duration simulation_time = 1.0_s;
 	const uint32_t update_interval = 4u;
 
 	// Check for required STL files
@@ -66,8 +66,8 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time_s);
-	print_info(to_string(simulation_time_s, 3u) + " seconds = " + to_string(lbm_T) + " time steps");
+	const uint64_t lbm_T = sim.to_lbm_timesteps(simulation_time);
+	print_info(to_string(simulation_time.si(), 3u) + " seconds = " + to_string(lbm_T) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	VideoRecorder()
@@ -83,9 +83,9 @@ void main_setup() {
 			.set_free_position(0.0f, 0.650189f, 1.461048f)
 			.set_angles(90.0f, 40.0f)
 			.set_fov(100.0f))
-		.set_video_length_s(5.0f)
-		.record(lbm, simulation_time_s, units, [&]() { parts.update(); }, update_interval);
+		.set_video_length(5.0_s)
+		.record(lbm, simulation_time, [&]() { parts.update(); }, update_interval);
 #else
-	parts.run(simulation_time_s, units);
+	parts.run(simulation_time);
 #endif
 }

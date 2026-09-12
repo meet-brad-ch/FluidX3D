@@ -50,8 +50,8 @@ void main_setup() {
 			.set_free_position(1.748119f, 0.442782f, 0.087945f)
 			.set_angles(24.0f, 2.0f)
 			.set_fov(92.0f))
-		.set_video_length_s(20.0f)
-		.record(lbm, 10.0f, units);
+		.set_video_length(20.0_s)
+		.record(lbm, 10.0_s);
 #else
 	lbm.run();
 #endif

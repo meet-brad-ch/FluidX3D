@@ -14,7 +14,7 @@ void main_setup() {
 	const Length city_size = 1000.0_m;           // city block size
 	const Speed wind_speed = 10.0_mps;           // Wind speed at reference height
 	const Length reference_height = 100.0_m;     // Reference height for wind profile
-	const float32_t simulation_time_s = 60.0f;   // 1 minute of simulation
+	const Duration simulation_time = 1.0_min;
 
 	// the city (its size along X) is 1.7 domain widths: the domain's side walls cut through it
 	const Length domain_width = city_size / 1.7f;
@@ -50,8 +50,8 @@ void main_setup() {
 		.apply();
 
 	// Run simulation
-	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time_s);
-	print_info(to_string(simulation_time_s, 0u) + " seconds = " + to_string(total_timesteps) + " time steps");
+	const uint64_t total_timesteps = sim.to_lbm_timesteps(simulation_time);
+	print_info(to_string(simulation_time.si(), 0u) + " seconds = " + to_string(total_timesteps) + " time steps");
 
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	VideoRecorder()
@@ -67,8 +67,8 @@ void main_setup() {
 			.set_free_position(-0.283501f, -0.099679f, 0.175468f)
 			.set_angles(234.0f, 29.0f)
 			.set_fov(117.0f))
-		.set_video_length_s(30.0f)
-		.record(lbm, simulation_time_s, units);
+		.set_video_length(30.0_s)
+		.record(lbm, simulation_time);
 #else
 	lbm.run();
 #endif
