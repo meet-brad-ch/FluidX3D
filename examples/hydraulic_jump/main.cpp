@@ -32,7 +32,7 @@ void main_setup() { // hydraulic jump; required extensions: FP16S, VOLUME_FORCE,
 		.set_water_level(water_height)
 		.initialize_hydrostatic()
 		.set_solid_faces({Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Z_MIN}) // sides and bottom, the top is open
-		.add_solid_block({0_m, 0_m, 0_m}, {domain_x, socket_length, socket_height}) // socket at the inlet
+		.add_solid(Shape::box({0_m, 0_m, 0_m}, {domain_x, socket_length, socket_height})) // socket at the inlet
 		.add_inflow(Face::Y_MIN, inlet_velocity, socket_height, water_height)
 		.add_outflow(Face::Y_MAX, outlet_velocity)
 		.apply();

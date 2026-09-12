@@ -122,6 +122,14 @@ public:
         return *this;
     }
 
+    using AccelerationField = std::function<AccelerationVector(Position)>; ///< a body force per mass at a point
+
+    /// A body force per mass in every cell, in addition to the LBM's uniform one (FORCE_FIELD), e.g. a pull toward a point.
+    BoundaryBuilder& set_force_field(AccelerationField force) {
+        force_field_ = std::move(force);
+        return *this;
+    }
+
     /// @brief Atmospheric boundary layer u(z) = u_ref*(z/z_ref)^alpha in the non-solid cells above the floor.
     /// @param alpha power-law exponent: 0.10 sea, 0.143 open terrain, 0.20 suburbs, 0.25-0.40 urban
     BoundaryBuilder& set_wind_profile_power_law(Speed reference_speed, Length reference_height, float32_t alpha = 0.143f) {
@@ -142,6 +150,9 @@ public:
         const uint32_t Nz = lbm_.get_Nz();
         const float32_t cell_size = units.si_x(1.0f);
         const float32_t pressure_unit = units.si_p(1.0f);
+#ifdef FORCE_FIELD
+        const float32_t acceleration_unit = units.si_x(1.0f) / sq((float32_t)units.si_t(1ull)); // m/s² per lattice unit
+#endif // FORCE_FIELD
 
         std::vector<Shape::Cells> solid_cells;
         for(const Solid& solid : solids_) solid_cells.push_back(solid.shape.in_cells(cell_size, uint3(Nx, Ny, Nz)));
@@ -181,6 +192,15 @@ public:
                 if (velocity_field_) set_velocity(n, velocity_field_(center));
                 if (pressure_field_) lbm_.rho[n] = 1.0f + 3.0f * pressure_field_(center).si() / pressure_unit; // p = c²*rho, c² = 1/3
             }
+
+#ifdef FORCE_FIELD
+            if (force_field_) { // per volume at the lattice density 1: the acceleration in lattice units
+                const AccelerationVector a = force_field_(center);
+                lbm_.F.x[n] = a.x.si() / acceleration_unit;
+                lbm_.F.y[n] = a.y.si() / acceleration_unit;
+                lbm_.F.z[n] = a.z.si() / acceleration_unit;
+            }
+#endif // FORCE_FIELD
 
             if (wind_ && !(lbm_.flags[n] & TYPE_S)) {
                 const float32_t height_ratio = ((float32_t)z + 0.5f) / lbm_wind_ref_height; // at the cell's center
@@ -230,6 +250,7 @@ private:
     std::optional<Speed> init_u_x_, init_u_y_, init_u_z_;
     VelocityField velocity_field_;
     PressureField pressure_field_;
+    AccelerationField force_field_;
     std::optional<Lid> lid_;
     std::optional<WindProfile> wind_;
     Face wind_direction_ = Face::Y_MIN;

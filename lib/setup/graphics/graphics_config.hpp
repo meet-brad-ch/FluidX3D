@@ -86,6 +86,11 @@ public:
         return *this;
     }
 
+    GraphicsConfig& show_free_surface_mesh() { // rasterized (marching cubes) also on one GPU, e.g. with show_flags()
+        visualization_modes_ |= VIS_PHI_RASTERIZE;
+        return *this;
+    }
+
     // slice planes at the LBM's current slice positions
     GraphicsConfig& set_slice_mode(SliceMode mode) {
         slice_mode_ = static_cast<int32_t>(mode);

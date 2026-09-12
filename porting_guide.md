@@ -27,6 +27,10 @@ The Setup API provides:
 | `units.set_m_kg_s(...)` | `sim.configure_units(10.0_mps, Fluid::AIR, lbm_u)` |
 | `lbm.voxelize_mesh_on_device(mesh)` | `sim.voxelize(lbm)` |
 | `parallel_for` boundary setup | `BoundaryBuilder(lbm).set_solid_floor()...` |
+| `sphere(x, y, z, p, r)` and the other shapes in a `parallel_for` | `Shape::sphere(center, radius)` with `BoundaryBuilder::add_solid()`, `SurfaceBuilder::add_water()` or `add_gas()` |
+| `LBM lbm(Nx, Ny, Nz, nu, fx, fy, fz)` | `sim.create_lbm(viscosity, { fx, fy, fz })`, a body force per mass in m/s² |
+| `lbm.set_f(fx, fy, fz)` while running | `const float3 f = sim.to_lbm_acceleration({ ... }); lbm.set_f(f.x, f.y, f.z);` |
+| `units.nu_from_Re(Re, L, u)` | `speed * length / reynolds`, a `KinematicViscosity` |
 | `lbm.graphics.visualization_modes = ...` | `GraphicsConfig(lbm).show_surface()...` |
 
 ---
@@ -167,7 +171,9 @@ Model("aircraft.stl")
     .mirrored(Axis::X)               // half model: add its mirror image
 ```
 
-Placement (with `size()` only):
+A model can also be an SDF file (`Model("Cow_t_sdf_128x428x258.sdf")`, see `cow_sdf`): the SDF's grid is the model's box, as the core's `read_sdf()` sizes it. It needs a `size()`.
+
+Placement (with `size()` only); a centered model is at the domain's center, the core's `lbm.center()`:
 - `.model_offset(x, y, z)`: the model's center, this far from the domain's center
 - `.gap_to_inlet(d)`: the model's front (bounding box minimum in Y) this far from the inlet at y = 0; X stays centered
 - `.gap_to_floor(d)`: the model's bottom this far above the floor at z = 0
@@ -182,7 +188,9 @@ LBM lbm = sim.create_lbm(Fluid::AIR);               // or create_lbm_surface / c
 ```
 The reference length comes from the domain (the box's longest side, or the model's `length()`), so there is no separate length to pass.
 
-Gravity and other volume forces are given in m/s²: `sim.create_lbm_surface(Fluid::WATER, 9.81_mps2)`. Times are durations (`sim.to_lbm_timesteps(0.5_s)`, `parts.run(1.0_min)`), temperatures absolute (`330.0_K` or `57.0_C`). A thermal LBM needs the range of its temperatures first: `sim.configure_temperatures(300.0_K, 330.0_K)` before `create_lbm_thermal()`, then `ThermalBuilder(lbm, sim.temperature_scale()).set_hot_wall(Face::Z_MIN, 330.0_K)`. For free-surface cases with a sub-cell water depth, see `dam_break` and `breaking_waves`: they match the original's Reynolds number, because real water viscosity would need a much finer grid.
+An original set up in lattice units (a viscosity of 0.02, a gravity of 0.0005) has no physical size. Its port picks one, such as a 1 cm cylinder in water, and keeps the original's dimensionless numbers: the lattice speed as the third argument of `configure_units()`, the Reynolds number for the viscosity (`speed * length / reynolds`), the Froude number with real gravity for free surfaces (`froude * sqrt(9.81_mps2 * depth)`), and the original's lattice surface tension with `sim.unit_scale().si_surface_tension(0.01f)`. The lattice setup then equals the original's; see `lid_driven_cavity`, `karman_vortex_street`, `river` and `cube_gravity`.
+
+Gravity and other volume forces are given in m/s²: `sim.create_lbm_surface(Fluid::WATER, 9.81_mps2)`, or as a vector for any direction: `sim.create_lbm(viscosity, { Acceleration{}, drive, Acceleration{} })` for a pressure gradient per density (`poiseuille_flow`), `create_lbm_surface(viscosity, { Acceleration{}, -0.14f * g, -g }, sigma)` for a sloped river bed. Times are durations (`sim.to_lbm_timesteps(0.5_s)`, `parts.run(1.0_min)`), temperatures absolute (`330.0_K` or `57.0_C`). A thermal LBM needs the range of its temperatures first: `sim.configure_temperatures(300.0_K, 330.0_K)` before `create_lbm_thermal()`, then `ThermalBuilder(lbm, sim.temperature_scale()).set_hot_wall(Face::Z_MIN, 330.0_K)`. For free-surface cases with a sub-cell water depth, see `dam_break` and `breaking_waves`: they match the original's Reynolds number, because real water viscosity would need a much finer grid.
 
 ### 4. Boundary Conditions
 
@@ -213,12 +221,32 @@ SurfaceBuilder(lbm)
     .set_water_level(water_height)
     .initialize_hydrostatic() // with the LBM's own gravity
     .set_solid_faces({Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Z_MIN})
-    .add_solid_block({0_m, 0_m, 0_m}, {domain_x, socket_length, socket_height})
+    .add_solid(Shape::box({0_m, 0_m, 0_m}, {domain_x, socket_length, socket_height}))
     .add_inflow(Face::Y_MIN, inlet_velocity, socket_height, water_height)
     .add_outflow(Face::Y_MAX, outlet_velocity)
     .apply();
 ```
-Positions are measured from the domain's origin corner and truncated to whole cells, as `(uint)units.x(...)` did; a bound in the last cell reaches the domain's end.
+Positions are measured from the domain's origin corner. The water level, the inflows' heights and boxes cover whole cells, rounded as the originals' `to_uint(units.x(...))`; a bound in the last cell reaches the domain's end.
+
+**Objects and regions** are `Shape`s in metres, in place of the core's cell tests (`sphere()`, `cylinder()`, ...) in a `parallel_for`:
+```cpp
+BoundaryBuilder(lbm)                                             // karman_vortex_street
+    .add_solid(Shape::cylinder({ 4_cm, 4_cm, 0.5f * cell }, Axis::Z, 0.5_cm, cell))
+    .set_open_boundaries()
+    .set_periodic(Axis::Z)                                       // a 2D domain, one cell high
+    .initialize_velocity_y(flow_speed)
+    .apply();
+
+SurfaceBuilder(lbm)
+    .set_water_level(depth)
+    .add_water(Shape::sphere(drop, 0.5f * D), { Speed{}, s * u, -c * u }) // a falling drop (raindrop)
+    .add_gas(Shape::sphere(bubble, 2_mm))                                  // a bubble (bursting_bubble)
+    .add_solid(floor_and_ceiling & !hole)                                  // walls with a hole (periodic_faucet)
+    .apply();
+```
+The shapes are `sphere`, `cylinder` (axis, radius, length), `box` (two corners, whole cells), `triangle` (a plate about one cell thick) and `torus`; `!a` is everything outside `a`, `a & b` the cells in both, `a | b` those in either. A cell belongs to a shape when its center does (cell i spans i to i+1 cell sizes), so the domain's center is the core's `lbm.center()`; water and gas shapes are smooth at a sphere's surface, as the core's `sphere_plic()`.
+
+Fields are functions of the position in metres: `BoundaryBuilder::initialize_velocity([](Position p) { return Velocity{...}; })` and `initialize_pressure()` for an analytic start (`taylor_green_2d`, `stokes_drag`), `add_moving_solid(shape, wall_velocity)` for a turning cylinder (`taylor_couette`), `set_force_field()` for a volume force per cell (FORCE_FIELD, `colliding_droplets`). They are evaluated at each cell's center.
 
 Thermal walls use `ThermalBuilder` (temperatures in Kelvin), wave makers `WaveBoundary`, rotating parts `MovingPartsManager`.
 
