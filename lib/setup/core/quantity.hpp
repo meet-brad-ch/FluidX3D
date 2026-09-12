@@ -79,23 +79,50 @@ using ThermalExpansion   = Quantity< 0, 0,  0, -1>; // 1/K
 class Angle {
 public:
     constexpr Angle() = default;
-    static constexpr Angle from_rad(float rad) { Angle a; a.rad_ = rad; return a; }
-    static constexpr Angle from_deg(float deg) { return from_rad(deg * (half_turn_rad / 180.0f)); }
-    constexpr float rad() const { return rad_; }
-    constexpr float deg() const { return rad_ * (180.0f / half_turn_rad); }
+    static constexpr Angle from_deg(float deg) { Angle a; a.deg_ = deg; return a; }
+    static constexpr Angle from_rad(float rad) { return from_deg(rad * (180.0f / half_turn_rad)); }
+    constexpr float deg() const { return deg_; }
+    constexpr float rad() const { return deg_ * (half_turn_rad / 180.0f); }
 
     constexpr auto operator<=>(const Angle&) const = default;
 
-    constexpr Angle operator-() const { return from_rad(-rad_); }
-    friend constexpr Angle operator+(Angle a, Angle b) { return from_rad(a.rad_ + b.rad_); }
-    friend constexpr Angle operator-(Angle a, Angle b) { return from_rad(a.rad_ - b.rad_); }
-    friend constexpr Angle operator*(Angle a, float factor) { return from_rad(a.rad_ * factor); }
-    friend constexpr Angle operator*(float factor, Angle a) { return from_rad(a.rad_ * factor); }
+    constexpr Angle operator-() const { return from_deg(-deg_); }
+    friend constexpr Angle operator+(Angle a, Angle b) { return from_deg(a.deg_ + b.deg_); }
+    friend constexpr Angle operator-(Angle a, Angle b) { return from_deg(a.deg_ - b.deg_); }
+    friend constexpr Angle operator*(Angle a, float factor) { return from_deg(a.deg_ * factor); }
+    friend constexpr Angle operator*(float factor, Angle a) { return from_deg(a.deg_ * factor); }
 
 private:
     static constexpr float half_turn_rad = 3.14159265358979f; // π
-    float rad_ = 0.0f;
+    float deg_ = 0.0f; // degrees: the core takes degrees (rotations, cameras), so they pass through unchanged
 };
+
+// A distance in units of the model's reference length (set with Model::length()), e.g. 0.5_lengths.
+class ModelLengths {
+public:
+    constexpr ModelLengths() = default;
+    static constexpr ModelLengths of(float lengths) { ModelLengths m; m.value_ = lengths; return m; }
+    constexpr float value() const { return value_; }
+    constexpr auto operator<=>(const ModelLengths&) const = default;
+private:
+    float value_ = 0.0f;
+};
+
+// Device memory, stored in MB (1 GB = 1024 MB, as the core's VRAM figures).
+class MemorySize {
+public:
+    constexpr MemorySize() = default;
+    static constexpr MemorySize from_mb(unsigned int mb) { MemorySize m; m.mb_ = mb; return m; }
+    constexpr unsigned int mb() const { return mb_; }
+    constexpr auto operator<=>(const MemorySize&) const = default;
+private:
+    unsigned int mb_ = 0u;
+};
+
+constexpr ModelLengths operator""_lengths(long double v) { return ModelLengths::of(static_cast<float>(v)); }
+constexpr ModelLengths operator""_lengths(unsigned long long v) { return ModelLengths::of(static_cast<float>(v)); }
+constexpr MemorySize operator""_mb(unsigned long long v) { return MemorySize::from_mb(static_cast<unsigned int>(v)); }
+constexpr MemorySize operator""_gb(unsigned long long v) { return MemorySize::from_mb(static_cast<unsigned int>(v * 1024ull)); }
 
 // Literals, e.g. 2.0_m, 36_kmh, 20.0_C (absolute temperature); integer and floating-point forms.
 #define FLUIDX3D_QUANTITY_LITERAL(suffix, Type, factor, offset) \

@@ -7,6 +7,7 @@
 
 #include "setup/config/simulation_config.hpp"
 #include "setup/core/setup_error.hpp"
+#include "setup/domain/domain.hpp"
 #include "setup/domain/domain_plan.hpp"
 #include "setup/domain/lattice.hpp"
 #include "setup/simulation/mesh_loader.hpp"
@@ -55,6 +56,16 @@ private:
         }
     }
 
+    static SimulationConfig config_of(const Domain& domain) {
+        std::optional<SimulationConfig> config;
+        try {
+            config.emplace(domain.config());
+        } catch(const SetupError& error) {
+            print_error(error.what()); // waits for Enter (Windows) and exits; nothing may follow it (C4702 with /GL)
+        }
+        return *config;
+    }
+
     // device memory per cell of this example's lattice (it depends on its defines.hpp)
     static LatticeMemory lattice_memory() {
 #ifdef D2Q9
@@ -65,6 +76,9 @@ private:
     }
 
 public:
+    // the domain in physical units (exits with a message if its settings conflict)
+    explicit SimulationSetup(const Domain& domain) : SimulationSetup(config_of(domain)) {}
+
     SimulationSetup(const SimulationConfig& cfg) : config(cfg) { // exits if the geometry file is not found
         std::cout.flush();
         if(config.domain_mode_ != SimulationConfig::DomainMode::DOMAIN_ONLY) {

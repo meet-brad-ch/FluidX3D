@@ -11,10 +11,10 @@ void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGR
 	const float32_t wind_reference_height_m = 100.0f;
 	const float32_t wind_profile_alpha = 0.25f; // power-law exponent for suburban terrain
 
-	SimulationSetup sim(SimulationConfig("hill.stl") // geometry-based sizing: SDF voxelization by default
-		.set_voxel_size_m(8.0f)
-		.set_max_vram_mb(20000u)
-		.set_clearances_m(2.0f, 500.0f, 100.0f)); // bottom, top, sides
+	SimulationSetup sim(Domain::around(Model("hill.stl")) // sized around the terrain; SDF voxelization by default
+		.clearances(2_m, 500_m, 100_m) // below, above, on each side
+		.cell_size(8_m)
+		.max_vram(20000_mb));
 
 	sim.setup();
 	sim.configure_units(wind_speed_mps, Fluid::AIR, 0.07f);

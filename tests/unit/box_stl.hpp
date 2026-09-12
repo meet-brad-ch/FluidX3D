@@ -44,3 +44,12 @@ public:
 private:
     std::filesystem::path path_;
 };
+
+#ifdef FLUIDX3D_TEST_DIR
+// SimulationConfig and Model look geometry files up in resources/ (and exit if they are missing), so geometry for
+// them is written to the test build directory and named relative to resources/.
+inline std::filesystem::path test_file(const char* name) { return std::filesystem::path(FLUIDX3D_TEST_DIR) / name; }
+inline std::string resource_name(const std::string& path) {
+    return std::filesystem::relative(path, FLUIDX3D_RESOURCE_DIR).generic_string();
+}
+#endif // FLUIDX3D_TEST_DIR

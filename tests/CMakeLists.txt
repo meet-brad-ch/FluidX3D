@@ -42,6 +42,7 @@ fluidx3d_add_test(fluidx3d_setup_tests
         unit/lattice_test.cpp
         unit/geometry_scaler_test.cpp
         unit/domain_plan_test.cpp
+        unit/domain_test.cpp
     LINK
         fluidx3d::setup
 )

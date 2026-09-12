@@ -7,24 +7,22 @@
 
 void main_setup() { // hydraulic jump; required extensions: FP16S, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, MOVING_BOUNDARIES, SURFACE, SUBGRID, INTERACTIVE_GRAPHICS
 	// physical parameters (SI units)
-	const float domain_x_m = 0.96f;
-	const float domain_y_m = 3.52f;
-	const float domain_z_m = 0.96f;
+	const Length domain_x = 0.96_m;
+	const Length domain_y = 3.52_m;
+	const Length domain_z = 0.96_m;
 
-	const float socket_length_m = domain_y_m * 3.0f / 20.0f;
-	const float socket_height_m = domain_z_m * 2.0f / 5.0f;
-	const float water_height_m = domain_z_m * 3.0f / 5.0f;
+	const float socket_length_m = domain_y.si() * 3.0f / 20.0f;
+	const float socket_height_m = domain_z.si() * 2.0f / 5.0f;
+	const float water_height_m = domain_z.si() * 3.0f / 5.0f;
 
 	const float flow_rate_m3ps = 0.25f;
-	const float inlet_area_m2 = domain_x_m * (water_height_m - socket_height_m);
-	const float outlet_area_m2 = domain_x_m * socket_height_m;
+	const float inlet_area_m2 = domain_x.si() * (water_height_m - socket_height_m);
+	const float outlet_area_m2 = domain_x.si() * socket_height_m;
 	const float inlet_velocity_mps = flow_rate_m3ps / inlet_area_m2;
 	const float outlet_velocity_mps = flow_rate_m3ps / outlet_area_m2;
 
 	// simulation setup
-	SimulationSetup sim(SimulationConfig()
-		.set_domain_size_m(domain_x_m, domain_y_m, domain_z_m)
-		.set_vram_mb(208u));
+	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).vram(208_mb));
 
 	sim.setup();
 	sim.configure_units(inlet_velocity_mps, Fluid::WATER);
