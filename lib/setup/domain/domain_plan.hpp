@@ -45,4 +45,18 @@ private:
     template<typename Vector> static auto along(const Vector& v, Axis axis) { // the component along an axis
         return axis == Axis::X ? v.x : axis == Axis::Y ? v.y : v.z;
     }
+
+    /// The domain's center in the core's cell coordinates (cell i's center is at i), as the core's lbm.center()
+    static float3 center_of(const uint3& cells) {
+        return float3(0.5f * (float32_t)cells.x - 0.5f, 0.5f * (float32_t)cells.y - 0.5f, 0.5f * (float32_t)cells.z - 0.5f);
+    }
+
+    /// A model's bounding box in its own units, turned as it is voxelized
+    struct ModelBox {
+        float3 size;           ///< after the whole rotation
+        float3 unpitched_size; ///< after Model::rotation(), before the angle of attack: where Model::length() is measured
+        float32_t scale_size;  ///< what voxelize_stl() scales (the longest side after the rotation), or voxelize_sdf() (the grid's longest side)
+    };
+    /// @param path the model's file: an STL, or an SDF, whose grid is the model's box (as read_sdf() computes it)
+    static ModelBox model_box(const Model& model, const std::string& path);
 };

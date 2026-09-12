@@ -1,82 +1,45 @@
+// City wind in real time: an atmospheric boundary layer over a city, slow enough to watch it develop, using Setup API
+//
+// Required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
+// STL from: resources/city.stl (the same city as the city example)
+
 #include "defines.hpp"
-#include "info.hpp"
 #include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+#include "setup/setup.hpp"
 
-void main_setup() { // city_rt_real: Real-time interactive wind flow with an atmospheric boundary layer profile.
-	// Required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
+void main_setup() {
+	const Length city_size = 1000.0_m;       // city block size
+	const Speed wind_speed = 1.0_kmh;        // at the reference height
+	const Length reference_height = 100.0_m; // of the wind profile
 
-	// ################################################################## define simulation box size and fluid properties ##################################################################
-	const uint L = 512u; // Base resolution
-	const float si_u_ref = 1.0f / 3.6f; // Reference wind speed in m/s (e.g., 10 km/h)
-	const float si_h_ref = 100.0f;       // Reference height in meters for the wind profile
-	const float si_building_size = 1000.0f; // Characteristic size of the building in meters
-	const float si_rho = 1.225f;       // Air density in kg/m^3
-	const float si_nu = 1.48E-5f;      // Kinematic viscosity of air in m^2/s
+	// the city (its size along Y) is 85 % of the domain length
+	const Length domain_width = city_size / 1.7f;
+	SimulationSetup sim(Domain::around(Model("city.stl").rotation(0_deg, 0_deg, 90_deg).length(city_size))
+		.size(domain_width, 2.0f * domain_width, 0.5f * domain_width)
+		.model_offset(0_m, -0.05f * city_size, -0.025f * city_size)
+		.cell_size(domain_width / 512.0f)); // 512 x 1024 x 256 cells, as the original
 
-	const float lbm_u_ref = 0.07f;     // Reference velocity in LBM units
-	const float lbm_building_size = 1.7f * (float)L;
+	sim.setup();
+	sim.configure_units(wind_speed, Fluid::AIR, 0.07f);
+	sim.print_reynolds_number(Fluid::AIR);
 
-	// Set up the unit conversion system
-	units.set_m_kg_s(lbm_building_size, lbm_u_ref, 1.0f, si_building_size, si_u_ref, si_rho);
-	const float lbm_nu = units.nu(si_nu);
-	print_info("Reynolds number Re = " + to_string(units.si_Re(si_building_size, si_u_ref, si_nu)));
+	LBM lbm = sim.create_lbm(Fluid::AIR);
+	sim.voxelize(lbm);
 
-	LBM lbm(L, L * 2u, L / 2u, lbm_nu);
+	// power-law profile u(z) = u_ref*(z/z_ref)^alpha, alpha = 0.25 for urban/suburban terrain
+	BoundaryBuilder(lbm)
+		.set_solid_floor()
+		.set_open_boundaries()
+		.set_wind_profile_power_law(wind_speed, reference_height, 0.25f)
+		.set_wind_direction(Face::Y_MIN)
+		.apply();
 
-	// ###################################################################################### define geometry ######################################################################################
-	const float3 center = lbm.center() - float3(0.0f, 0.05f * lbm_building_size, 0.025f * lbm_building_size);
-	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(90.0f));
-	lbm.voxelize_stl(get_resource_path("city.stl"), center, rotation, lbm_building_size);
+	const Length W = domain_width; // the camera from the domain's origin corner
+	GraphicsConfig(lbm)
+		.show_surface()
+		.show_vortices()
+		.set_camera(CameraView::at({ -0.588245f * W, 0.112162f * W, 1.10899f * W }, 215_deg, 39_deg).field_of_view(70_deg))
+		.apply();
 
-	// ######################################################## define atmospheric boundary layer and initial conditions #######################################################
-	const uint Nx = lbm.get_Nx(), Ny = lbm.get_Ny(), Nz = lbm.get_Nz();
-
-	// Parameters for the power-law velocity profile U(z) = U_ref * (z / z_ref)^alpha
-	const float lbm_h_ref = units.x(si_h_ref); // Reference height in LBM units
-	const float alpha = 0.25f; // Power-law exponent for urban/suburban terrain
-
-	parallel_for(lbm.get_N(), [&](ulong n) {
-		uint x = 0u, y = 0u, z = 0u;
-		lbm.coordinates(n, x, y, z);
-
-		// Calculate velocity at this height using the power-law profile
-		// Use z+0.5f to get cell-center height, add small epsilon to avoid z=0
-		float height = (float)z + 0.5f;
-		float velocity_at_height = lbm_u_ref * powf(height / lbm_h_ref, alpha);
-
-		// Initialize velocity for all non-solid cells with the profile
-		if (lbm.flags[n] != TYPE_S) {
-			lbm.u.y[n] = velocity_at_height;
-		}
-
-		// --- Set Boundary Conditions ---
-		// Inlet (y=0): Enforce the velocity profile
-		if (y == 0u) {
-			lbm.flags[n] = TYPE_E;
-		}
-		// Outlets (y=Ny-1, x=0, x=Nx-1, z=Nz-1): Open boundaries to simulate atmosphere
-		else if (x == 0u || x == Nx - 1u || y == Ny - 1u || z == Nz - 1u) {
-			lbm.flags[n] = TYPE_E;
-			// Also initialize outflow/top/side velocities to the profile to prevent
-			// a large pressure drop at the start of the simulation.
-			if (lbm.flags[n] != TYPE_S) {
-				lbm.u.y[n] = velocity_at_height;
-			}
-		}
-
-		// Ground (z=0): No-slip solid wall
-		if (z == 0u) {
-			lbm.flags[n] = TYPE_S;
-		}
-	});
-
-	// ####################################################################### run simulation and set graphics #######################################################################
-	lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_Q_CRITERION;
-	lbm.graphics.set_camera_free(float3(-1.088245f * (float)Nx, -0.443919f * (float)Ny, 1.717979f * (float)Nz), 215.0f, 39.0f, 70.0f);
-
-	// Run in interactive mode. Use mouse to rotate, press P to start/pause.
-	lbm.run();
+	lbm.run(); // interactive: rotate with the mouse, start and pause with P
 }

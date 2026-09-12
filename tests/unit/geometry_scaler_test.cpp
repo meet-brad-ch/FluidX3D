@@ -51,8 +51,8 @@ TEST(GeometryScaler, ClearancesAddCellsAroundTheGeometry) {
     EXPECT_EQ(domain.y, 20u + 2u * 3u);
     EXPECT_EQ(domain.z, 10u + 5u + 10u);
     const float3 center = scaler.calculate_center(domain, clearances); // centered in x/y, resting on the bottom clearance
-    EXPECT_FLOAT_EQ(center.x, 23.0f);
-    EXPECT_FLOAT_EQ(center.y, 13.0f);
+    EXPECT_FLOAT_EQ(center.x, 22.5f); // the core's lbm.center(): cell i's center is at i
+    EXPECT_FLOAT_EQ(center.y, 12.5f);
     EXPECT_FLOAT_EQ(center.z, 5.0f + 5.0f);
 }
 

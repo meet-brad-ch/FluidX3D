@@ -182,8 +182,8 @@ public:
                 if (pressure_field_) lbm_.rho[n] = 1.0f + 3.0f * pressure_field_(center).si() / pressure_unit; // p = c²*rho, c² = 1/3
             }
 
-            if (wind_ && !(lbm_.flags[n] & TYPE_S) && z > 0u) {
-                const float32_t height_ratio = (float32_t)z / lbm_wind_ref_height;
+            if (wind_ && !(lbm_.flags[n] & TYPE_S)) {
+                const float32_t height_ratio = ((float32_t)z + 0.5f) / lbm_wind_ref_height; // at the cell's center
                 const float32_t wind_velocity = lbm_wind_ref_velocity * pow(height_ratio, wind_->alpha);
                 switch (wind_direction_) {
                     case Face::X_MIN: lbm_.u.x[n] = wind_velocity; break;

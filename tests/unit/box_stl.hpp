@@ -45,6 +45,34 @@ private:
     std::filesystem::path path_;
 };
 
+// Test fixture: an SDF file in the core's format (read_sdf()) with an nx x ny x nz grid over the box from the origin to
+// (sx, sy, sz), all distances 0, removed again at the end of the test.
+class BoxSdf {
+public:
+    BoxSdf(const std::filesystem::path& path, std::int32_t nx, std::int32_t ny, std::int32_t nz, float sx, float sy, float sz) : path_(path) {
+        std::ofstream file(path_, std::ios::binary);
+        const std::int32_t n[3] = { nx, ny, nz };
+        const float bounds[6] = { 0.0f, 0.0f, 0.0f, sx, sy, sz };
+        file.write(reinterpret_cast<const char*>(n), sizeof(n));
+        file.write(reinterpret_cast<const char*>(bounds), sizeof(bounds));
+        const float distance = 0.0f;
+        for(std::int64_t i = 0; i < (std::int64_t)nx * ny * nz; i++) file.write(reinterpret_cast<const char*>(&distance), sizeof(distance));
+    }
+
+    ~BoxSdf() {
+        std::error_code ignored;
+        std::filesystem::remove(path_, ignored);
+    }
+
+    BoxSdf(const BoxSdf&) = delete;
+    BoxSdf& operator=(const BoxSdf&) = delete;
+
+    std::string path() const { return path_.string(); }
+
+private:
+    std::filesystem::path path_;
+};
+
 #ifdef FLUIDX3D_TEST_DIR
 // Model looks geometry files up in resources/ (and exit if they are missing), so geometry for
 // them is written to the test build directory and named relative to resources/.

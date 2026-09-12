@@ -4,7 +4,7 @@ BASELINE nu 4.662e-08
 BASELINE unit_m 8
 BASELINE unit_s 0.2016
 BASELINE unit_kg 627.2
-BASELINE cells_S 3035505
+BASELINE cells_S 3035364
 BASELINE cells_E 591676
 BASELINE cells_T 0
 BASELINE cells_F 0
@@ -12,11 +12,11 @@ BASELINE cells_I 0
 BASELINE cells_G 0
 BASELINE cells_X 0
 BASELINE cells_Y 0
-BASELINE object_cells 2760929
-BASELINE object_min 69 77 1
-BASELINE object_max 443 466 87
+BASELINE object_cells 2760788
+BASELINE object_min 68 76 1
+BASELINE object_max 442 465 87
 BASELINE u_solid_mean 0 0 0
-BASELINE u_mean 0 0.106472 0
+BASELINE u_mean 0 0.106763 0
 BASELINE rho_mean 1
 BASELINE vis_modes 18
 BASELINE field_mode 0

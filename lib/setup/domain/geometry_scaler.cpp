@@ -84,9 +84,9 @@ uint3 GeometryScaler::calculate_domain_size(const Clearances& clearances) const 
 
 float3 GeometryScaler::calculate_center(const uint3& domain_size, const Clearances& clearances) const {
     const uint32_t bottom_cells = meters_to_cells(clearances.bottom_m);
-    return float3(
-        (float32_t)domain_size.x / 2.0f,
-        (float32_t)domain_size.y / 2.0f,
+    return float3( // X and Y at the domain's center, the core's lbm.center() (cell i's center is at i)
+        (float32_t)domain_size.x / 2.0f - 0.5f,
+        (float32_t)domain_size.y / 2.0f - 0.5f,
         (float32_t)stl_size_lbm_.z / 2.0f + (float32_t)bottom_cells
     );
 }
