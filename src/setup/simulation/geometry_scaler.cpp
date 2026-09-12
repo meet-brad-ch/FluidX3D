@@ -96,24 +96,13 @@ uint3 GeometryScaler::calculate_domain_size(const Clearances& clearances) const 
     return domain_size;
 }
 
-float3 GeometryScaler::calculate_center(
-    const uint3& domain_size,
-    const Clearances& clearances,
-    const float3& offset_m
-) const {
-    // Convert clearances and offsets from meters to cells
+float3 GeometryScaler::calculate_center(const uint3& domain_size, const Clearances& clearances) const {
     const uint32_t bottom_cells = meters_to_cells(clearances.bottom_m);
-    const int32_t offset_x_cells = (int32_t)meters_to_cells(fabs(offset_m.x)) * (offset_m.x >= 0.0f ? 1 : -1);
-    const int32_t offset_y_cells = (int32_t)meters_to_cells(fabs(offset_m.y)) * (offset_m.y >= 0.0f ? 1 : -1);
-    const int32_t offset_z_cells = (int32_t)meters_to_cells(fabs(offset_m.z)) * (offset_m.z >= 0.0f ? 1 : -1);
-
-    // Calculate center position in lattice coordinates
-    float3 center;
-    center.x = (float32_t)domain_size.x / 2.0f + (float32_t)offset_x_cells;
-    center.y = (float32_t)domain_size.y / 2.0f + (float32_t)offset_y_cells;
-    center.z = (float32_t)stl_size_lbm_.z / 2.0f + (float32_t)bottom_cells + (float32_t)offset_z_cells;
-
-    return center;
+    return float3(
+        (float32_t)domain_size.x / 2.0f,
+        (float32_t)domain_size.y / 2.0f,
+        (float32_t)stl_size_lbm_.z / 2.0f + (float32_t)bottom_cells
+    );
 }
 
 float32_t GeometryScaler::get_reference_dimension(const float3& size) const {
