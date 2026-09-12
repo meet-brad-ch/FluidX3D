@@ -31,6 +31,10 @@ SimulationConfig Domain::config() const {
     config.set_rotation_deg(model_->rotation_x_.deg(), model_->rotation_y_.deg(), model_->rotation_z_.deg());
     if(model_->angle_of_attack_ != Angle{}) config.set_angle_of_attack_deg(model_->angle_of_attack_.deg());
     if(model_->repair_mesh_) config.set_fix_mesh(true);
+    if(model_->mirror_) {
+        config.set_mirror_plane(*model_->mirror_ == Axis::X ? SimulationConfig::MirrorPlane::X
+                              : *model_->mirror_ == Axis::Y ? SimulationConfig::MirrorPlane::Y : SimulationConfig::MirrorPlane::Z);
+    }
 
     if(size_) { // a size in metres around the model, scaled to its real length
         if(!model_->length_) throw SetupError("Domain::size() around a model needs the model's real size: Model::length()");

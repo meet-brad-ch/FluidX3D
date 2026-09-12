@@ -11,22 +11,20 @@
 #include "setup/setup.hpp"
 
 void main_setup() {
-	const float32_t city_size_m = 1000.0f;       // City block size in meters
+	const Length city_size = 1000.0_m;           // city block size
 	const float32_t wind_speed_mps = 10.0f;      // Wind speed at reference height
 	const float32_t reference_height_m = 100.0f; // Reference height for wind profile
 	const float32_t simulation_time_s = 60.0f;   // 1 minute of simulation
 
-	// Configure domain - 1:2:0.5 aspect ratio
-	SimulationSetup sim(SimulationConfig("city.stl")
-		.set_domain_aspect_ratio(1.0f, 2.0f, 0.5f)
-		.set_vram_mb(2152u)
-		.set_geometry_scale(1.7f)
-		.set_rotation_deg(0.0f, 0.0f, 90.0f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::X)
-		.set_center_offset_ratio(0.0f, -0.05f, -0.025f));
+	// the city (its size along X) is 1.7 domain widths: the domain's side walls cut through it
+	const Length domain_width = city_size / 1.7f;
+	SimulationSetup sim(Domain::around(Model("city.stl").rotation(0_deg, 0_deg, 90_deg).length(city_size, Axis::X))
+		.size(domain_width, 2.0f * domain_width, 0.5f * domain_width)
+		.model_offset(0_m, -0.05f * city_size, -0.025f * city_size)
+		.vram(2152_mb));
 
 	sim.setup();
-	sim.configure_units_with_length(city_size_m, wind_speed_mps, Fluid::AIR);
+	sim.configure_units(wind_speed_mps, Fluid::AIR);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM
