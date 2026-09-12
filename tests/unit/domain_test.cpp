@@ -22,8 +22,8 @@ TEST(Domain, AroundAModelKeepsTheClearances) {
     EXPECT_EQ(plan.Nx, 20u + 6u); // measured after the rotation: 2 m along X, 4 m along Y
     EXPECT_EQ(plan.Ny, 40u + 6u);
     EXPECT_EQ(plan.Nz, 10u + 5u + 10u);
-    EXPECT_FLOAT_EQ(plan.center_lbm.x, 13.0f);
-    EXPECT_FLOAT_EQ(plan.center_lbm.y, 23.0f);
+    EXPECT_FLOAT_EQ(plan.center_lbm.x, 12.5f); // the core's lbm.center(): cell i's center is at i
+    EXPECT_FLOAT_EQ(plan.center_lbm.y, 22.5f);
     EXPECT_FLOAT_EQ(plan.center_lbm.z, 10.0f);
     EXPECT_FLOAT_EQ(plan.lbm_reference_size, 40.0f); // along Y
 }

@@ -28,6 +28,9 @@ void Domain::validate() const {
         if(model_offset_ || has_gaps()) throw SetupError("Domain::box() has no model to place");
         return;
     }
+    if(model_->is_sdf() && (!size_ || model_->mirror_)) {
+        throw SetupError("Domain: an SDF model needs a size() and its length(), and cannot be mirrored");
+    }
     if(size_) { // a size in metres around the model, scaled to its real length
         if(!model_->length_) throw SetupError("Domain::size() around a model needs the model's real size: Model::length()");
         if(clearances_) throw SetupError("Domain: give the size() or the clearances(), not both");
