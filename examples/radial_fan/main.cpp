@@ -20,7 +20,7 @@ void main_setup() {
 		.set_domain_aspect_ratio(3.0f, 3.0f, 1.0f)
 		.set_vram_mb(181u)
 		.set_geometry_scale(0.5f)
-		.set_center_offset_ratio(0.0f, 0.0f, -0.28f));  // Position fan near floor
+		.set_center_offset_ratio(0.0f, 0.0f, -0.154f));  // Position fan near floor
 
 	sim.setup();
 	sim.configure_units_with_length(fan_diameter_m, tip_speed_mps, Fluid::AIR);

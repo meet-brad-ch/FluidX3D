@@ -23,6 +23,7 @@ void main_setup() {
 		.set_vram_mb(1760u)
 		.set_geometry_scale(0.65f)
 		.set_rotation_deg(90.0f, 0.0f, 0.0f)
+		.set_reference_axis(SimulationConfig::ReferenceAxis::X)
 		.set_center_offset_ratio(0.0f, -0.94f, 0.0f));  // Position for tumbling through domain
 
 	sim.setup();

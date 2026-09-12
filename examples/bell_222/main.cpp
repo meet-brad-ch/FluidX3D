@@ -31,12 +31,12 @@ void main_setup() {
 		return;
 	}
 
-	// Configure body using Y axis as reference (fuselage length)
+	// Configure body using X axis as reference (matches original sizing)
 	SimulationSetup sim(SimulationConfig("Bell-222-body.stl")
 		.set_domain_aspect_ratio(1.0f, 1.2f, 0.3f)
 		.set_vram_mb(8000u)
 		.set_geometry_scale(0.8f)
-		.set_reference_axis(SimulationConfig::ReferenceAxis::Y));
+		.set_reference_axis(SimulationConfig::ReferenceAxis::X));
 
 	sim.setup();
 	sim.configure_units(tip_speed_mps, Fluid::AIR);
