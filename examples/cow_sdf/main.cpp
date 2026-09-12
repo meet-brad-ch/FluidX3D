@@ -32,7 +32,7 @@ void main_setup() { // aerodynamics of a cow using SDF; required extensions in d
 	const float lbm_u = 0.075f;
 	units.set_m_kg_s(lbm_length, lbm_u, 1.0f, si_length, si_u, si_rho);
 	const float lbm_nu = units.nu(si_nu);
-	const ulong lbm_T = units.t(si_T);
+	[[maybe_unused]] const ulong lbm_T = units.t(si_T); // only used when rendering to disk (GRAPHICS without INTERACTIVE_GRAPHICS)
 	print_info("Re = "+to_string(to_uint(units.si_Re(si_length, si_u, si_nu))));
 	LBM lbm(lbm_N, lbm_nu);
 	// ###################################################################################### define geometry ######################################################################################
