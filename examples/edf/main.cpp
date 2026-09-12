@@ -35,7 +35,7 @@ void main_setup() {
 
 	// Configure boundaries - open with inlet velocity
 	BoundaryBuilder(lbm)
-		.set_all_open()
+		.set_open_boundaries()
 		.initialize_velocity_y(inlet_velocity)
 		.apply();
 

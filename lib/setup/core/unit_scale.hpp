@@ -29,6 +29,7 @@ public:
     Speed si_velocity(float u) const;
     Duration si_time(std::uint64_t steps) const;
     Force si_force(float f) const;
+    SurfaceTension si_surface_tension(float sigma) const;
 
 private:
     float unit_m_ = 1.0f;  // m per cell

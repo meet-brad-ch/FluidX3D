@@ -53,6 +53,7 @@ private:
 
     bool has_pmin_offset_ { false };      // ASPECT_RATIO mode: place by bounding box minimum instead of center
     float3 pmin_offset_ratio_ { 0.0f, 0.0f, 0.0f };
+    bool on_floor_ { false };             // ASPECT_RATIO mode: bounding box minimum one cell above z = 0 (replaces pmin z)
 
     bool fix_mesh_ { false };
     MirrorPlane mirror_plane_ { MirrorPlane::NONE };
@@ -172,6 +173,12 @@ public:
     SimulationConfig& set_pmin_offset_ratio(float32_t x, float32_t y, float32_t z) {
         has_pmin_offset_ = true;
         pmin_offset_ratio_ = float3(x, y, z);
+        return *this;
+    }
+
+    // the bounding box minimum one cell above z = 0, on a floor there, at any resolution (with set_pmin_offset_ratio)
+    SimulationConfig& set_on_floor() {
+        on_floor_ = true;
         return *this;
     }
 };

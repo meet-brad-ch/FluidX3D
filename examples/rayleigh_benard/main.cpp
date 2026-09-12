@@ -18,7 +18,7 @@ void main_setup() { // Rayleigh-Benard convection; required extensions: FP16S, V
 	const Speed u_buoyancy = sqrt(9.81_mps2 * Fluid::AIR.thermal_expansion * delta_T * height);
 
 	// simulation setup (domain-only, no geometry)
-	SimulationSetup sim(Domain::box(domain_size, domain_size, height).vram(2000_mb));
+	SimulationSetup sim(Domain::box(domain_size, domain_size, height).cell_size(domain_size / 256.0f)); // 256 x 256 x 64 cells, as the original
 
 	sim.setup();
 	sim.configure_units(u_buoyancy, Fluid::AIR);
@@ -44,7 +44,7 @@ void main_setup() { // Rayleigh-Benard convection; required extensions: FP16S, V
 
 	// graphics
 	GraphicsConfig(lbm)
-		.show_surface()
+		.show_flags()
 		.show_streamlines()
 		.apply();
 

@@ -94,8 +94,8 @@ void main_setup() {
 
     SimulationSetup sim(Domain::around(Model("Cow_t.stl").rotation(180_deg, 0_deg, 180_deg).length(cow_length))
         .size(0.5f * domain_length, domain_length, 0.5f * domain_length)
-        .gap_to_inlet(0.1f * cow_length)   // the cow's nose
-        .gap_to_floor(0.006f * cow_length) // about one cell
+        .gap_to_inlet(0.1f * cow_length) // the cow's nose
+        .on_floor()
         .vram(1000_mb));
 
     sim.setup();
@@ -128,9 +128,10 @@ void main_setup() {
 
 Pick the form that matches how the original sized its grid.
 
-**A box without geometry** (the original used `resolution()` with a fixed aspect ratio):
+**A box without geometry** (the original used `resolution()` with a fixed aspect ratio, or a fixed grid):
 ```cpp
 SimulationSetup sim(Domain::box(1.0_m, 5.0_m, 0.75_m).vram(2000_mb));
+SimulationSetup sim(Domain::box(1.0_m, 5.0_m, 0.75_m).cell_size(1.0_m / 128.0f)); // the original's 128 x 640 x 96 cells
 ```
 
 **Clearances around a model** whose STL is already in metres (terrain, measured parts):
@@ -151,7 +152,9 @@ SimulationSetup sim(Domain::around(Model("X-Wing.stl").length(13.4_m))  // real 
 ```
 `Model::length(L, axis)` gives the model's real size along an axis after its rotation, before its angle of attack; it scales the whole model, the STL's own units then do not matter, and it is the reference length of the units and the Reynolds number. If the original only knew a ratio (the model is 65 % of the domain), write the size as `length / 0.65f`, which keeps the grid and the scale of the original.
 
-The resolution is either `vram()` (the largest grid that fits the budget, default 2000 MB) or, around a model with clearances, `cell_size()` with an optional `max_vram()`.
+The resolution is either `vram()` (the largest grid that fits the budget, default 2000 MB) or `cell_size()` with an optional `max_vram()`. With `box()` and `size()`, the cell size gives whole cells along each side (rounded): the way to keep an original's fixed grid.
+
+Check a port against its original: configure with `-DFLUIDX3D_BUILD_ORIGINALS=ON`, record the original with `FLUIDX3D_BLESS=1 ctest -R original_<name>`, then compare the two baselines side by side with `cmake -DCOMPARE=<build>/tests/fluidx3d_baseline_compare -DNAMES=<name> -P tests/originals/compare_ports.cmake`.
 
 ### 2. Geometry
 
@@ -168,6 +171,7 @@ Placement (with `size()` only):
 - `.model_offset(x, y, z)`: the model's center, this far from the domain's center
 - `.gap_to_inlet(d)`: the model's front (bounding box minimum in Y) this far from the inlet at y = 0; X stays centered
 - `.gap_to_floor(d)`: the model's bottom this far above the floor at z = 0
+- `.on_floor()`: the model's bottom one cell above z = 0, resting on a solid floor there (the originals' `1.0f-mesh->pmin.z`)
 
 ### 3. Units
 
@@ -201,6 +205,8 @@ BoundaryBuilder(lbm)
     .initialize_velocity_y(flow_velocity)
     .apply();
 ```
+`set_open_boundaries()` opens every face that is not set solid: with `set_solid_floor()` a wind tunnel, alone all six faces (an aircraft in free flow, the originals' "all non periodic").
+
 Free surfaces use `SurfaceBuilder`, in metres and m/s (`hydraulic_jump`):
 ```cpp
 SurfaceBuilder(lbm)
@@ -275,7 +281,7 @@ Earlier versions of the Setup API configured the domain with `SimulationConfig`.
 | `.set_voxel_size_m(v).set_max_vram_mb(n)` | `.cell_size(v).max_vram(n_mb)` |
 | `.set_domain_aspect_ratio(ax, ay, az).set_geometry_scale(s)` with reference axis A and `configure_units_with_length(L, ...)` | `Model(file).length(L, A)` and `.size(...)`, where the size along A is `L / s` and the other sides follow the ratio. The old scale applied to the model's longest side after the whole rotation (the core's `voxelize_stl()` size); give `L` along that side to keep the geometry |
 | `.set_center_offset_ratio(x, y, z)` | `.model_offset(x * L, y * L, z * L)` |
-| `.set_pmin_offset_ratio(0, y, z)` | `.gap_to_inlet(y * L).gap_to_floor(z * L)` |
+| `.set_pmin_offset_ratio(0, y, z)` | `.gap_to_inlet(y * L).gap_to_floor(z * L)`, or `.on_floor()` for a z of about one cell |
 | `.set_rotation_deg(x, y, z)` | `Model::rotation(x_deg, y_deg, z_deg)` |
 | `.set_angle_of_attack_deg(a)` | `Model::angle_of_attack(a_deg)` |
 | `.set_fix_mesh(true)` | `Model::repair_mesh()` |

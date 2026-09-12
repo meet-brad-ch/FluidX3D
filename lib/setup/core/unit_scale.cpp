@@ -25,3 +25,4 @@ Length UnitScale::si_length(float cells) const { return Length::from_si(cells * 
 Speed UnitScale::si_velocity(float u) const { return Speed::from_si(u * unit_m_ / unit_s_); }
 Duration UnitScale::si_time(std::uint64_t steps) const { return Duration::from_si(static_cast<float>(steps) * unit_s_); }
 Force UnitScale::si_force(float f) const { return Force::from_si(f * unit_kg_ * unit_m_ / (unit_s_ * unit_s_)); }
+SurfaceTension UnitScale::si_surface_tension(float sigma) const { return SurfaceTension::from_si(sigma * unit_kg_ / (unit_s_ * unit_s_)); }

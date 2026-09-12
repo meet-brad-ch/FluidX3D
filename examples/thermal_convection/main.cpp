@@ -19,6 +19,8 @@ void main_setup() { // thermal convection; required extensions: FP16S, VOLUME_FO
 	const Speed u_buoyancy = sqrt(9.81_mps2 * Fluid::AIR.thermal_expansion * delta_T * domain_z);
 
 	// simulation setup (domain-only, no geometry)
+	// finer than the original's 32 x 196 x 60 cells: real air there would have a lattice viscosity of 0.00085 (the
+	// original's lattice fluid: 0.02) and blows up
 	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).vram(2000_mb));
 
 	sim.setup();
@@ -45,7 +47,7 @@ void main_setup() { // thermal convection; required extensions: FP16S, VOLUME_FO
 
 	// graphics
 	GraphicsConfig(lbm)
-		.show_surface()
+		.show_flags()
 		.show_streamlines()
 		.apply();
 

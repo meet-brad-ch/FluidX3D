@@ -55,17 +55,18 @@ TEST(Lattice, RequiredMemoryInWholeMegabytes) {
     EXPECT_EQ(required_memory_mb({ 1u, 1u, 1u }, { 93u }), 0u);
 }
 
-static_assert(CellSpan::of(0.0f, 1.0f / (1.0f / 397.0f) / 8.0f, 397u).end == 49u); // dam_break's water column: y < Ny/8
+static_assert(CellSpan::of(0.0f, 0.528f / 0.01f, 352u).end == 53u); // hydraulic_jump's socket: to_uint(52.8) in the original
 
-TEST(CellSpan, TruncatesBothBoundsToWholeCells) {
-    EXPECT_EQ(CellSpan::of(2.9f, 7.99f, 100u), (CellSpan{ 2u, 7u }));
+TEST(CellSpan, RoundsBothBoundsToTheNearestCellBoundary) {
+    EXPECT_EQ(CellSpan::of(2.9f, 7.49f, 100u), (CellSpan{ 3u, 7u }));
+    EXPECT_EQ(CellSpan::of(2.4f, 7.5f, 100u), (CellSpan{ 2u, 8u }));
     EXPECT_EQ(CellSpan::of(-3.0f, 0.0f, 100u), (CellSpan{ 0u, 0u }));
 }
 
-TEST(CellSpan, ABoundInTheLastCellReachesTheEnd) {
-    EXPECT_EQ(CellSpan::of(0.0f, 198.5f, 199u).end, 199u); // dam_break: 0.5 m of 1/397 m cells on its 199-cell axis
+TEST(CellSpan, BoundsAreClampedToTheAxis) {
+    EXPECT_EQ(CellSpan::of(0.0f, 198.5f, 199u).end, 199u); // 0.5 m of 1/397 m cells on a 199-cell axis
     EXPECT_EQ(CellSpan::of(0.0f, 250.0f, 199u).end, 199u);
-    EXPECT_EQ(CellSpan::of(0.0f, 197.99f, 199u).end, 197u);
+    EXPECT_EQ(CellSpan::of(0.0f, 198.4f, 199u).end, 198u);
     EXPECT_EQ(CellSpan::of(250.0f, 300.0f, 199u), (CellSpan{ 199u, 199u })); // beyond the axis: empty
 }
 

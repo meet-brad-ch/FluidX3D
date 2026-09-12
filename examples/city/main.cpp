@@ -21,10 +21,10 @@ void main_setup() {
 	SimulationSetup sim(Domain::around(Model("city.stl").rotation(0_deg, 0_deg, 90_deg).length(city_size))
 		.size(domain_width, 2.0f * domain_width, 0.5f * domain_width)
 		.model_offset(0_m, -0.05f * city_size, -0.025f * city_size)
-		.vram(2152_mb));
+		.cell_size(domain_width / 512.0f)); // 512 x 1024 x 256 cells, as the original
 
 	sim.setup();
-	sim.configure_units(wind_speed, Fluid::AIR);
+	sim.configure_units(wind_speed, Fluid::AIR, 0.07f);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	// Create LBM

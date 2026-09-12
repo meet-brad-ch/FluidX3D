@@ -48,7 +48,8 @@ DomainPlan DomainPlanner::plan_domain_only(const SimulationConfig& config, Latti
     DomainPlan plan;
     const float max_dim = fmax(fmax(config.domain_size_x_m_, config.domain_size_y_m_), config.domain_size_z_m_);
     const float3 aspect(config.domain_size_x_m_ / max_dim, config.domain_size_y_m_ / max_dim, config.domain_size_z_m_ / max_dim);
-    const uint3 lbm_N = grid_for_vram(config, aspect, lattice);
+    const float3 size_m(config.domain_size_x_m_, config.domain_size_y_m_, config.domain_size_z_m_);
+    const uint3 lbm_N = grid_for_resolution(config, aspect, size_m, lattice);
 
     plan.Nx = lbm_N.x;
     plan.Ny = lbm_N.y;
@@ -72,7 +73,7 @@ DomainPlan DomainPlanner::plan_domain_only(const SimulationConfig& config, Latti
 DomainPlan DomainPlanner::plan_aspect_ratio(const SimulationConfig& config, LatticeMemory lattice) {
     DomainPlan plan;
     const float3 aspect(config.aspect_x_, config.aspect_y_, config.aspect_z_);
-    const uint3 lbm_N = grid_for_vram(config, aspect, lattice);
+    const uint3 lbm_N = grid_for_resolution(config, aspect, aspect, lattice); // Domain::size() gives the aspect ratio in metres
 
     plan.Nx = lbm_N.x;
     plan.Ny = lbm_N.y;
@@ -111,7 +112,7 @@ DomainPlan DomainPlanner::plan_aspect_ratio(const SimulationConfig& config, Latt
         if(config.has_pmin_offset_) { // X centered in the domain, Y/Z from the pmin offset
             center.x = 0.5f * (float32_t)lbm_N.x;
             center.y = config.pmin_offset_ratio_.y * plan.lbm_reference_size + half_size.y;
-            center.z = config.pmin_offset_ratio_.z * plan.lbm_reference_size + half_size.z;
+            center.z = (config.on_floor_ ? 1.0f : config.pmin_offset_ratio_.z * plan.lbm_reference_size) + half_size.z;
         } else {
             const float3 domain_center = 0.5f * float3((float32_t)lbm_N.x, (float32_t)lbm_N.y, (float32_t)lbm_N.z);
             const float3 offset(config.center_offset_x_, config.center_offset_y_, config.center_offset_z_);
@@ -155,9 +156,10 @@ DomainPlan DomainPlanner::plan_geometry_based(const SimulationConfig& config, La
 
     DomainPlan plan;
     plan.stl_path = get_resource_path(config.geometry_filename);
+    plan.rotation_matrix = rotation(config);
     const GeometryScaler scaler = (config.resolution_mode_ == SimulationConfig::ResolutionMode::VOXEL_SIZE)
-        ? GeometryScaler(plan.stl_path, config.voxel_size_m_, config.max_vram_mb_, clearances, lattice, scaler_axis)
-        : GeometryScaler(plan.stl_path, config.vram_mb, clearances, lattice, scaler_axis);
+        ? GeometryScaler(plan.stl_path, config.voxel_size_m_, config.max_vram_mb_, clearances, lattice, scaler_axis, plan.rotation_matrix)
+        : GeometryScaler(plan.stl_path, config.vram_mb, clearances, lattice, scaler_axis, plan.rotation_matrix);
 
     plan.base_grid = scaler.get_stl_size_cells();
     plan.stl_size_si = scaler.get_stl_size_meters();
@@ -169,7 +171,6 @@ DomainPlan DomainPlanner::plan_geometry_based(const SimulationConfig& config, La
     plan.Ny = domain_size.y;
     plan.Nz = domain_size.z;
     plan.center_lbm = scaler.calculate_center(domain_size, clearances);
-    plan.rotation_matrix = rotation(config);
     plan.voxel_size = fmax(fmax((float)plan.base_grid.x, (float)plan.base_grid.y), (float)plan.base_grid.z);
 
     print_info("Geometry: " + config.geometry_filename);
@@ -215,7 +216,21 @@ uint32_t DomainPlanner::reference_dimension(const SimulationConfig& config, cons
     }
 }
 
-uint3 DomainPlanner::grid_for_vram(const SimulationConfig& config, const float3& aspect, LatticeMemory lattice) {
-    const GridSize grid = grid_for_memory(aspect.x, aspect.y, aspect.z, config.vram_mb, lattice);
+uint3 DomainPlanner::grid_for_resolution(const SimulationConfig& config, const float3& aspect, const float3& size_m, LatticeMemory lattice) {
+    if(config.resolution_mode_ == SimulationConfig::ResolutionMode::VRAM_BUDGET) {
+        const GridSize grid = grid_for_memory(aspect.x, aspect.y, aspect.z, config.vram_mb, lattice);
+        return uint3(grid.x, grid.y, grid.z);
+    }
+    const float32_t cell = config.voxel_size_m_;
+    const GridSize grid { to_uint(size_m.x / cell), to_uint(size_m.y / cell), to_uint(size_m.z / cell) };
+    if(grid.x == 0u || grid.y == 0u || grid.z == 0u) {
+        throw SetupError("Domain: a cell size of " + to_string(cell) + " m is larger than the domain");
+    }
+    const uint32_t required_mb = (uint32_t)required_memory_mb(grid, lattice);
+    if(required_mb > config.max_vram_mb_) {
+        throw SetupError("VRAM requirement exceeds the limit: a cell size of " + to_string(cell) + " m gives a grid of " +
+            to_string(grid.x) + " x " + to_string(grid.y) + " x " + to_string(grid.z) + " cells, which needs " +
+            to_string(required_mb) + " MB of the " + to_string(config.max_vram_mb_) + " MB allowed (max_vram)");
+    }
     return uint3(grid.x, grid.y, grid.z);
 }

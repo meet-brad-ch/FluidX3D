@@ -8,6 +8,7 @@
 # Options (set with -D<OPTION>=<value> when configuring)
 # ==============================================================================
 option(FLUIDX3D_BUILD_TESTS "Build tests: a baseline build of every example, and unit tests" ON)
+option(FLUIDX3D_BUILD_ORIGINALS "Build the original examples (before the Setup API) as baseline tests: ctest -L original" OFF)
 option(FLUIDX3D_WERROR "Treat warnings in first-party code (examples, Setup API, tests) as errors" OFF)
 set(SDFGEN_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures for SDFGen (default: this machine's GPU)")
 

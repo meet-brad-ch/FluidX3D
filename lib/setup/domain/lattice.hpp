@@ -17,9 +17,9 @@ struct GridSize { // cells
 
 /// @brief The whole cells [begin, end) along one axis that an interval covers.
 ///
-/// Both bounds are truncated to whole cells (cell i spans i to i+1 cell sizes from the origin), as the examples
-/// convert lengths with (uint)units.x(). A bound within the last cell reaches the end of the axis, so a length equal
-/// to the domain size covers every cell even when the grid was rounded down from it.
+/// Both bounds are rounded to the nearest cell boundary (cell i spans i to i+1 cell sizes from the origin), as the
+/// original examples convert lengths with to_uint(units.x()), and clamped to the axis. So a length equal to the domain
+/// size covers every cell even when the grid was rounded from it.
 struct CellSpan {
     std::uint32_t begin = 0u; ///< first cell
     std::uint32_t end = 0u;   ///< one past the last cell
@@ -27,14 +27,19 @@ struct CellSpan {
     /// @param from, to  the interval in cells (lattice units), e.g. units.x(metres)
     /// @param cells     the number of cells along the axis
     static constexpr CellSpan of(float from, float to, std::uint32_t cells) {
-        return { from <= 0.0f ? 0u : from >= static_cast<float>(cells) ? cells : static_cast<std::uint32_t>(from),
-                 to <= 0.0f ? 0u : to >= static_cast<float>(cells - 1u) ? cells : static_cast<std::uint32_t>(to) };
+        return { boundary(from, cells), boundary(to, cells) };
     }
 
     /// Whether cell i is in the span.
     constexpr bool contains(std::uint32_t i) const { return i >= begin && i < end; }
 
     constexpr auto operator<=>(const CellSpan&) const = default;
+
+private:
+    /// The cell boundary nearest to position (in cells), within 0 to cells.
+    static constexpr std::uint32_t boundary(float position, std::uint32_t cells) {
+        return position <= 0.0f ? 0u : position >= static_cast<float>(cells) ? cells : static_cast<std::uint32_t>(position + 0.5f);
+    }
 };
 
 // grid with the given aspect ratio that fills budget_mb, as the core's resolution() (same float operations)

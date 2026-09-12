@@ -69,8 +69,8 @@ public:
         return *this;
     }
 
-    GraphicsConfig& show_free_surface() { // rasterized (SURFACE extension)
-        visualization_modes_ |= VIS_PHI_RASTERIZE;
+    GraphicsConfig& show_free_surface() { // raytraced on one GPU, rasterized on several (SURFACE extension)
+        visualization_modes_ |= lbm_.get_D() == 1u ? VIS_PHI_RAYTRACE : VIS_PHI_RASTERIZE;
         return *this;
     }
 

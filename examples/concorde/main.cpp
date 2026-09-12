@@ -16,10 +16,10 @@ void main_setup() {
 	SimulationSetup sim(Domain::around(Model("concord_cut_large.stl").rotation(90_deg, 0_deg, 90_deg).angle_of_attack(-10_deg).length(fuselage_length))
 		.size(domain_length / 3.0f, domain_length, domain_length / 6.0f)
 		.model_offset(0_m, -0.373f * fuselage_length, 0.03f * fuselage_length)
-		.vram(6084_mb));
+		.vram(2084_mb));
 
 	sim.setup();
-	sim.configure_units(cruise_speed, Fluid::AIR);
+	sim.configure_units(cruise_speed, Fluid::AIR, 0.075f);
 	sim.print_reynolds_number(Fluid::AIR);
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
