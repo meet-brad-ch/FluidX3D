@@ -4,7 +4,6 @@
 // STL from: https://www.thingiverse.com/thing:3014759/files
 //
 // Note: This example uses MovingPartsManager for the rotor.
-// Rotor has different Y offset (-0.41) compared to stator (-0.2).
 
 #include "defines.hpp"
 #include "lbm.hpp"
@@ -17,10 +16,10 @@ void main_setup() {
 	const Duration simulation_time = 0.5_s;
 	const uint32_t update_interval = 4u;
 
-	// the stator's diameter (X) is 98 % of the domain length (Y)
-	const Length domain_length = fan_diameter / 0.98f;
+	// the stator's diameter (X and Z) is 98 % of the domain width; the domain is 1.5 widths long (Y)
+	const Length domain_width = fan_diameter / 0.98f;
 	SimulationSetup sim(Domain::around(Model("edf_v39.stl").rotation(0_deg, 0_deg, 180_deg).length(fan_diameter, Axis::X))
-		.size(domain_length / 1.5f, domain_length, domain_length / 1.5f)
+		.size(domain_width, 1.5f * domain_width, domain_width)
 		.model_offset(0_m, -0.2f * fan_diameter, 0_m) // stator position
 		.vram(8000_mb));
 
@@ -40,12 +39,13 @@ void main_setup() {
 		.initialize_velocity_y(inlet_velocity)
 		.apply();
 
-	// Configure rotor with different Y offset (difference from stator: -0.41 - (-0.2) = -0.21)
+	// the rotor's STL is not in the stator's coordinates (the duct's axis is off its origin): centered on the duct's
+	// axis, 0.21 diameters behind the stator's center, as in the original
 	MovingPartsManager parts(sim, lbm);
 	parts.add(MovingPart("edf_v391.stl")
 		.set_rotation_axis(RotationAxis::Y)
 		.set_tip_speed(tip_speed)
-		.set_offset_ratio(0.0f, -0.21f, 0.0f)
+		.centered_on_model(Position{ 0_m, -0.21f * fan_diameter, 0_m })
 		.set_update_interval(update_interval));
 	parts.initialize();
 

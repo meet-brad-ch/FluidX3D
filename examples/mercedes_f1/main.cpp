@@ -49,7 +49,7 @@ void main_setup() {
 	print_info("Re = " + to_string(to_uint(Re)));
 
 	LBM lbm = sim.create_lbm(Fluid::AIR);
-	const float32_t scale = sim.get_mesh_scale_factor();
+	const float32_t scale = ModelPlacement::of(sim.get_results()).cells_per_unit(); // cells per STL unit, as the body's
 
 	// Load all meshes and apply same scale
 	Mesh* body = read_stl(body_path);

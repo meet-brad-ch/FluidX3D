@@ -2,6 +2,7 @@
 
 #include "setup/core/types.hpp"
 #include "setup/core/quantity.hpp"
+#include <optional>
 
 enum class RotationAxis { X, Y, Z };
 
@@ -10,7 +11,7 @@ enum class MotionType {
     TUMBLING  // arbitrary axis, fixed angle per update: unvoxelized and re-voxelized
 };
 
-// One moving part for MovingPartsManager; the STL (in resources/) is scaled and placed like the SimulationSetup geometry.
+// One moving part for MovingPartsManager; the STL (in resources/) gets the transform of the SimulationSetup model.
 //   MovingPart("rotor.stl").set_rotation_axis(RotationAxis::Z).set_tip_speed(100.0_mps).set_update_interval(4)
 //   MovingPart("tie_fighter.stl").set_tumble(float3(0.2f, 1.0f, 0.1f), radians(0.4032f)).set_update_interval(28)
 class MovingPart {
@@ -32,10 +33,10 @@ public:
         return *this;
     }
 
-    // offset from the body placement, as ratio of the reference size
-    MovingPart& set_offset_ratio(float32_t x, float32_t y, float32_t z) {
-        has_offset_ratio_ = true;
-        offset_ratio_ = float3(x, y, z);
+    /// @brief For an STL in other coordinates than the model's: its bounding box center goes to the model's plus this
+    /// offset. By default a part keeps its place relative to the model, as in the CAD assembly both files come from.
+    MovingPart& centered_on_model(Position offset = {}) {
+        centered_offset_ = offset;
         return *this;
     }
 
@@ -65,8 +66,7 @@ public:
     MotionType get_motion_type() const { return motion_type_; }
     uint32_t get_update_interval() const { return update_interval_; }
     float32_t get_direction_multiplier() const { return direction_multiplier_; }
-    bool has_offset_ratio() const { return has_offset_ratio_; }
-    const float3& get_offset_ratio() const { return offset_ratio_; }
+    const std::optional<Position>& get_centered_offset() const { return centered_offset_; } ///< set by centered_on_model()
     Speed get_tip_speed() const { return tip_speed_; }
     bool uses_tumble_angle() const { return use_tumble_angle_; }
     float32_t get_tumble_angle() const { return tumble_angle_; }
@@ -80,8 +80,7 @@ private:
     uint32_t update_interval_{4};
     float32_t direction_multiplier_{1.0f};
 
-    bool has_offset_ratio_{false};
-    float3 offset_ratio_{0.0f, 0.0f, 0.0f};
+    std::optional<Position> centered_offset_;
 
     bool use_tumble_angle_{false};
     float32_t tumble_angle_{0.0f};

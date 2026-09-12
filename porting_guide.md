@@ -216,6 +216,17 @@ Positions are measured from the domain's origin corner and truncated to whole ce
 
 Thermal walls use `ThermalBuilder` (temperatures in Kelvin), wave makers `WaveBoundary`, rotating parts `MovingPartsManager`.
 
+A moving part gets the model's own transform (its rotation, its scale, its move to the planned center), so a rotor split from the same CAD file stays where it was on the model — the old `mesh->scale(scale); mesh->translate(offset)` with the body's `scale` and `offset`. A part in other coordinates is centered on the model instead, as the old code did with `translate(center - part->get_bounding_box_center() + offset)`:
+```cpp
+MovingPartsManager parts(sim, lbm);                 // after configure_units()
+parts.add(MovingPart("rotor.stl")
+    .set_rotation_axis(RotationAxis::Y)
+    .set_tip_speed(tip_speed)
+    .centered_on_model(Position{0_m, -0.21f * fan_diameter, 0_m})); // only for an STL in other coordinates
+parts.initialize();
+```
+`ModelPlacement::of(sim.get_results())` gives the same transform for meshes placed by hand (`cells_per_unit()`, `load(path)`).
+
 ### 5. Graphics and Video
 
 ```cpp
