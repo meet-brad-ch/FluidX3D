@@ -255,7 +255,6 @@ Instead of manually specifying `si_nu` and `si_rho`, use predefined fluids:
 ```cpp
 Fluid::AIR      // density=1.225, nu=1.48e-5
 Fluid::WATER    // density=998.2, nu=1.004e-6
-Fluid::SEAWATER // density=1025,  nu=1.08e-6
 ```
 
 ---
