@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/types.hpp"
+#include "setup/core/types.hpp"
 #include <string>
 
 // Generates signed distance fields from STL files, with a hash-based cache (wraps SDFCacheManager).

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/quantity.hpp"
+#include "setup/core/quantity.hpp"
 #include <cstdint>
 
 // Scale between SI units and lattice units, as a value: 1 cell is cell_size() long, 1 time step lasts time_step(),

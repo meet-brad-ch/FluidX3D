@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/types.hpp"
+#include "setup/core/types.hpp"
 #include <string>
 
 // One camera for VideoRecorder: centered (orbits the domain center) or free (position as ratio of the domain size).

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/types.hpp"
+#include "setup/core/types.hpp"
 
 // Kelvin <-> LBM temperature (TEMPERATURE extension): T_lbm = 1 + (T_K - T_ref_K)/delta_T_K
 namespace thermal_utils {

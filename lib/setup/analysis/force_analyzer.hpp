@@ -1,7 +1,7 @@
 #pragma once
 
-#include "core/types.hpp"
-#include "boundaries/boundary_flags.hpp"
+#include "setup/core/types.hpp"
+#include "setup/boundaries/boundary_flags.hpp"
 #include "lbm.hpp"
 #include "units.hpp"
 

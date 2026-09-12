@@ -6,10 +6,9 @@ add_library(fluidx3d_setup STATIC
     domain/lattice.cpp
 )
 add_library(fluidx3d::setup ALIAS fluidx3d_setup)
-target_include_directories(fluidx3d_setup PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/..  # "setup/core/quantity.hpp"
-    ${CMAKE_CURRENT_SOURCE_DIR}     # the API's own includes ("core/quantity.hpp")
-)
+# lib/ is the only include root: the API is always included as "setup/...", so none of its headers
+# can shadow a core header of the same name (such as src/setup.hpp)
+target_include_directories(fluidx3d_setup PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(fluidx3d_setup
     PUBLIC  fluidx3d::build_options
     PRIVATE fluidx3d::warnings

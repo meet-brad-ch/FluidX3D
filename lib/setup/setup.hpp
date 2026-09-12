@@ -10,44 +10,44 @@
 //   GraphicsConfig(lbm).show_surface().show_vortices().apply();
 //   lbm.run();
 
-#include "core/types.hpp"
-#include "core/fluids.hpp"
-#include "core/boundary_utils.hpp"
+#include "setup/core/types.hpp"
+#include "setup/core/fluids.hpp"
+#include "setup/core/boundary_utils.hpp"
 
-#include "config/camera_config.hpp"
-#include "config/simulation_config.hpp"
+#include "setup/config/camera_config.hpp"
+#include "setup/config/simulation_config.hpp"
 
-#include "simulation/geometry_scaler.hpp"
-#include "simulation/mesh_loader.hpp"
-#include "simulation/simulation_setup.hpp"
+#include "setup/simulation/geometry_scaler.hpp"
+#include "setup/simulation/mesh_loader.hpp"
+#include "setup/simulation/simulation_setup.hpp"
 
-#include "boundaries/boundary_flags.hpp"
-#include "boundaries/boundary_builder.hpp"
+#include "setup/boundaries/boundary_flags.hpp"
+#include "setup/boundaries/boundary_builder.hpp"
 
 #ifdef TEMPERATURE
-#include "boundaries/thermal_utils.hpp"
-#include "boundaries/thermal_builder.hpp"
+#include "setup/boundaries/thermal_utils.hpp"
+#include "setup/boundaries/thermal_builder.hpp"
 #endif // TEMPERATURE
 
 #ifdef GRAPHICS
-#include "graphics/graphics_config.hpp"
-#include "graphics/video_recorder.hpp"
+#include "setup/graphics/graphics_config.hpp"
+#include "setup/graphics/video_recorder.hpp"
 #endif // GRAPHICS
 
-#include "moving/moving_part.hpp"
-#include "moving/moving_parts_manager.hpp"
+#include "setup/moving/moving_part.hpp"
+#include "setup/moving/moving_parts_manager.hpp"
 
-#include "sdf/sdf_generator.hpp"
+#include "setup/sdf/sdf_generator.hpp"
 
 #ifdef FORCE_FIELD
-#include "analysis/force_analyzer.hpp"
+#include "setup/analysis/force_analyzer.hpp"
 #endif // FORCE_FIELD
 
 #ifdef SURFACE
-#include "surface/surface_builder.hpp"
-#include "surface/wave_boundary.hpp"
+#include "setup/surface/surface_builder.hpp"
+#include "setup/surface/wave_boundary.hpp"
 #endif // SURFACE
 
 #ifdef PARTICLES
-#include "particles/particle_manager.hpp"
+#include "setup/particles/particle_manager.hpp"
 #endif // PARTICLES

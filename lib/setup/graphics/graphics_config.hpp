@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/types.hpp"
+#include "setup/core/types.hpp"
 #include "lbm.hpp"
 
 enum class FieldMode { // lbm.graphics.field_mode

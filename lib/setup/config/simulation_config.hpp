@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/types.hpp"
+#include "setup/core/types.hpp"
 
 // Geometry, domain and resolution settings for SimulationSetup (fluent setters).
 // Three domain modes, set by the constructor and the last mode setter:
