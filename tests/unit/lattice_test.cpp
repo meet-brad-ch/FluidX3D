@@ -18,7 +18,7 @@ struct ExampleGrid {
     float aspect_x, aspect_y, aspect_z;
     std::uint32_t budget_mb;
     LatticeMemory lattice;
-    GridSize grid; // from tests/baselines/<example>.txt
+    GridSize grid; // the example's grid, as the core computed it
 };
 
 // Aspect ratios as the planner computes them: the size in m (Domain::size()), or divided by its largest side (Domain::box()).

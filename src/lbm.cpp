@@ -989,13 +989,7 @@ void LBM::do_time_step() { // call kernel_stream_collide to perform one LBM time
 	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->increment_time_step();
 }
 
-#ifdef FLUIDX3D_BASELINE
-void fluidx3d_baseline_hook(LBM& lbm, const ulong steps, const bool initialized); // test hook (tests/baseline): baseline dump or stability check
-#endif // FLUIDX3D_BASELINE
 void LBM::run(const ulong steps, const ulong total_steps) { // initializes the LBM simulation (copies data to device and runs initialize kernel), then runs LBM
-#ifdef FLUIDX3D_BASELINE
-	fluidx3d_baseline_hook(*this, steps, initialized);
-#endif // FLUIDX3D_BASELINE
 	info.append(steps, total_steps, get_t()); // total_steps parameter is just for runtime estimation
 	if(!initialized) {
 		initialize();
