@@ -38,51 +38,69 @@ public:
     /// @param runner     the simulation's runner, which drives the moving solids that change in time (may be null)
     BoundaryBuilder(LBM& lbm, const UnitScale& unit_scale, Runner* runner = nullptr) : lbm_(lbm), units_(unit_scale), runner_(runner) {}
 
-    /// Solid floor (z = 0).
+    /// @brief Solid floor (z = 0).
+    /// @return this builder
     BoundaryBuilder& set_solid_floor() { return set_solid_faces({ Face::Z_MIN }); }
 
-    /// Solid ceiling (z = Nz-1).
+    /// @brief Solid ceiling (z = Nz-1).
+    /// @return this builder
     BoundaryBuilder& set_solid_ceiling() { return set_solid_faces({ Face::Z_MAX }); }
 
-    /// Solid walls on the four X and Y faces.
+    /// @brief Solid walls on the four X and Y faces.
+    /// @return this builder
     BoundaryBuilder& set_solid_sides() { return set_solid_faces({ Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Y_MAX }); }
 
-    /// Solid walls on all six faces: a closed box.
+    /// @brief Solid walls on all six faces: a closed box.
+    /// @return this builder
     BoundaryBuilder& set_solid_box() { return set_solid_sides().set_solid_floor().set_solid_ceiling(); }
 
-    /// Solid walls on these faces.
+    /// @brief Solid walls on these faces.
+    /// @param faces the faces
+    /// @return this builder
     BoundaryBuilder& set_solid_faces(std::initializer_list<Face> faces) {
         for(const Face face : faces) solid_faces_[index(face)] = true;
         return *this;
     }
 
-    /// Every face not set solid or periodic open (TYPE_E): alone all six faces (free flow), with set_solid_floor() a
-    /// wind tunnel.
+    /// @brief Every face not set solid or periodic open (TYPE_E): alone all six faces (free flow), with
+    /// set_solid_floor() a wind tunnel.
+    /// @return this builder
     BoundaryBuilder& set_open_boundaries() {
         open_ = true;
         return *this;
     }
 
-    /// The two faces normal to this axis stay periodic, also with set_open_boundaries() (e.g. Z of a 2D domain).
+    /// @brief The two faces normal to this axis stay periodic, also with set_open_boundaries() (e.g. Z of a 2D domain).
+    /// @param axis the axis
+    /// @return this builder
     BoundaryBuilder& set_periodic(Axis axis) {
         periodic_[static_cast<std::size_t>(axis)] = true;
         return *this;
     }
 
-    /// All walls solid; moving_face slides at this speed along +y (X and Z faces) or +x (Y faces).
+    /// @brief All walls solid; one face slides along +y (X and Z faces) or +x (Y faces).
+    /// @param moving_face the sliding face
+    /// @param speed its speed
+    /// @return this builder
     BoundaryBuilder& preset_lid_driven_cavity(Face moving_face, Speed speed) {
         set_solid_box();
         lid_ = Lid{ moving_face, speed };
         return *this;
     }
 
-    /// A solid object at rest; Solid::MEASURED: the fluid's force on it is measured (Simulation::forces()).
+    /// @brief A solid object at rest.
+    /// @param shape the object
+    /// @param kind  Solid::MEASURED: the fluid's force on it is measured (Simulation::forces())
+    /// @return this builder
     BoundaryBuilder& add_solid(const Shape& shape, Solid kind = Solid::FIXED) {
         solids_.push_back({ shape, kind == Solid::MEASURED ? (uchar)(TYPE_S | TYPE_X) : (uchar)TYPE_S, {} });
         return *this;
     }
 
-    /// A solid object whose surface moves at this velocity, such as a turning cylinder (MOVING_BOUNDARIES).
+    /// @brief A solid object whose surface moves, such as a turning cylinder (MOVING_BOUNDARIES).
+    /// @param shape         the object
+    /// @param wall_velocity the velocity of its surface at a point
+    /// @return this builder
     BoundaryBuilder& add_moving_solid(const Shape& shape, VelocityField wall_velocity) {
         solids_.push_back({ shape, TYPE_S, std::move(wall_velocity), {} });
         return *this;
@@ -90,31 +108,42 @@ public:
 
     /// @brief A solid object whose surface velocity changes with the simulated time, such as a vibrating membrane
     /// (MOVING_BOUNDARIES): the simulation sets it every time step.
+    /// @param shape         the object
+    /// @param wall_velocity the velocity of its surface at a point and a simulated time
+    /// @return this builder
     BoundaryBuilder& add_moving_solid(const Shape& shape, TimedVelocityField wall_velocity) {
         if(!runner_) print_error("BoundaryBuilder: a moving solid that changes in time needs the simulation's runner: use Simulation::boundaries()");
         solids_.push_back({ shape, TYPE_S, {}, std::move(wall_velocity) });
         return *this;
     }
 
-    /// Initial velocity along x in all non-solid cells.
+    /// @brief Initial velocity along x in all non-solid cells.
+    /// @param u the velocity
+    /// @return this builder
     BoundaryBuilder& initialize_velocity_x(Speed u) {
         init_u_x_ = u;
         return *this;
     }
 
-    /// Initial velocity along y in all non-solid cells.
+    /// @brief Initial velocity along y in all non-solid cells.
+    /// @param u the velocity
+    /// @return this builder
     BoundaryBuilder& initialize_velocity_y(Speed u) {
         init_u_y_ = u;
         return *this;
     }
 
-    /// Initial velocity along z in all non-solid cells.
+    /// @brief Initial velocity along z in all non-solid cells.
+    /// @param u the velocity
+    /// @return this builder
     BoundaryBuilder& initialize_velocity_z(Speed u) {
         init_u_z_ = u;
         return *this;
     }
 
-    /// Initial velocity in all non-solid cells.
+    /// @brief Initial velocity in all non-solid cells.
+    /// @param u the velocity
+    /// @return this builder
     BoundaryBuilder& initialize_velocity(Velocity u) {
         init_u_x_ = u.x;
         init_u_y_ = u.y;
@@ -122,19 +151,26 @@ public:
         return *this;
     }
 
-    /// Initial velocity field in the non-solid cells, at each cell's center (after the uniform velocities).
+    /// @brief Initial velocity field in the non-solid cells, at each cell's center (after the uniform velocities).
+    /// @param velocity the velocity at a point
+    /// @return this builder
     BoundaryBuilder& initialize_velocity(VelocityField velocity) {
         velocity_field_ = std::move(velocity);
         return *this;
     }
 
-    /// Initial pressure field in the non-solid cells, relative to the fluid's at rest.
+    /// @brief Initial pressure field in the non-solid cells, relative to the fluid's at rest.
+    /// @param pressure the pressure at a point
+    /// @return this builder
     BoundaryBuilder& initialize_pressure(PressureField pressure) {
         pressure_field_ = std::move(pressure);
         return *this;
     }
 
-    /// A body force per mass in every cell, in addition to the simulation's uniform one (FORCE_FIELD), e.g. a pull toward a point.
+    /// @brief A body force per mass in every cell, in addition to the simulation's uniform one (FORCE_FIELD), e.g. a
+    /// pull toward a point.
+    /// @param force the force per mass at a point
+    /// @return this builder
     BoundaryBuilder& set_force_field(AccelerationField force) {
 #ifndef FORCE_FIELD
         print_error("BoundaryBuilder::set_force_field() needs FORCE_FIELD in the EXTENSIONS");
@@ -144,13 +180,18 @@ public:
     }
 
     /// @brief Atmospheric boundary layer u(z) = u_ref*(z/z_ref)^alpha in the non-solid cells above the floor.
-    /// @param alpha power-law exponent: 0.10 sea, 0.143 open terrain, 0.20 suburbs, 0.25-0.40 urban
+    /// @param reference_speed  the wind speed at the reference height
+    /// @param reference_height the height it is measured at
+    /// @param alpha            power-law exponent: 0.10 sea, 0.143 open terrain, 0.20 suburbs, 0.25-0.40 urban
+    /// @return this builder
     BoundaryBuilder& set_wind_profile_power_law(Speed reference_speed, Length reference_height, float32_t alpha = 0.143f) {
         wind_ = WindProfile{ reference_speed, reference_height, alpha };
         return *this;
     }
 
-    /// The face the wind comes from (default Y_MIN).
+    /// @brief The face the wind comes from (default Y_MIN).
+    /// @param direction the face
+    /// @return this builder
     BoundaryBuilder& set_wind_direction(Face direction) {
         wind_direction_ = direction;
         return *this;
@@ -240,17 +281,33 @@ public:
     }
 
 private:
-    struct Lid { Face face; Speed speed; };                                        ///< the moving wall of a lid-driven cavity
-    struct WindProfile { Speed reference_speed; Length reference_height; float32_t alpha; }; ///< power-law wind
-    struct SolidShape { ///< both velocities empty: at rest
-        Shape shape;
-        uchar flag;
-        VelocityField wall_velocity;
-        TimedVelocityField timed_velocity;
+    /// The moving wall of a lid-driven cavity.
+    struct Lid {
+        Face face;   ///< the sliding face
+        Speed speed; ///< its speed
     };
 
-    /// A task that sets the solid's cells to their velocity at the simulated time, every time step. The core marks the
-    /// cells next to a moving wall when its velocity is not zero, which is done once the wall first moves.
+    /// A power-law wind.
+    struct WindProfile {
+        Speed reference_speed;   ///< the wind speed at the reference height
+        Length reference_height; ///< the height it is measured at
+        float32_t alpha;         ///< the power-law exponent
+    };
+
+    /// A solid object; with both velocities empty it is at rest.
+    struct SolidShape {
+        Shape shape;                      ///< the object
+        uchar flag;                       ///< its cell flag: TYPE_S, or TYPE_S|TYPE_X when measured
+        VelocityField wall_velocity;      ///< the velocity of its surface, or empty
+        TimedVelocityField timed_velocity; ///< the velocity of its surface in time, or empty
+    };
+
+    /// @brief Schedules a task that sets the solid's cells to their velocity at the simulated time, every time step.
+    ///
+    /// The core marks the cells next to a moving wall when its velocity is not zero, which is done once the wall first
+    /// moves.
+    /// @param shape    the solid's cells
+    /// @param velocity the velocity of its surface at a point and a simulated time
     void schedule_moving_solid(const Shape::Cells& shape, const TimedVelocityField& velocity) const {
         std::vector<uint64_t> cells;
         for(uint64_t n = 0ull; n < lbm_.get_N(); n++) {
@@ -286,30 +343,41 @@ private:
         });
     }
 
-    static constexpr Face all_faces[] = { Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Y_MAX, Face::Z_MIN, Face::Z_MAX };
-    static std::size_t index(Face face) { return static_cast<std::size_t>(face); }
-    static std::size_t axis_index(Face face) { return index(face) / 2u; } ///< X faces 0, Y faces 1, Z faces 2
+    static constexpr Face all_faces[] = { Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Y_MAX, Face::Z_MIN, Face::Z_MAX }; ///< every face
 
+    /// @param face a face
+    /// @return its index in the per-face arrays
+    static std::size_t index(Face face) { return static_cast<std::size_t>(face); }
+
+    /// @param face a face
+    /// @return the index of its axis: X faces 0, Y faces 1, Z faces 2
+    static std::size_t axis_index(Face face) { return index(face) / 2u; }
+
+    /// @brief Sets a cell's velocity.
+    /// @param n the cell's index
+    /// @param u the velocity
     void set_velocity(uint64_t n, const Velocity& u) {
         lbm_.u.x[n] = units_.velocity(u.x);
         lbm_.u.y[n] = units_.velocity(u.y);
         lbm_.u.z[n] = units_.velocity(u.z);
     }
 
-    LBM& lbm_;
-    UnitScale units_;
-    Runner* runner_;
+    LBM& lbm_;        ///< the LBM whose grid is set
+    UnitScale units_; ///< the simulation's unit scale
+    Runner* runner_;  ///< the simulation's runner, or null
 
-    std::array<bool, 6> solid_faces_{}; ///< indexed by Face
-    std::array<bool, 3> periodic_{};    ///< indexed by Axis
-    bool open_ = false;                 ///< the faces neither solid nor periodic
+    std::array<bool, 6> solid_faces_{}; ///< the solid faces, indexed by Face
+    std::array<bool, 3> periodic_{};    ///< the periodic axes, indexed by Axis
+    bool open_ = false;                 ///< whether the faces neither solid nor periodic are open
 
-    std::vector<SolidShape> solids_;
-    std::optional<Speed> init_u_x_, init_u_y_, init_u_z_;
-    VelocityField velocity_field_;
-    PressureField pressure_field_;
-    AccelerationField force_field_;
-    std::optional<Lid> lid_;
-    std::optional<WindProfile> wind_;
-    Face wind_direction_ = Face::Y_MIN;
+    std::vector<SolidShape> solids_;                      ///< the solid objects
+    std::optional<Speed> init_u_x_;                       ///< the uniform initial velocity along x
+    std::optional<Speed> init_u_y_;                       ///< the uniform initial velocity along y
+    std::optional<Speed> init_u_z_;                       ///< the uniform initial velocity along z
+    VelocityField velocity_field_;                        ///< the initial velocity field, or empty
+    PressureField pressure_field_;                        ///< the initial pressure field, or empty
+    AccelerationField force_field_;                       ///< the body force field, or empty
+    std::optional<Lid> lid_;                              ///< the lid of a lid-driven cavity
+    std::optional<WindProfile> wind_;                     ///< the wind profile
+    Face wind_direction_ = Face::Y_MIN;                   ///< the face the wind comes from
 };

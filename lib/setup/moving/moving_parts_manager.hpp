@@ -22,20 +22,24 @@
 /// @endcode
 class MovingPartsManager {
 public:
-    /// @param lbm    the LBM the parts are voxelized in
-    /// @param unit_scale  the simulation's unit scale
-    /// @param plan   the simulation's plan, for its model's transform (see MovingPart::centered_on_model())
-    /// @param runner the simulation's runner, which turns the parts
+    /// @param lbm        the LBM the parts are voxelized in
+    /// @param unit_scale the simulation's unit scale
+    /// @param plan       the simulation's plan, for its model's transform (see MovingPart::centered_on_model())
+    /// @param runner     the simulation's runner, which turns the parts
     MovingPartsManager(LBM& lbm, const UnitScale& unit_scale, const DomainPlan& plan, Runner& runner)
         : lbm_(lbm), units_(unit_scale), plan_(plan), runner_(runner) {}
 
+    /// @brief Adds a part.
+    /// @param part the part
+    /// @return this manager
     MovingPartsManager& add(const MovingPart& part) {
         configs_.push_back(part);
         return *this;
     }
 
-    /// Loads the parts with the model's transform, voxelizes them with their angular velocity and schedules their
-    /// turns, each at its update interval.
+    /// @brief Loads the parts with the model's transform, voxelizes them with their angular velocity and schedules
+    /// their turns, each at its update interval.
+    /// @return this manager
     MovingPartsManager& initialize() {
         if(initialized_) print_error("MovingPartsManager: initialize() was already called");
         initialized_ = true;
@@ -85,14 +89,14 @@ public:
     }
 
 private:
-    LBM& lbm_;
-    UnitScale units_;
-    const DomainPlan& plan_;
-    Runner& runner_;
-    std::vector<MovingPart> configs_;
-    bool initialized_{false};
+    LBM& lbm_;                        ///< the LBM the parts are voxelized in
+    UnitScale units_;                 ///< the simulation's unit scale
+    const DomainPlan& plan_;          ///< the simulation's plan
+    Runner& runner_;                  ///< the simulation's runner
+    std::vector<MovingPart> configs_; ///< the parts added
+    bool initialized_{false};         ///< whether initialize() was called
 
-    // the transform of the simulation's model (exits with a message if it has none)
+    /// @return the transform of the simulation's model (exits with a message if it has none)
     ModelPlacement model_placement() const {
         std::optional<ModelPlacement> placement;
         try {
@@ -103,25 +107,29 @@ private:
         return *placement;
     }
 
+    /// A part while the simulation runs.
     struct RuntimePart {
-        MovingPart config{""};
-        std::unique_ptr<Mesh> mesh;
-        float32_t lbm_omega{0.0f};      // angular velocity in rad per time step
-        float3 rotation_center{0.0f};
-        float3 rotation_axis{0.0f, 1.0f, 0.0f};
-        bool tumbling{false};
-        Duration update_interval{};
-        uint64_t last_update_t{0};
+        MovingPart config{""};                  ///< the part as added
+        std::unique_ptr<Mesh> mesh;             ///< its mesh, placed and turned
+        float32_t lbm_omega{0.0f};              ///< its angular velocity in rad per time step
+        float3 rotation_center{0.0f};           ///< its center of mass in cells
+        float3 rotation_axis{0.0f, 1.0f, 0.0f}; ///< the unit vector of its axis
+        bool tumbling{false};                   ///< whether it tumbles (turned in steps) instead of rotating
+        Duration update_interval{};             ///< the simulated time between its turns
+        uint64_t last_update_t{0};              ///< the time step of its last turn
     };
 
     std::vector<std::unique_ptr<RuntimePart>> parts_; ///< stable addresses: the runner's tasks refer to them
 
-    // the angular velocity on the part's cells: tumbling parts turn in steps and have none
+    /// @param rp a part
+    /// @return the angular velocity on the part's cells; tumbling parts turn in steps and have none
     static float3 angular_velocity(const RuntimePart& rp) {
         return rp.tumbling ? float3(0.0f) : rp.rotation_axis * rp.lbm_omega;
     }
 
-    // rad per time step: a tumbling part's rate, or the tip speed at half the part's largest dimension
+    /// @param config the part
+    /// @param mesh   its mesh, placed
+    /// @return rad per time step: a tumbling part's rate, or the tip speed at half the part's largest dimension
     float32_t lbm_angular_velocity(const MovingPart& config, const Mesh* mesh) const {
         if(config.get_motion_type() == MotionType::TUMBLING) {
             return config.get_tumble_rate().rad_per_s() * units_.time_step().si();
@@ -130,7 +138,11 @@ private:
         return units_.velocity(config.get_tip_speed()) / radius_lbm;
     }
 
-    // the part's update interval, by default the time its tip takes to move half a cell (at least one time step)
+    /// @param config    the part
+    /// @param lbm_omega its angular velocity in rad per time step
+    /// @param mesh      its mesh, placed
+    /// @return the part's update interval: the one set, or by default the time its tip takes to move half a cell (at
+    /// least one time step)
     Duration update_interval(const MovingPart& config, float32_t lbm_omega, const Mesh* mesh) const {
         if(const auto& interval = config.get_update_interval()) return *interval;
         const float32_t tip_speed_lbm = fabs(lbm_omega) * 0.5f * mesh->get_max_size();
@@ -138,7 +150,8 @@ private:
         return units_.si_time((uint64_t)steps);
     }
 
-    // turns the part by the angle since its last update and re-voxelizes it
+    /// @brief Turns a part by the angle since its last update and re-voxelizes it.
+    /// @param rp the part
     void turn(RuntimePart& rp) {
         const uint64_t t = lbm_.get_t();
         if(t == rp.last_update_t) return; // no time has passed (the start)

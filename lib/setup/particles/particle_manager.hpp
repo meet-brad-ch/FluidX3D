@@ -13,29 +13,44 @@
 /// Seeding patterns for ParticleManager: positions in metres from the domain's origin corner.
 class ParticleSeeder {
 public:
+    /// Particles at random positions in a shape.
     struct Pattern {
-        enum class Shape { SPHERE, CUBE } shape;
-        Position center;
-        Length size; ///< the sphere's radius, the cube's half side
-        uint32_t count;
+        /// The shape's kind.
+        enum class Shape {
+            SPHERE, ///< a sphere
+            CUBE    ///< an axis-aligned cube
+        };
+        Shape shape;     ///< the shape's kind
+        Position center; ///< the shape's center
+        Length size;     ///< the sphere's radius, the cube's half side
+        uint32_t count;  ///< the number of particles
     };
 
-    /// count particles at random positions inside a sphere.
+    /// @brief Particles at random positions inside a sphere.
+    /// @param center the sphere's center
+    /// @param radius its radius
+    /// @param count  the number of particles
+    /// @return this seeder
     ParticleSeeder& sphere(Position center, Length radius, uint32_t count) {
         patterns_.push_back({ Pattern::Shape::SPHERE, center, radius, count });
         return *this;
     }
 
-    /// count particles at random positions inside an axis-aligned cube.
+    /// @brief Particles at random positions inside an axis-aligned cube.
+    /// @param center    the cube's center
+    /// @param half_side half its side
+    /// @param count     the number of particles
+    /// @return this seeder
     ParticleSeeder& cube(Position center, Length half_side, uint32_t count) {
         patterns_.push_back({ Pattern::Shape::CUBE, center, half_side, count });
         return *this;
     }
 
+    /// @return the patterns, in the order added
     const std::vector<Pattern>& patterns() const { return patterns_; }
 
 private:
-    std::vector<Pattern> patterns_;
+    std::vector<Pattern> patterns_; ///< the patterns, in the order added
 };
 
 /// @brief Places the simulation's particles (PARTICLES extension, Simulation::set_particles()) from seeding patterns
@@ -46,19 +61,22 @@ private:
 /// @endcode
 class ParticleManager {
 public:
-    /// @param lbm   an LBM created with particles
+    /// @param lbm        an LBM created with particles
     /// @param unit_scale the simulation's unit scale
     ParticleManager(LBM& lbm, const UnitScale& unit_scale) : lbm_(lbm), units_(unit_scale) {}
 
+    /// @return the seeder to add patterns to
     ParticleSeeder& seed() { return seeder_; }
 
-    /// The particles are drawn (VIS_PARTICLES; default).
+    /// @brief The particles are drawn (VIS_PARTICLES; default).
+    /// @return this manager
     ParticleManager& show() {
         visible_ = true;
         return *this;
     }
 
-    /// The particles are not drawn.
+    /// @brief The particles are not drawn.
+    /// @return this manager
     ParticleManager& hide() {
         visible_ = false;
         return *this;
@@ -103,11 +121,14 @@ public:
     }
 
 private:
-    LBM& lbm_;
-    UnitScale units_;
-    ParticleSeeder seeder_;
-    bool visible_ = true;
+    LBM& lbm_;              ///< the LBM with the particles
+    UnitScale units_;       ///< the simulation's unit scale
+    ParticleSeeder seeder_; ///< the seeding patterns
+    bool visible_ = true;   ///< whether the particles are drawn
 
+    /// @brief Sets a particle's position, if the index is within the particles.
+    /// @param index   the particle's index
+    /// @param pos_lbm the position in cells from the domain center
     void set_particle_position(uint64_t index, float3 pos_lbm) {
         if(index < lbm_.particles->length()) {
             lbm_.particles->x[index] = pos_lbm.x;
@@ -116,7 +137,8 @@ private:
         }
     }
 
-    // the core's particle positions are in cells from the domain center
+    /// @param p a position in metres from the domain's origin corner
+    /// @return the position in cells from the domain center, as the core keeps particle positions
     float3 position_to_lbm(const Position& p) const {
         return float3(units_.length(p.x) - 0.5f * (float32_t)lbm_.get_Nx(),
                       units_.length(p.y) - 0.5f * (float32_t)lbm_.get_Ny(),

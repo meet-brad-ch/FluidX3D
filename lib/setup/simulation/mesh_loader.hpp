@@ -4,11 +4,14 @@
 #include "setup/domain/domain_plan.hpp"
 #include <memory>
 
-/// Meshes placed like the planned model.
+/// Meshes placed like the planned model (internal, for Simulation's voxelization).
 class MeshLoader {
 public:
     /// @brief The full mesh of a half model: rotated and scaled as planned, completed by its mirror image across the
-    /// plane normal to mirror, and centered on the planned center.
+    /// plane normal to an axis, and centered on the planned center.
+    /// @param plan the plan, with the model's file, rotation, scale and center
+    /// @param mirror the axis normal to the symmetry plane
+    /// @return the full mesh
     static std::unique_ptr<Mesh> load_mirrored(const DomainPlan& plan, Axis mirror) {
         const std::unique_ptr<Mesh> half(read_stl(plan.stl_path, 1.0f, plan.rotation_matrix));
         half->scale(plan.lbm_reference_size / half->get_max_size());

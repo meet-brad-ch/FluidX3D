@@ -3,11 +3,12 @@
 #include <algorithm>
 #include <cmath>
 
-namespace {
-std::uint32_t round_to_cells(float cells) { // as the core's to_uint()
+/// @brief Rounds a number of cells to the nearest whole cell, as the core's to_uint().
+/// @param cells the number of cells
+/// @return the whole number, at least 0
+static std::uint32_t round_to_cells(float cells) {
     return static_cast<std::uint32_t>(std::max(cells + 0.5f, 0.5f));
 }
-} // namespace
 
 GridSize grid_for_memory(float aspect_x, float aspect_y, float aspect_z, std::uint32_t budget_mb, LatticeMemory lattice) {
     const float bytes_per_cell = static_cast<float>(lattice.bytes_per_cell);

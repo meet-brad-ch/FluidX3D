@@ -27,31 +27,41 @@
 class ThermalBuilder {
 public:
     /// @param lbm          a thermal LBM
-    /// @param unit_scale        the simulation's unit scale
+    /// @param unit_scale   the simulation's unit scale
     /// @param temperatures the scale the LBM was created with
     /// @param gravity_axis the axis the simulation's gravity acts along, for the hydrostatic start
     ThermalBuilder(LBM& lbm, const UnitScale& unit_scale, const TemperatureScale& temperatures, Axis gravity_axis)
         : lbm_(lbm), units_(unit_scale), temperatures_(temperatures), gravity_axis_(gravity_axis) {}
 
-    /// A wall at this temperature, one cell inward from the face.
+    /// @brief The hot wall, one cell inward from a face.
+    /// @param face        the face
+    /// @param temperature the wall's temperature
+    /// @return this builder
     ThermalBuilder& set_hot_wall(Face face, Temperature temperature) {
         hot_ = Wall{ face, temperature };
         return *this;
     }
 
-    /// A wall at this temperature, one cell inward from the face.
+    /// @brief The cold wall, one cell inward from a face.
+    /// @param face        the face
+    /// @param temperature the wall's temperature
+    /// @return this builder
     ThermalBuilder& set_cold_wall(Face face, Temperature temperature) {
         cold_ = Wall{ face, temperature };
         return *this;
     }
 
-    /// Initial density from the hydrostatic pressure of the simulation's gravity, relative to half the domain height.
+    /// @brief Initial density from the hydrostatic pressure of the simulation's gravity, relative to half the domain
+    /// height.
+    /// @return this builder
     ThermalBuilder& initialize_hydrostatic() {
         init_hydrostatic_ = true;
         return *this;
     }
 
-    /// Random initial velocity components up to this speed in the fluid cells, to trigger convection.
+    /// @brief Random initial velocity components in the fluid cells, to trigger convection.
+    /// @param magnitude the largest component
+    /// @return this builder
     ThermalBuilder& initialize_random_perturbation(Speed magnitude) {
         perturbation_ = magnitude;
         return *this;
@@ -100,17 +110,26 @@ public:
     }
 
 private:
-    struct Wall { Face face; Temperature temperature; }; ///< a wall at a fixed temperature
+    /// A wall at a fixed temperature.
+    struct Wall {
+        Face face;               ///< the face the wall is one cell inward from
+        Temperature temperature; ///< the wall's temperature
+    };
 
-    LBM& lbm_;
-    UnitScale units_;
-    TemperatureScale temperatures_;
-    Axis gravity_axis_;
-    std::optional<Wall> hot_, cold_;
-    bool init_hydrostatic_ = false;
-    std::optional<Speed> perturbation_;
+    LBM& lbm_;                          ///< the thermal LBM
+    UnitScale units_;                   ///< the simulation's unit scale
+    TemperatureScale temperatures_;     ///< the temperature scale
+    Axis gravity_axis_;                 ///< the axis gravity acts along
+    std::optional<Wall> hot_;           ///< the hot wall
+    std::optional<Wall> cold_;          ///< the cold wall
+    bool init_hydrostatic_ = false;     ///< initialize_hydrostatic()
+    std::optional<Speed> perturbation_; ///< initialize_random_perturbation()
 
-    static float32_t random_symmetric(uint32_t& seed, float32_t magnitude) { // LCG, one seed per thread
+    /// @brief A random number from a linear congruential generator, one seed per thread.
+    /// @param seed      the thread's seed, advanced
+    /// @param magnitude the largest magnitude
+    /// @return a number between -magnitude and magnitude
+    static float32_t random_symmetric(uint32_t& seed, float32_t magnitude) {
         seed = seed * 1103515245u + 12345u;
         float32_t r = (float32_t)(seed & 0x7FFFFFFFu) / (float32_t)0x7FFFFFFFu;
         return magnitude * (2.0f * r - 1.0f);

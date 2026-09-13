@@ -11,8 +11,15 @@ enum class Face {
 };
 
 /// A coordinate axis; Z is the height.
-enum class Axis { X, Y, Z };
+enum class Axis {
+    X, ///< the X axis
+    Y, ///< the Y axis
+    Z  ///< the Z axis, the height
+};
 
 /// What a solid object is for: at rest, or at rest with the fluid's force on it measured (Simulation::forces(), the
 /// FORCE_FIELD extension).
-enum class Solid { FIXED, MEASURED };
+enum class Solid {
+    FIXED,   ///< at rest
+    MEASURED ///< at rest, with the fluid's force on it measured
+};
