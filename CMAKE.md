@@ -64,7 +64,7 @@ This build system uses a **unity build** approach where each example compiles al
 - No shared library = No ODR violations
 - Matches original FluidX3D architecture philosophy
 
-**Exception: the Setup API library.** The parts of the Setup API that do not include `lbm.hpp` (physical quantities, unit scaling, lattice and geometry sizing, SDF generation) do not depend on `defines.hpp`; what they need from an example's configuration, the bytes per lattice cell, is passed in. They are compiled once into the static library `fluidx3d::setup` (`lib/setup/CMakeLists.txt`) and unit-tested on the CPU. The parts that use the LBM are compiled per example, like the core.
+**Exception: the Setup API library.** The parts of the Setup API that do not include `lbm.hpp` (physical quantities, unit scaling, lattice and geometry sizing, the domain plan, which uses the SDF cache) do not depend on `defines.hpp`; what they need from an example's configuration, the bytes per lattice cell, is passed in. They are compiled once into the static library `fluidx3d::setup` (`lib/setup/CMakeLists.txt`) and unit-tested on the CPU. The parts that use the LBM are compiled per example, like the core.
 
 ---
 

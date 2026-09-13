@@ -1,7 +1,7 @@
 #include "setup/domain/domain_plan.hpp"
 #include "setup/core/setup_error.hpp"
 #include "setup/domain/geometry_scaler.hpp"
-#include "setup/sdf/sdf_generator.hpp"
+#include "sdf_cache/sdf_cache.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -32,13 +32,11 @@ void DomainPlanner::choose_voxelization(DomainPlan& plan, const Domain& domain) 
         return;
     }
     if(!model.is_sdf() && model.file_.find(".stl") != string::npos) {
-        // convert the STL to an SDF at the base grid resolution (cached), for smoother voxelization
-        SDFGenerator sdf_gen;
-        sdf_gen.set_cache_dir("resources/sdf_cache/")
-               .enable_cache(true)
-               .set_fix_mesh(model.repair_mesh_)
-               .set_verbose(true);
-        const std::string sdf_path = sdf_gen.generate(plan.stl_path, plan.base_grid.x, plan.base_grid.y, plan.base_grid.z, 1);
+        // convert the STL to an SDF at the base grid resolution (cached in resources/sdf_cache/), for smoother voxelization
+        SDFCacheConfig cache;
+        cache.fix_mesh = model.repair_mesh_;
+        cache.verbose = true;
+        const std::string sdf_path = SDFCacheManager(cache).get_or_generate(plan.stl_path, plan.base_grid.x, plan.base_grid.y, plan.base_grid.z);
         if(!sdf_path.empty()) {
             plan.voxelization_path = sdf_path;
             plan.voxelize_sdf = true;

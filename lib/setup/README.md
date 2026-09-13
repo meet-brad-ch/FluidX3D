@@ -11,7 +11,6 @@ simulation with them.
 | `core/` | Quantities and literals (`quantity.hpp`), `UnitScale`, `TemperatureScale`, `Fluid`, `SetupError` | library |
 | `domain/` | `Domain`, `Model`, `DomainPlanner`, `Shape`, lattice sizing (`lattice.hpp`), `ModelPlacement`, `GeometryScaler` | library |
 | `graphics/` | `CameraView` (library); `GraphicsConfig`, `VideoRecorder` | library, with each example |
-| `sdf/` | The cached SDF of an STL model | library |
 | `simulation/` | `StepSchedule` (library); `Simulation`, `Runner`, `FieldReader`, `MeshLoader` | library, with each example |
 | `boundaries/`, `surface/`, `moving/`, `particles/`, `analysis/` | The builders that write to the LBM | with each example |
 

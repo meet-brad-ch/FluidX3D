@@ -1,6 +1,7 @@
-# The Setup API layers that do not need the LBM: physical quantities and unit scaling (core/),
-# lattice sizing (domain/). Unlike the core they do not depend on an example's defines.hpp,
-# so they are compiled once and unit-tested on the CPU.
+# The Setup API layers that do not need the LBM: physical quantities and unit scaling (core/), lattice sizing,
+# shapes and the domain plan (domain/), cameras, the step schedule. Unlike the core they do not depend on an
+# example's defines.hpp, so they are compiled once and unit-tested on the CPU. The SDF cache (fluidx3d::sdf_cache)
+# is theirs to use.
 add_library(fluidx3d_setup STATIC
     core/unit_scale.cpp
     domain/lattice.cpp
@@ -11,7 +12,6 @@ add_library(fluidx3d_setup STATIC
     domain/shape.cpp
     graphics/camera_view.cpp
     simulation/step_schedule.cpp
-    sdf/sdf_generator.cpp
 )
 add_library(fluidx3d::setup ALIAS fluidx3d_setup)
 # lib/ is the only include root: the API is always included as "setup/...", so none of its headers

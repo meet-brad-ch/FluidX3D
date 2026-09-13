@@ -9,8 +9,7 @@ include(configs)               # options, build type, fluidx3d::build_options, f
 include(FluidX3DDependencies)  # pinned third-party code: LodePNG, OpenCL headers, SDFGen
 include(FluidX3DPlatform)      # fluidx3d::platform: OpenCL ICD loader, system libraries, X11, threads
 
-add_subdirectory(src/sdf_cache)
-target_compile_definitions(sdf_cache PRIVATE SDFGEN_VERSION_TAG="${SDFGEN_TAG}") # the SDFGen version is part of the SDF cache key
+add_subdirectory(src/sdf_cache)  # fluidx3d::sdf_cache: SDFs of STL models, generated with SDFGen and cached
 add_subdirectory(lib/setup)    # fluidx3d::setup: the Setup API layers that do not need the LBM
 
 include(FluidX3DCore)          # fluidx3d::core and the core source lists
