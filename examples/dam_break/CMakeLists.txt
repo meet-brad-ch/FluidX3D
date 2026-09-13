@@ -1,4 +1,3 @@
-# Example: dam_break
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(NAME dam_break)
+add_fluidx3d_example(NAME dam_break
+    EXTENSIONS FP16S VOLUME_FORCE SURFACE INTERACTIVE_GRAPHICS
+)

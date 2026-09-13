@@ -1,4 +1,3 @@
-# Example: stokes_drag
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(NAME stokes_drag)
+add_fluidx3d_example(NAME stokes_drag
+    EXTENSIONS FORCE_FIELD EQUILIBRIUM_BOUNDARIES
+)

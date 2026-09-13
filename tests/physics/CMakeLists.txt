@@ -10,7 +10,7 @@ function(fluidx3d_add_physics_test name)
         set(ARG_TIMEOUT 300)
     endif()
     set(defines_dir ${CMAKE_CURRENT_BINARY_DIR}/${name})
-    fluidx3d_configure_defines(${defines_dir} ${ARG_EXTENSIONS})
+    fluidx3d_configure_defines(${defines_dir} EXTENSIONS ${ARG_EXTENSIONS})
 
     _fluidx3d_add_executable(physics_${name} ${defines_dir} ${CMAKE_CURRENT_SOURCE_DIR}/${name}.cpp)
     target_include_directories(physics_${name}_setup PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}) # physics_check.hpp

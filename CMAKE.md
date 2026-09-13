@@ -42,9 +42,8 @@ FluidX3D/
 └── examples/                  # Example simulations (41 total)
     ├── CMakeLists.txt
     ├── taylor_green_3d/
-    │   ├── defines.hpp         # Example-specific configuration
     │   ├── main.cpp            # Implements main_setup()
-    │   └── CMakeLists.txt      # 1 line: add_fluidx3d_example()
+    │   └── CMakeLists.txt      # add_fluidx3d_example(NAME ... EXTENSIONS ...): its configuration
     └── ...
 ```
 
@@ -109,7 +108,7 @@ add_fluidx3d_example(NAME cow)
 
 For an example `<name>`, `add_fluidx3d_example()` creates:
 
-1. **`<name>_setup`** (OBJECT library): the example's `main.cpp`, which also compiles the Setup API headers that use the LBM, with the example directory (its `defines.hpp`) on the include path and `fluidx3d::warnings` applied.
+1. **`<name>_setup`** (OBJECT library): the example's `main.cpp`, which also compiles the Setup API headers that use the LBM, with its generated `defines.hpp` (see [Configuration Per Example](#configuration-per-example)) on the include path and `fluidx3d::warnings` applied.
 2. **`<name>`** (executable in `bin/`): the core sources (`graphics.cpp`, `info.cpp`, `kernel.cpp`, `lbm.cpp`, `main.cpp`, `shapes.cpp`), linked with `<name>_setup` and `fluidx3d::core`.
 3. **`<name>_baseline`** and the CTest test **`baseline_<name>`** (when `FLUIDX3D_BUILD_TESTS` is on): a headless build of the same example that prints its setup state instead of running (see [Tests](#tests)).
 
@@ -126,7 +125,14 @@ For an example `<name>`, `add_fluidx3d_example()` creates:
 
 ## Configuration Per Example
 
-Each example has its own `examples/<name>/defines.hpp` file that configures:
+Each example names its configuration in its `CMakeLists.txt`; `add_fluidx3d_example()` generates the `defines.hpp` the core reads from `cmake/defines.hpp.in` (`fluidx3d_configure_defines()` in `cmake/FluidX3DExample.cmake`). A macro the template does not know stops the configuration with a message.
+
+```cmake
+add_fluidx3d_example(NAME <name>
+    EXTENSIONS <macros...>                 # the options below, in any order
+    SETTINGS "<macro> <value>" ...         # optional: graphics settings with a value
+)
+```
 
 ### Available Options
 
@@ -142,34 +148,28 @@ Each example has its own `examples/<name>/defines.hpp` file that configures:
   - `TEMPERATURE`
   - `SUBGRID`
   - `PARTICLES`
-- **Graphics Mode**:
-  - `INTERACTIVE_GRAPHICS` (default)
+- **Graphics Mode** (none: console only):
+  - `INTERACTIVE_GRAPHICS`
   - `INTERACTIVE_GRAPHICS_ASCII`
   - `GRAPHICS`
+- **Settings** (`SETTINGS`): `GRAPHICS_FRAME_WIDTH`, `GRAPHICS_FRAME_HEIGHT`, `GRAPHICS_BACKGROUND_COLOR`, `GRAPHICS_U_MAX`, `GRAPHICS_TRANSPARENCY`, ... (the defaults and their meaning: `cmake/defines.hpp.in`)
 
 ### Example Configurations
 
-**taylor_green_3d:**
-```cpp
-#define D3Q19
-#define SRT
-#define INTERACTIVE_GRAPHICS
-```
-
-**karman_vortex_street:**
-```cpp
-#define D2Q9                    // 2D simulation
-#define SRT
-#define FP16S                   // Compression
-#define EQUILIBRIUM_BOUNDARIES
-#define INTERACTIVE_GRAPHICS
-```
-
-**benchmark:**
-```cpp
-#define D3Q19
-#define SRT
-#define BENCHMARK               // Disables all extensions
+```cmake
+add_fluidx3d_example(NAME taylor_green_3d
+    EXTENSIONS INTERACTIVE_GRAPHICS
+)
+add_fluidx3d_example(NAME karman_vortex_street
+    EXTENSIONS D2Q9 FP16S EQUILIBRIUM_BOUNDARIES INTERACTIVE_GRAPHICS
+)
+add_fluidx3d_example(NAME city
+    EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS
+    SETTINGS "GRAPHICS_FRAME_WIDTH 3840" "GRAPHICS_FRAME_HEIGHT 2160" "GRAPHICS_U_MAX 0.15f"
+)
+add_fluidx3d_example(NAME benchmark
+    EXTENSIONS BENCHMARK        # disables all extensions
+)
 ```
 
 **Note**: Each example compiles all core sources with its own configuration (Unity Build). This allows different examples to have different features enabled simultaneously without conflicts.
@@ -183,10 +183,9 @@ Each example has its own `examples/<name>/defines.hpp` file that configures:
 1. **Create example directory**:
    ```bash
    mkdir examples/my_example
-   cp examples/taylor_green_3d/defines.hpp examples/my_example/
    ```
 
-2. **Edit `defines.hpp`**: Enable required extensions
+2. **Name the extensions** in its `CMakeLists.txt` (step 4)
 
 3. **Create `main.cpp`**:
    ```cpp
@@ -203,7 +202,9 @@ Each example has its own `examples/<name>/defines.hpp` file that configures:
 
 4. **Create `CMakeLists.txt`**:
    ```cmake
-   add_fluidx3d_example(NAME my_example)
+   add_fluidx3d_example(NAME my_example
+       EXTENSIONS FP16S INTERACTIVE_GRAPHICS
+   )
    ```
 
 5. **Add to `examples/CMakeLists.txt`**:
@@ -262,7 +263,7 @@ Examples whose STL files are missing report their baseline test as skipped.
 
 The build also checks that every Setup API header compiles on its own (`tests/headers/`): each header gets a source file that includes only it, compiled with every extension and with none. A header that needs an extension stops with an `#error` that names it (for example `surface_builder.hpp` without `SURFACE`) and is left out of the configuration without it.
 
-Unit tests are added with `fluidx3d_add_test(<name> SOURCES <files...> LINK <targets...>)` in `tests/CMakeLists.txt`. A physics test is a `main_setup()` in `tests/physics/<name>.cpp` that ends with `PhysicsCheck::report()`, added with `fluidx3d_add_physics_test(<name> EXTENSIONS <defines...>)` in `tests/physics/CMakeLists.txt`; its `defines.hpp` is generated from `tests/physics/defines.hpp.in` with those extensions.
+Unit tests are added with `fluidx3d_add_test(<name> SOURCES <files...> LINK <targets...>)` in `tests/CMakeLists.txt`. A physics test is a `main_setup()` in `tests/physics/<name>.cpp` that ends with `PhysicsCheck::report()`, added with `fluidx3d_add_physics_test(<name> EXTENSIONS <defines...>)` in `tests/physics/CMakeLists.txt`; its `defines.hpp` is generated from `cmake/defines.hpp.in` with those extensions, as an example's.
 
 ---
 
@@ -325,7 +326,7 @@ Mesh* cow = read_stl(get_resource_path("Cow_t.stl"), ...);
 
 ### Include Path Priority
 
-The example directory comes first on each example's include path, so its `defines.hpp` is found before the core's default `src/defines.hpp`.
+Each example's generated `defines.hpp` (`build/<...>/examples/<name>/defines/`) comes first on its include path, before the core's `src/`.
 
 ### Performance Considerations
 

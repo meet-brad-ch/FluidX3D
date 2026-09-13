@@ -1,6 +1,3 @@
-# Example: edf
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(
-    NAME edf
+add_fluidx3d_example(NAME edf
+    EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES MOVING_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS
 )

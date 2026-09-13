@@ -1,4 +1,3 @@
-# Example: raindrop
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(NAME raindrop)
+add_fluidx3d_example(NAME raindrop
+    EXTENSIONS FP16C VOLUME_FORCE EQUILIBRIUM_BOUNDARIES SURFACE INTERACTIVE_GRAPHICS
+)

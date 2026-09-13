@@ -1,4 +1,3 @@
-# Example: colliding_droplets
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(NAME colliding_droplets)
+add_fluidx3d_example(NAME colliding_droplets
+    EXTENSIONS FP16S VOLUME_FORCE FORCE_FIELD SURFACE INTERACTIVE_GRAPHICS
+)
