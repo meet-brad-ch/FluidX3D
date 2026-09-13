@@ -111,6 +111,15 @@ TEST(Domain, SizeAndPlacementNeedTheirCounterparts) {
     EXPECT_NO_THROW(Domain::around(Model("any.stl").length(1_m)).size(1_m, 2_m, 1_m).gap_to_inlet(0.1_m).validate());
 }
 
+TEST(Model, RequiredFilesAndInstructionsAreKept) {
+    const Model model = Model("body.stl").needs({ "rotor.stl", "tail.stl" }).instructions({ "1. download", "2. split" });
+    ASSERT_EQ(model.required_files().size(), 2u);
+    EXPECT_EQ(model.required_files()[1], "tail.stl");
+    ASSERT_EQ(model.instruction_lines().size(), 2u);
+    EXPECT_EQ(model.instruction_lines()[0], "1. download");
+    EXPECT_TRUE(Model("alone.stl").required_files().empty());
+}
+
 TEST(Model, KnowsAnSdfByItsExtension) {
     EXPECT_TRUE(Model("sdf_cache/cow_128x428x258.SDF").is_sdf());
     EXPECT_FALSE(Model("Cow_t.stl").is_sdf());

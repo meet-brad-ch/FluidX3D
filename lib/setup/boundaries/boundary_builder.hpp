@@ -6,11 +6,13 @@
 #include "setup/core/boundary_utils.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
 #include "setup/domain/shape.hpp"
+#include "setup/simulation/runner.hpp"
 #include "lbm.hpp"
 #include <array>
 #include <functional>
 #include <initializer_list>
 #include <optional>
+#include <utility>
 #include <vector>
 
 /// @brief Domain boundaries, solid objects and the initial flow in physical units; apply() writes them to the grid
@@ -27,12 +29,14 @@
 class BoundaryBuilder {
 public:
     using VelocityField = std::function<Velocity(Position)>; ///< a velocity at a point in metres from the origin corner
+    using TimedVelocityField = std::function<Velocity(Position, Duration)>; ///< a velocity at a point and a simulated time
     using PressureField = std::function<Pressure(Position)>; ///< a pressure relative to the fluid's at rest
     using AccelerationField = std::function<AccelerationVector(Position)>; ///< a body force per mass at a point
 
-    /// @param lbm   the LBM whose flags, velocities and densities are set
+    /// @param lbm        the LBM whose flags, velocities and densities are set
     /// @param unit_scale the simulation's unit scale
-    BoundaryBuilder(LBM& lbm, const UnitScale& unit_scale) : lbm_(lbm), units_(unit_scale) {}
+    /// @param runner     the simulation's runner, which drives the moving solids that change in time (may be null)
+    BoundaryBuilder(LBM& lbm, const UnitScale& unit_scale, Runner* runner = nullptr) : lbm_(lbm), units_(unit_scale), runner_(runner) {}
 
     /// Solid floor (z = 0).
     BoundaryBuilder& set_solid_floor() { return set_solid_faces({ Face::Z_MIN }); }
@@ -80,7 +84,15 @@ public:
 
     /// A solid object whose surface moves at this velocity, such as a turning cylinder (MOVING_BOUNDARIES).
     BoundaryBuilder& add_moving_solid(const Shape& shape, VelocityField wall_velocity) {
-        solids_.push_back({ shape, TYPE_S, std::move(wall_velocity) });
+        solids_.push_back({ shape, TYPE_S, std::move(wall_velocity), {} });
+        return *this;
+    }
+
+    /// @brief A solid object whose surface velocity changes with the simulated time, such as a vibrating membrane
+    /// (MOVING_BOUNDARIES): the simulation sets it every time step.
+    BoundaryBuilder& add_moving_solid(const Shape& shape, TimedVelocityField wall_velocity) {
+        if(!runner_) print_error("BoundaryBuilder: a moving solid that changes in time needs the simulation's runner: use Simulation::boundaries()");
+        solids_.push_back({ shape, TYPE_S, {}, std::move(wall_velocity) });
         return *this;
     }
 
@@ -180,6 +192,7 @@ public:
                 if(!solid_cells[i].contains(x, y, z)) continue;
                 lbm_.flags[n] = solids_[i].flag;
                 if(solids_[i].wall_velocity) set_velocity(n, solids_[i].wall_velocity(center));
+                if(solids_[i].timed_velocity) set_velocity(n, solids_[i].timed_velocity(center, Duration{}));
             }
 
             if(!(lbm_.flags[n] & TYPE_S)) {
@@ -220,12 +233,58 @@ public:
                 }
             }
         });
+
+        for(std::size_t i = 0u; i < solids_.size(); i++) {
+            if(solids_[i].timed_velocity) schedule_moving_solid(solid_cells[i], solids_[i].timed_velocity);
+        }
     }
 
 private:
     struct Lid { Face face; Speed speed; };                                        ///< the moving wall of a lid-driven cavity
     struct WindProfile { Speed reference_speed; Length reference_height; float32_t alpha; }; ///< power-law wind
-    struct SolidShape { Shape shape; uchar flag; VelocityField wall_velocity; };    ///< wall_velocity empty: at rest
+    struct SolidShape { ///< both velocities empty: at rest
+        Shape shape;
+        uchar flag;
+        VelocityField wall_velocity;
+        TimedVelocityField timed_velocity;
+    };
+
+    /// A task that sets the solid's cells to their velocity at the simulated time, every time step. The core marks the
+    /// cells next to a moving wall when its velocity is not zero, which is done once the wall first moves.
+    void schedule_moving_solid(const Shape::Cells& shape, const TimedVelocityField& velocity) const {
+        std::vector<uint64_t> cells;
+        for(uint64_t n = 0ull; n < lbm_.get_N(); n++) {
+            uint32_t x = 0u, y = 0u, z = 0u;
+            lbm_.coordinates(n, x, y, z);
+            if(shape.contains(x, y, z)) cells.push_back(n);
+        }
+        const float32_t cell_size = units_.cell_size().si();
+        runner_->every_step([&lbm = lbm_, units = units_, cells = std::move(cells), velocity, cell_size, marked = false](Duration time) mutable {
+            lbm.u.read_from_device();
+            bool moving = false;
+            for(const uint64_t n : cells) {
+                uint32_t x = 0u, y = 0u, z = 0u;
+                lbm.coordinates(n, x, y, z);
+                const Velocity u = velocity({ Length::from_si(((float32_t)x + 0.5f) * cell_size),
+                                              Length::from_si(((float32_t)y + 0.5f) * cell_size),
+                                              Length::from_si(((float32_t)z + 0.5f) * cell_size) }, time);
+                lbm.u.x[n] = units.velocity(u.x);
+                lbm.u.y[n] = units.velocity(u.y);
+                lbm.u.z[n] = units.velocity(u.z);
+                moving = moving || u.x.si() != 0.0f || u.y.si() != 0.0f || u.z.si() != 0.0f;
+            }
+            lbm.u.write_to_device();
+#ifdef MOVING_BOUNDARIES
+            if(moving && !marked) {
+                lbm.update_moving_boundaries();
+                marked = true;
+            }
+#else
+            (void)moving;
+            (void)marked;
+#endif // MOVING_BOUNDARIES
+        });
+    }
 
     static constexpr Face all_faces[] = { Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Y_MAX, Face::Z_MIN, Face::Z_MAX };
     static std::size_t index(Face face) { return static_cast<std::size_t>(face); }
@@ -239,6 +298,7 @@ private:
 
     LBM& lbm_;
     UnitScale units_;
+    Runner* runner_;
 
     std::array<bool, 6> solid_faces_{}; ///< indexed by Face
     std::array<bool, 3> periodic_{};    ///< indexed by Axis

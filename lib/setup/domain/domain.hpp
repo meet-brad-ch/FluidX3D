@@ -4,6 +4,8 @@
 #include "setup/boundaries/boundary_flags.hpp"
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 // A geometry file (in resources/) and its orientation. Its STL coordinates are metres, unless length() gives the
 // model's real size; then the STL's own units do not matter.
@@ -42,8 +44,22 @@ public:
         return *this;
     }
 
+    /// Other files of the same assembly the simulation needs (its moving parts), checked with the model's file.
+    Model& needs(std::vector<std::string> files) {
+        required_files_ = std::move(files);
+        return *this;
+    }
+
+    /// How to get the files, printed line by line when one is missing.
+    Model& instructions(std::vector<std::string> lines) {
+        instructions_ = std::move(lines);
+        return *this;
+    }
+
     const std::string& file() const { return file_; } ///< in resources/
     bool is_sdf() const;                              ///< a binary SDF (".sdf"), not an STL
+    const std::vector<std::string>& required_files() const { return required_files_; } ///< needs()
+    const std::vector<std::string>& instruction_lines() const { return instructions_; }  ///< instructions()
 
     /// rotation() and then angle_of_attack(), as the core's voxelizer turns the model
     float3x3 rotation_matrix(bool with_angle_of_attack = true) const;
@@ -56,6 +72,8 @@ private:
     Axis length_axis_ = Axis::Y;
     bool repair_mesh_ = false;
     std::optional<Axis> mirror_;
+    std::vector<std::string> required_files_;
+    std::vector<std::string> instructions_;
 
     friend class Domain;
     friend class DomainPlanner;

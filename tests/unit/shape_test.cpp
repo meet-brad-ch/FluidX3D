@@ -43,6 +43,17 @@ TEST(Shape, CylinderHasItsLengthAlongItsAxis) {
     EXPECT_FALSE(cells.contains(12u, 14u, 4u)); // 2.5 cells off the axis
 }
 
+// The half-space is the side of the plane the normal points away from: below a horizontal plane at 0.5 m, the lower
+// half of the 1 m tall grid; a tilted plane gives the core's plane() cells.
+TEST(Shape, HalfSpaceIsBehindItsNormal) {
+    EXPECT_EQ(count(Shape::half_space({ 0_m, 0_m, 0.5_m }, float3(0.0f, 0.0f, 1.0f)).in_cells(cell, grid)), grid.x * grid.y * 5u);
+    const Shape::Cells beach = Shape::half_space({ 1_m, 1_m, 0_m }, float3(0.0f, -1.0f, 8.0f)).in_cells(cell, grid);
+    const float3 point(9.5f, 9.5f, -0.5f); // the core's cell coordinates of the point
+    for(uint32_t z = 0u; z < grid.z; z++) for(uint32_t y = 0u; y < grid.y; y++) for(uint32_t x = 0u; x < grid.x; x++) {
+        ASSERT_EQ(beach.contains(x, y, z), plane(x, y, z, point, float3(0.0f, -1.0f, 8.0f))) << x << " " << y << " " << z;
+    }
+}
+
 TEST(Shape, CombinationsAreSetOperations) {
     const Shape big = Shape::sphere({ 1_m, 1.5_m, 0.5_m }, 0.45_m);
     const Shape lower = Shape::box({ 0_m, 0_m, 0_m }, { 2_m, 3_m, 0.5_m });

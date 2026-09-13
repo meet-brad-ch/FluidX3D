@@ -13,6 +13,7 @@
 #include "setup/domain/lattice.hpp"
 #include "setup/graphics/graphics_config.hpp"
 #include "setup/moving/moving_parts_manager.hpp"
+#include "setup/simulation/field_reader.hpp"
 #include "setup/simulation/mesh_loader.hpp"
 #include "setup/simulation/runner.hpp"
 #include "lbm.hpp"
@@ -149,7 +150,7 @@ public:
 
     /// @name The setup of the grid (a new builder each time)
     /// @{
-    BoundaryBuilder boundaries() { return BoundaryBuilder(lbm(), scale_); }
+    BoundaryBuilder boundaries() { return BoundaryBuilder(lbm(), scale_, &runner()); }
     GraphicsConfig graphics() { return GraphicsConfig(lbm(), scale_); }
 #ifdef SURFACE
     SurfaceBuilder surface() { return SurfaceBuilder(lbm(), scale_); }
@@ -158,6 +159,9 @@ public:
     ThermalBuilder thermal() { return ThermalBuilder(lbm(), scale_, temperature_scale(), gravity_axis_); }
 #endif // TEMPERATURE
     /// @}
+
+    /// A snapshot of the fields in physical units: read from the device now, or the setup before the first run.
+    FieldReader fields() { return FieldReader(lbm(), scale_, started_); }
 
     /// @name The components that act while the simulation runs (owned)
     /// @{
@@ -214,6 +218,7 @@ public:
     /// Runs this much simulated time from now; the first call records the video, if there is one.
     void run_for(Duration time) {
         start_video(time);
+        started_ = true;
         runner().run_for(time);
     }
 
@@ -222,6 +227,7 @@ public:
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
         if(video().has_views()) print_warning("Simulation::run(): a video needs run_for() with the simulated time it spans; no frames are written");
 #endif // GRAPHICS && !INTERACTIVE_GRAPHICS
+        started_ = true;
         runner().run();
     }
 
@@ -262,6 +268,7 @@ private:
     bool measure_forces_ = false;
     bool voxelize_model_ = true;
     bool video_started_ = false;
+    bool started_ = false; ///< run_for() or run() was called: the device holds the fields
 
     std::unique_ptr<LBM> lbm_;
     std::unique_ptr<Runner> runner_;
@@ -307,10 +314,17 @@ private:
         return *plan;
     }
 
+    /// the model's file and the files it needs() are in resources/; otherwise its instructions() and an error
     void validate_geometry_file() const {
         const Model& model = *domain_.model();
-        if(!get_resource_path(model.file()).empty()) return;
-        string message = string(model.is_sdf() ? "SDF" : "STL") + " file not found: " + model.file() + "; searched in";
+        string missing;
+        if(get_resource_path(model.file()).empty()) missing = model.file();
+        for(const std::string& file : model.required_files()) {
+            if(get_resource_path(file).empty()) missing += (missing.empty() ? "" : ", ") + file;
+        }
+        if(missing.empty()) return;
+        for(const std::string& line : model.instruction_lines()) print_info(line);
+        string message = "geometry file not found: " + missing + "; searched in";
 #ifdef FLUIDX3D_RESOURCE_DIR
         message += " " + string(FLUIDX3D_RESOURCE_DIR) + "/ and";
 #endif // FLUIDX3D_RESOURCE_DIR

@@ -26,26 +26,16 @@ void main_setup() { // extensions: FP16S, VOLUME_FORCE, MOVING_BOUNDARIES, SURFA
 		.set_solid_box()
 		.apply();
 
-	// the speaker's membrane, the floor inside the walls: a speed above zero makes it a moving wall from the start
+	// the speaker's membrane, the floor inside the walls, oscillates up and down
 	sim.boundaries()
-		.add_moving_solid(Shape::box({ cell, cell, 0_m }, { width - cell, width - cell, cell }),
-		                  [](Position) { return Velocity{ Speed{}, Speed{}, Speed::from_si(1E-12f) }; })
+		.add_moving_solid(Shape::box({ cell, cell, 0_m }, { width - cell, width - cell, cell }), [=](Position, Duration t) {
+			return Velocity{ Speed{}, Speed{}, peak_speed * sinf(2.0f * pif * (frequency * t)) };
+		})
 		.apply();
 
 	sim.graphics()
 		.show_free_surface()
 		.apply();
 
-	// the membrane oscillates up and down
-	LBM& lbm = sim.lbm();
-	const uint Nx = lbm.get_Nx(), Ny = lbm.get_Ny();
-	sim.every_step([&](Duration t) {
-		lbm.u.read_from_device();
-		const float uz = sim.unit_scale().velocity(peak_speed * sinf(2.0f * pif * (frequency * t)));
-		for(uint y = 1u; y < Ny - 1u; y++) {
-			for(uint x = 1u; x < Nx - 1u; x++) lbm.u.z[x + y * Nx] = uz;
-		}
-		lbm.u.write_to_device();
-	});
 	sim.run();
 }

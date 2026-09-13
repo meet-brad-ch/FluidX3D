@@ -11,22 +11,18 @@ void main_setup() {
 	const Speed flight_speed = 226.0_kmh;
 	const Duration simulation_time = 1.0_s;
 
-	// Check for required STL files
-	if(get_resource_path("Cessna-172-Skyhawk-body.stl").empty() || get_resource_path("Cessna-172-Skyhawk-rotor.stl").empty()) {
-		print_info("This example requires manually splitting Airplane.stl into body and rotor components.");
-		print_info("Steps:");
-		print_info("  1. Download Airplane.stl: cd resources && python download_all_thingiverse_stl.py");
-		print_info("  2. Open Airplane.stl in Microsoft 3D Builder");
-		print_info("  3. Separate body and propeller into 2 meshes");
-		print_info("  4. Save as Cessna-172-Skyhawk-body.stl and Cessna-172-Skyhawk-rotor.stl");
-		print_info("  5. Place both files in resources/");
-		wait();
-		return;
-	}
-
 	// static body: the wingspan (X) is 95 % of the domain width
 	const Length domain_width = wingspan / 0.95f;
-	Simulation sim(Domain::around(Model("Cessna-172-Skyhawk-body.stl").length(wingspan, Axis::X))
+	const Model body = Model("Cessna-172-Skyhawk-body.stl").length(wingspan, Axis::X)
+		.needs({ "Cessna-172-Skyhawk-rotor.stl" })
+		.instructions({ "This example requires manually splitting Airplane.stl into body and rotor components.",
+		                "Steps:",
+		                "  1. Download Airplane.stl: cd resources && python download_all_thingiverse_stl.py",
+		                "  2. Open Airplane.stl in Microsoft 3D Builder",
+		                "  3. Separate body and propeller into 2 meshes",
+		                "  4. Save as Cessna-172-Skyhawk-body.stl and Cessna-172-Skyhawk-rotor.stl",
+		                "  5. Place both files in resources/" });
+	Simulation sim(Domain::around(body)
 		.size(domain_width, 0.8f * domain_width, 0.25f * domain_width)
 		.vram(8000_mb),
 		Fluid::AIR, flight_speed);

@@ -16,27 +16,20 @@ void main_setup() {
 	const Speed car_speed = 100.0_kmh;
 	const Duration simulation_time = 0.25_s;
 
-	// Check for required STL files
-	const string body_path = get_resource_path("mercedesf1-body.stl");
-	const string front_path = get_resource_path("mercedesf1-front-wheels.stl");
-	const string back_path = get_resource_path("mercedesf1-back-wheels.stl");
-	if(body_path.empty() || front_path.empty() || back_path.empty()) {
-		print_info("This example requires manually preparing Mercedes F1 W14 model.");
-		print_info("Steps:");
-		print_info("  1. Download from https://downloadfree3d.com/3d-models/vehicles/sports-car/mercedes-f1-w14/");
-		print_info("  2. Open in Microsoft 3D Builder");
-		print_info("  3. Separate body and wheels into 3 meshes");
-		print_info("  4. Remove decals, convert to .stl");
-		print_info("  5. Edit geometry: remove front wheel fenders, adjust right back wheel");
-		print_info("  6. Save as mercedesf1-body.stl, mercedesf1-front-wheels.stl, mercedesf1-back-wheels.stl");
-		print_info("  7. Place all 3 files in resources/");
-		wait();
-		return;
-	}
-
 	// the car (its length along Y) is 80 % of the domain length
 	const Length domain_length = car_length / 0.8f;
-	Simulation sim(Domain::around(Model("mercedesf1-body.stl").length(car_length))
+	const Model car = Model("mercedesf1-body.stl").length(car_length)
+		.needs({ "mercedesf1-front-wheels.stl", "mercedesf1-back-wheels.stl" })
+		.instructions({ "This example requires manually preparing Mercedes F1 W14 model.",
+		                "Steps:",
+		                "  1. Download from https://downloadfree3d.com/3d-models/vehicles/sports-car/mercedes-f1-w14/",
+		                "  2. Open in Microsoft 3D Builder",
+		                "  3. Separate body and wheels into 3 meshes",
+		                "  4. Remove decals, convert to .stl",
+		                "  5. Edit geometry: remove front wheel fenders, adjust right back wheel",
+		                "  6. Save as mercedesf1-body.stl, mercedesf1-front-wheels.stl, mercedesf1-back-wheels.stl",
+		                "  7. Place all 3 files in resources/" });
+	Simulation sim(Domain::around(car)
 		.size(0.5f * domain_length, domain_length, 0.25f * domain_length)
 		.vram(4000_mb),
 		Fluid::AIR, car_speed);
@@ -47,9 +40,9 @@ void main_setup() {
 	const float32_t scale = ModelPlacement::of(sim.plan()).cells_per_unit(); // cells per STL unit, as the body's
 
 	// Load all meshes and apply same scale
-	Mesh* body = read_stl(body_path);
-	Mesh* front_wheels = read_stl(front_path);
-	Mesh* back_wheels = read_stl(back_path);
+	Mesh* body = read_stl(get_resource_path("mercedesf1-body.stl"));
+	Mesh* front_wheels = read_stl(get_resource_path("mercedesf1-front-wheels.stl"));
+	Mesh* back_wheels = read_stl(get_resource_path("mercedesf1-back-wheels.stl"));
 
 	body->scale(scale);
 	front_wheels->scale(scale);
