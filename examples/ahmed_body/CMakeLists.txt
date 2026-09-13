@@ -1,5 +1,3 @@
-# Example: ahmed_body
-# Unity build - compiles all core sources with this example's defines.hpp
-# Note: Requires manual STL download - see main.cpp comments for URL
-
-add_fluidx3d_example(NAME ahmed_body)
+add_fluidx3d_example(NAME ahmed_body
+    EXTENSIONS FP16C FORCE_FIELD EQUILIBRIUM_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS
+)

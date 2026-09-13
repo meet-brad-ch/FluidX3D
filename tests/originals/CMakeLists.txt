@@ -36,6 +36,7 @@ foreach(name IN LISTS FLUIDX3D_ORIGINALS)
         TEST original_${name}
         EXPECTED ${CMAKE_CURRENT_SOURCE_DIR}/baselines/${name}.txt
         LABELS original gpu
+        DEFINES_FILE ${source_dir}/defines.hpp
         THIRD_PARTY
     )
 endforeach()

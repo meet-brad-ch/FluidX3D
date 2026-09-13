@@ -1,6 +1,3 @@
-# Example: concorde
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(
-    NAME concorde
+add_fluidx3d_example(NAME concorde
+    EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS
 )

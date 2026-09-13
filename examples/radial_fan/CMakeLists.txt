@@ -1,6 +1,3 @@
-# Example: radial_fan
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(
-    NAME radial_fan
+add_fluidx3d_example(NAME radial_fan
+    EXTENSIONS FP16S MOVING_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS
 )

@@ -9,7 +9,7 @@ file(GLOB_RECURSE fluidx3d_setup_headers CONFIGURE_DEPENDS RELATIVE ${PROJECT_SO
 function(fluidx3d_add_header_check variant)
     cmake_parse_arguments(PARSE_ARGV 1 ARG "" "" "EXTENSIONS")
     set(dir ${CMAKE_CURRENT_BINARY_DIR}/${variant})
-    fluidx3d_configure_defines(${dir} ${ARG_EXTENSIONS})
+    fluidx3d_configure_defines(${dir} EXTENSIONS ${ARG_EXTENSIONS})
     set(sources)
     foreach(header IN LISTS fluidx3d_setup_headers)
         # a header that needs an extension this variant lacks stops with its #error "... needs <EXTENSION> ..."

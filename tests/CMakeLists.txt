@@ -8,15 +8,6 @@ if(FLUIDX3D_BUILD_ORIGINALS)
     add_subdirectory(originals)
 endif()
 
-# fluidx3d_configure_defines(<dir> [<extensions...>])
-#   Writes <dir>/defines.hpp: the core's default configuration (D3Q19, SRT, FP32, no graphics) with these extensions,
-#   such as VOLUME_FORCE or SURFACE.
-function(fluidx3d_configure_defines dir)
-    list(TRANSFORM ARGN PREPEND "#define " OUTPUT_VARIABLE extension_lines)
-    list(JOIN extension_lines "\n" FLUIDX3D_EXTENSIONS)
-    configure_file(${CMAKE_CURRENT_FUNCTION_LIST_DIR}/defines.hpp.in ${dir}/defines.hpp @ONLY)
-endfunction()
-
 add_subdirectory(physics) # simulations against analytic solutions: ctest -L physics
 add_subdirectory(headers) # every Setup API header compiles on its own (built, not run)
 

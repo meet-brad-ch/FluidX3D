@@ -1,6 +1,3 @@
-# Example: tie_fighter
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(
-    NAME tie_fighter
+add_fluidx3d_example(NAME tie_fighter
+    EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS
 )

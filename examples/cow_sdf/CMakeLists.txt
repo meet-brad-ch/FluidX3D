@@ -1,6 +1,3 @@
-# Example: cow_sdf (SDF voxelization test)
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(
-    NAME cow_sdf
+add_fluidx3d_example(NAME cow_sdf
+    EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS
 )

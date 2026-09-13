@@ -1,4 +1,3 @@
-# Example: hydraulic_jump
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(NAME hydraulic_jump)
+add_fluidx3d_example(NAME hydraulic_jump
+    EXTENSIONS FP16S VOLUME_FORCE EQUILIBRIUM_BOUNDARIES MOVING_BOUNDARIES SURFACE SUBGRID INTERACTIVE_GRAPHICS
+)

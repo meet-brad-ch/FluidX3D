@@ -1,6 +1,4 @@
-# Example: city
-# Wind flow around a city building
-
-add_fluidx3d_example(
-    NAME city
+add_fluidx3d_example(NAME city
+    EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS
+    SETTINGS "GRAPHICS_FRAME_WIDTH 3840" "GRAPHICS_FRAME_HEIGHT 2160" "GRAPHICS_U_MAX 0.15f" "GRAPHICS_STREAMLINE_SPARSE 4u"
 )

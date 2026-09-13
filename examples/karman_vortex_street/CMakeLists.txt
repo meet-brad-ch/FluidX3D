@@ -1,4 +1,3 @@
-# Example: karman_vortex_street
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(NAME karman_vortex_street)
+add_fluidx3d_example(NAME karman_vortex_street
+    EXTENSIONS D2Q9 FP16S EQUILIBRIUM_BOUNDARIES INTERACTIVE_GRAPHICS
+)

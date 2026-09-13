@@ -1,4 +1,3 @@
-# Example: particle_test
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(NAME particle_test)
+add_fluidx3d_example(NAME particle_test
+    EXTENSIONS VOLUME_FORCE FORCE_FIELD MOVING_BOUNDARIES PARTICLES INTERACTIVE_GRAPHICS
+)

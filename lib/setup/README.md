@@ -16,8 +16,8 @@ calls to them.
 | `boundaries/`, `surface/`, `moving/`, `particles/`, `analysis/` | The builders that write to the LBM | with each example |
 
 The static library `fluidx3d::setup` holds the code that does not need the LBM: it is compiled once and unit-tested on
-the CPU. The headers that use the LBM depend on each example's `defines.hpp` (its extensions and velocity set), so they
-are compiled with the example.
+the CPU. The headers that use the LBM depend on each example's configuration (the extensions and velocity set of its
+`add_fluidx3d_example()`, which generates its `defines.hpp`), so they are compiled with the example.
 
 ## Conventions
 

@@ -1,4 +1,3 @@
-# Example: periodic_faucet
-# Unity build - compiles all core sources with this example's defines.hpp
-
-add_fluidx3d_example(NAME periodic_faucet)
+add_fluidx3d_example(NAME periodic_faucet
+    EXTENSIONS FP16S VOLUME_FORCE SURFACE INTERACTIVE_GRAPHICS
+)

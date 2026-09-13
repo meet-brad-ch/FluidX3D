@@ -251,7 +251,7 @@ sudo apt update && sudo apt install cmake
 
 ### Configuration changes not applied
 
-**Problem:** Changed `defines.hpp` but example behavior unchanged
+**Problem:** Changed an example's `EXTENSIONS` (its `CMakeLists.txt`) but example behavior unchanged
 
 **Solution:** Clean rebuild:
 ```bash
