@@ -274,13 +274,13 @@ Quantities multiply and divide into new dimensions (`10_m / 2_s` is a `Speed`, `
 
 ## Testing a Setup
 
-`FLUIDX3D_BLESS=1 ctest -R baseline_<example>` records what an example's setup produces (its grid, units, cell counts and fields at the first time step) in `tests/baselines/`, and `ctest -L baseline` checks it from then on; `FLUIDX3D_BASELINE_STEPS=3000 bin/<example>_baseline` runs the setup for a number of time steps and reports its fastest cell. `tests/physics/` holds simulations checked against analytic solutions. See [CMAKE.md](CMAKE.md#tests).
+`tests/physics/` holds simulations checked against analytic solutions (`ctest -L physics`): a `main_setup()` that ends with `PhysicsCheck::report()`, registered with `fluidx3d_add_physics_test()`. A new check of this kind is the way to test a setup. See [CMAKE.md](CMAKE.md#tests).
 
 ---
 
 ## Appendix: Coming from the Low-Level API
 
-The core's own examples configure everything in lattice units and cell indices. Their calls map to the API as follows; the recorded originals (`-DFLUIDX3D_BUILD_ORIGINALS=ON`, `ctest -L original`) and `tests/originals/compare_ports.cmake` compare a port with its original.
+The core's own examples configure everything in lattice units and cell indices. Their calls map to the API as follows.
 
 | Low-level | Setup API |
 |-----------|-----------|

@@ -1,12 +1,4 @@
-# Test tools and tests. The per-example baseline tests are registered by add_fluidx3d_example().
-
-# Compares a baseline output with its expectation (used by every baseline_<example> test)
-add_executable(fluidx3d_baseline_compare baseline/baseline_compare.cpp)
-target_link_libraries(fluidx3d_baseline_compare PRIVATE fluidx3d::build_options fluidx3d::warnings)
-
-if(FLUIDX3D_BUILD_ORIGINALS)
-    add_subdirectory(originals)
-endif()
+# The tests: physics tests (GPU), the header check (built, not run) and the unit tests (CPU).
 
 add_subdirectory(physics) # simulations against analytic solutions: ctest -L physics
 add_subdirectory(headers) # every Setup API header compiles on its own (built, not run)

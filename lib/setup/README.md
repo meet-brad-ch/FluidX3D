@@ -39,7 +39,6 @@ the CPU. The headers that use the LBM depend on each example's configuration (th
 
 ## Tests
 
-`ctest -L unit` runs the library's unit tests (GoogleTest), `ctest -L baseline` checks each example's setup against
-`tests/baselines/`, `ctest -L physics` runs simulations set up with the API against analytic solutions (`tests/physics/`),
-and `ctest -L original` the original examples (configured with `-DFLUIDX3D_BUILD_ORIGINALS=ON`).
+`ctest -L unit` runs the library's unit tests (GoogleTest) and `ctest -L physics` simulations set up with the API
+against analytic solutions (`tests/physics/`); the build compiles every header on its own (`tests/headers/`).
 See [CMAKE.md](../../CMAKE.md#tests).

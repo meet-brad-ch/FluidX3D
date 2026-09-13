@@ -149,12 +149,10 @@ Then run the tests (from the build directory, e.g. `build-Release`):
 
 ```bash
 ctest -L unit                            # Setup API unit tests (CPU only)
-ctest -L baseline                        # every example's setup state against tests/baselines/
 ctest -L physics                         # simulations against analytic solutions (Poiseuille, Stokes, Taylor-Green, hydrostatic)
-FLUIDX3D_BLESS=1 ctest -L baseline       # after an intended change: record the new baselines
 ```
 
-`FLUIDX3D_BASELINE_STEPS=N ../bin/<example>_baseline` runs an example's own loop for N time steps and reports the largest velocity, to check that a changed setup stays stable. See [CMAKE.md](CMAKE.md#tests).
+See [CMAKE.md](CMAKE.md#tests).
 
 ### Example Names
 

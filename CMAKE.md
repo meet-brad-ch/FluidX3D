@@ -32,8 +32,6 @@ FluidX3D/
 ├── tests/
 │   ├── CMakeLists.txt         # GoogleTest, fluidx3d_add_test(), unit tests
 │   ├── unit/                  # CPU unit tests (ctest -L unit)
-│   ├── baseline/              # Baseline dump, comparison and runner
-│   ├── baselines/             # Expected baseline output per example
 │   ├── headers/               # Every Setup API header compiles on its own (build check)
 │   └── physics/               # Simulations against analytic solutions (ctest -L physics)
 ├── third_party/               # Bundled third-party binaries
@@ -92,16 +90,20 @@ All examples use the **`add_fluidx3d_example()`** function from `cmake/FluidX3DE
 
 ### Example CMakeLists.txt
 
-Every example has a simple 1-line CMakeLists.txt:
+Every example has a CMakeLists.txt of 1-3 lines:
 
 ```cmake
 # examples/taylor_green_3d/CMakeLists.txt
-add_fluidx3d_example(NAME taylor_green_3d)
+add_fluidx3d_example(NAME taylor_green_3d
+    EXTENSIONS INTERACTIVE_GRAPHICS
+)
 ```
 
 ```cmake
 # examples/cow/CMakeLists.txt
-add_fluidx3d_example(NAME cow)
+add_fluidx3d_example(NAME cow
+    EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS
+)
 ```
 
 ### What the Function Does
@@ -109,14 +111,13 @@ add_fluidx3d_example(NAME cow)
 For an example `<name>`, `add_fluidx3d_example()` creates:
 
 1. **`<name>_setup`** (OBJECT library): the example's `main.cpp`, which also compiles the Setup API headers that use the LBM, with its generated `defines.hpp` (see [Configuration Per Example](#configuration-per-example)) on the include path and `fluidx3d::warnings` applied.
-2. **`<name>`** (executable in `bin/`): the core sources (`graphics.cpp`, `info.cpp`, `kernel.cpp`, `lbm.cpp`, `main.cpp`, `shapes.cpp`), linked with `<name>_setup` and `fluidx3d::core`.
-3. **`<name>_baseline`** and the CTest test **`baseline_<name>`** (when `FLUIDX3D_BUILD_TESTS` is on): a headless build of the same example that prints its setup state instead of running (see [Tests](#tests)).
+2. **`<name>`** (executable in `bin/`): the core sources (`FLUIDX3D_CORE_SOURCES` in `cmake/FluidX3DCore.cmake`), linked with `<name>_setup` and `fluidx3d::core`.
 
 ### Benefits
 
 | Aspect | Original | CMake Unity Build |
 |--------|----------|-------------------|
-| **Lines per example** | 47-129 lines | 1 line |
+| **Lines per example** | 47-129 lines | 1-3 lines (the extensions) |
 | **Code duplication** | Repeated 37× | Centralized function |
 | **Example selection** | Edit source code | `cmake --build build --target <name>` |
 | **IDE support** | Limited | Full (VS, CLion, VS Code) |
@@ -220,11 +221,6 @@ add_fluidx3d_example(NAME benchmark
    cmake --build build --target my_example
    ```
 
-7. **Record its baseline** (see [Tests](#tests)):
-   ```bash
-   FLUIDX3D_BLESS=1 ctest --test-dir build -R baseline_my_example
-   ```
-
 ### Example with STL Files
 
 Place STL files in `resources/` directory and name them in the `Model`; the simulation finds, scales, places and voxelizes them:
@@ -250,19 +246,13 @@ Tests are built when `FLUIDX3D_BUILD_TESTS` is on (the default) and run with CTe
 
 | Label | What it checks | Needs |
 |-------|----------------|-------|
-| `unit` | Setup API library (quantities, unit scaling, lattice and geometry sizing), one CTest test per GoogleTest `TEST` | CPU only |
-| `baseline` | Each example's setup state (grid, units, cell flag counts, velocities, graphics settings) against `tests/baselines/<name>.txt`, with a relative tolerance of 1e-4 | OpenCL device |
+| `unit` | Setup API library (quantities, unit scaling, lattice and geometry sizing, shapes, cameras), one CTest test per GoogleTest `TEST` | CPU only |
 | `physics` | Simulations in physical units against analytic solutions: Poiseuille profile (L2 error < 1 %), Stokes drag (< 5 %), Taylor-Green decay (viscosity within 1 %), hydrostatic pressure (< 1 %); about 15 s in total | OpenCL device |
 
 ```bash
 ctest --test-dir build -L unit
-ctest --test-dir build -L baseline
 ctest --test-dir build -L physics
-FLUIDX3D_BLESS=1 ctest --test-dir build -L baseline       # accept intended changes as the new baselines
-FLUIDX3D_BASELINE_STEPS=3000 ./bin/dam_break_baseline     # stability check: run 3000 steps, report the largest velocity
 ```
-
-Examples whose STL files are missing report their baseline test as skipped.
 
 The build also checks that every Setup API header compiles on its own (`tests/headers/`): each header gets a source file that includes only it, compiled with every extension and with none. A header that needs an extension stops with an `#error` that names it (for example `surface_builder.hpp` without `SURFACE`) and is left out of the configuration without it.
 
@@ -345,11 +335,11 @@ Each example's generated `defines.hpp` (`build/<...>/examples/<name>/defines/`) 
 |---------|----------|-------------|
 | **Build system** | Makefiles | Modern CMake |
 | **Example selection** | Edit `setup.cpp` | `--target <name>` |
-| **CMakeLists.txt size** | N/A | 1 line per example |
+| **CMakeLists.txt size** | N/A | 1-3 lines per example |
 | **Parallel examples** | ❌ | ✅ |
 | **IDE integration** | Limited | Full |
 | **Dependency management** | Bundled | FetchContent |
-| **Tests** | None | Unit tests and per-example baselines (CTest) |
+| **Tests** | None | Unit and physics tests (CTest), a header check |
 
 ---
 
@@ -358,10 +348,10 @@ Each example's generated `defines.hpp` (`build/<...>/examples/<name>/defines/`) 
 The CMake build system provides:
 
 - ✅ **Unity Build**: No ODR violations, each example independent
-- ✅ **Simplicity**: 1-line CMakeLists.txt per example
+- ✅ **Simplicity**: a CMakeLists.txt of 1-3 lines per example, naming its extensions
 - ✅ **Flexibility**: Different examples with different features
 - ✅ **Modern**: IDE support, FetchContent, target-based builds
 - ✅ **Maintainable**: Centralized build logic, no duplication
-- ✅ **Tested**: CTest unit tests and baselines
+- ✅ **Tested**: CTest unit and physics tests
 
 **See [BUILD.md](BUILD.md) for build instructions and [EXAMPLES.md](EXAMPLES.md) for the complete list of examples.**

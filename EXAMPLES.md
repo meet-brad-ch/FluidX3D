@@ -50,7 +50,7 @@ the Setup API ([README.md](README.md#setup-api)); its extensions are named in it
 | **thermal_convection** | FP16S, VOLUME_FORCE, TEMPERATURE, INTERACTIVE_GRAPHICS | - |
 
 `INTERACTIVE_GRAPHICS` opens a window; built with `GRAPHICS` instead, the same example writes its video (`sim.video()`)
-without one. The baseline tests build every example that way.
+without one.
 
 ---
 

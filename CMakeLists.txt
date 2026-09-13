@@ -17,7 +17,7 @@ include(FluidX3DCore)          # fluidx3d::core and the core source lists
 include(FluidX3DExample)       # add_fluidx3d_example()
 
 if(FLUIDX3D_BUILD_TESTS)
-    enable_testing() # before the examples: each one registers its baseline test
+    enable_testing()
     add_subdirectory(tests)
 endif()
 add_subdirectory(examples)
