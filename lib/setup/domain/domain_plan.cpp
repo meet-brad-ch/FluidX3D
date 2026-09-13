@@ -11,10 +11,15 @@
 
 DomainPlan DomainPlanner::plan(const Domain& domain, LatticeMemory lattice) {
     domain.validate();
-    if(!domain.model_) return plan_box(domain, lattice);
+    if(!domain.model_) {
+        DomainPlan plan = plan_box(domain, lattice);
+        plan.gpus = domain.gpus_;
+        return plan;
+    }
     DomainPlan plan = domain.size_ ? plan_in_size(domain, *domain.model_, lattice)
                                    : plan_with_clearances(domain, *domain.model_, lattice);
     plan.mirror = domain.model_->mirror_;
+    plan.gpus = domain.gpus_;
     return plan;
 }
 
@@ -207,7 +212,7 @@ uint3 DomainPlanner::grid_for_resolution(const Domain& domain, const float3& asp
     if(required_mb > domain.max_vram_mb()) {
         throw SetupError("VRAM requirement exceeds the limit: a cell size of " + to_string(cell) + " m gives a grid of " +
             to_string(grid.x) + " x " + to_string(grid.y) + " x " + to_string(grid.z) + " cells, which needs " +
-            to_string(required_mb) + " MB of the " + to_string(domain.max_vram_mb()) + " MB allowed (max_vram)");
+            to_string(required_mb) + " MB of the " + to_string(domain.max_vram_mb()) + " MB allowed (vram_limit)");
     }
     return uint3(grid.x, grid.y, grid.z);
 }

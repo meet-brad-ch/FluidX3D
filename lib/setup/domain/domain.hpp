@@ -63,7 +63,7 @@ private:
 
 // The simulation box in physical units:
 //   Domain::box(1.0_m, 5.0_m, 0.75_m).vram(2000_mb)
-//   Domain::around(Model("hill.stl")).clearances(2_m, 500_m, 100_m).cell_size(8_m).max_vram(20_gb)
+//   Domain::around(Model("hill.stl")).clearances(2_m, 500_m, 100_m).cell_size(8_m).vram_limit(20_gb)
 //   Domain::around(Model("Cow_t.stl").length(2.4_m)).size(1.85_m, 3.7_m, 1.85_m).gap_to_inlet(0.24_m).on_floor().vram(1000_mb)
 //   Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(1.0_m / 256.0f)   // 128 x 256 x 256 cells
 // DomainPlanner computes the grid and the model's place from it. Conflicting or unused settings are reported with a
@@ -127,8 +127,14 @@ public:
         return *this;
     }
 
-    Domain& max_vram(MemorySize limit) { // ... up to this memory (default 24000 MB)
-        max_vram_ = limit;
+    Domain& vram_limit(MemorySize limit) { // ... up to this memory (default 24000 MB)
+        vram_limit_ = limit;
+        return *this;
+    }
+
+    /// The grid split among this many GPUs along each axis (default one GPU); the core rounds the grid down to whole parts.
+    Domain& gpus(uint32_t x, uint32_t y, uint32_t z) {
+        gpus_ = uint3(x, y, z);
         return *this;
     }
 
@@ -150,11 +156,12 @@ private:
     bool on_floor_ = false;
     std::optional<MemorySize> vram_;
     std::optional<Length> cell_size_;
-    std::optional<MemorySize> max_vram_;
+    std::optional<MemorySize> vram_limit_;
+    uint3 gpus_ = uint3(1u, 1u, 1u);
 
     bool has_gaps() const { return gap_to_inlet_ || gap_to_floor_ || on_floor_; }
     uint32_t vram_mb() const { return vram_ ? vram_->mb() : 2000u; }
-    uint32_t max_vram_mb() const { return max_vram_ ? max_vram_->mb() : 24000u; }
+    uint32_t max_vram_mb() const { return vram_limit_ ? vram_limit_->mb() : 24000u; }
 
     friend class DomainPlanner;
 };

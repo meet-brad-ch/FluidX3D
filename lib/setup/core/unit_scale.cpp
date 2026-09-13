@@ -16,6 +16,7 @@ float UnitScale::velocity(Speed u) const { return u.si() * unit_s_ / unit_m_; }
 float UnitScale::acceleration(Acceleration a) const { return a.si() / unit_m_ * (unit_s_ * unit_s_); }
 float UnitScale::viscosity(KinematicViscosity nu) const { return nu.si() * unit_s_ / (unit_m_ * unit_m_); }
 float UnitScale::surface_tension(SurfaceTension sigma) const { return sigma.si() * (unit_s_ * unit_s_) / unit_kg_; }
+float UnitScale::pressure(Pressure p) const { return p.si() * unit_m_ * (unit_s_ * unit_s_) / unit_kg_; }
 
 std::uint64_t UnitScale::time_steps(Duration t) const {
     return static_cast<std::uint64_t>(std::max(t.si() / unit_s_ + 0.5f, 0.5f)); // as the core's to_ulong()
@@ -25,4 +26,6 @@ Length UnitScale::si_length(float cells) const { return Length::from_si(cells * 
 Speed UnitScale::si_velocity(float u) const { return Speed::from_si(u * unit_m_ / unit_s_); }
 Duration UnitScale::si_time(std::uint64_t steps) const { return Duration::from_si(static_cast<float>(steps) * unit_s_); }
 Force UnitScale::si_force(float f) const { return Force::from_si(f * unit_kg_ * unit_m_ / (unit_s_ * unit_s_)); }
+Pressure UnitScale::si_pressure(float p) const { return Pressure::from_si(p * unit_kg_ / (unit_m_ * (unit_s_ * unit_s_))); }
+Density UnitScale::si_density(float rho) const { return Density::from_si(rho * unit_kg_ / (unit_m_ * unit_m_ * unit_m_)); }
 SurfaceTension UnitScale::si_surface_tension(float sigma) const { return SurfaceTension::from_si(sigma * unit_kg_ / (unit_s_ * unit_s_)); }

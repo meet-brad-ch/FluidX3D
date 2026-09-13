@@ -1,10 +1,8 @@
-// 2D Taylor-Green vortices, using Setup API
+// 2D Taylor-Green vortices
 
-#include "defines.hpp"
-#include "lbm.hpp"
 #include "setup/setup.hpp"
 
-void main_setup() { // 2D Taylor-Green vortices; required extensions: D2Q9, INTERACTIVE_GRAPHICS
+void main_setup() { // extensions: D2Q9, INTERACTIVE_GRAPHICS
 	const Length size = 1.0_m;             // square, periodic
 	const Length cell = size / 1024.0f;    // 1024 x 1024 cells, as the original
 	const Length wavelength = size / 5.0f; // 5 x 5 vortex pairs
@@ -12,15 +10,12 @@ void main_setup() { // 2D Taylor-Green vortices; required extensions: D2Q9, INTE
 	const Speed amplitude = reynolds * Fluid::WATER.kinematic_viscosity / wavelength; // 1 cm/s in water
 	const Density density = Fluid::WATER.density;
 
-	SimulationSetup sim(Domain::box(size, size, cell).cell_size(cell)); // one cell high: 2D
-	sim.setup();
-	sim.configure_units(amplitude, Fluid::WATER, LatticeMach(0.346f)); // the original's lattice speed 0.2
-
-	LBM lbm = sim.create_lbm(Fluid::WATER);
+	Simulation sim(Domain::box(size, size, cell).cell_size(cell), Fluid::WATER, amplitude, // one cell high: 2D
+	               LatticeMach(0.346f)); // the original's lattice speed 0.2
 
 	// phases from the domain's center
 	const auto phase = [=](Length position) { return 2.0f * pif * ((position - 0.5f * size) / wavelength); };
-	BoundaryBuilder(lbm)
+	sim.boundaries()
 		.initialize_velocity([=](Position p) {
 			const float x = phase(p.x), y = phase(p.y);
 			return Velocity{ amplitude * (cosf(x) * sinf(y)), -amplitude * (sinf(x) * cosf(y)), Speed{} };
@@ -30,10 +25,10 @@ void main_setup() { // 2D Taylor-Green vortices; required extensions: D2Q9, INTE
 		})
 		.apply();
 
-	GraphicsConfig(lbm)
+	sim.graphics()
 		.show_velocity_field()
 		.set_slice_mode(SliceMode::Z)
 		.apply();
 
-	lbm.run();
-} /**/
+	sim.run();
+}

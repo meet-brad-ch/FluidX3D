@@ -1,10 +1,8 @@
-// Raindrop impact on sea water, using Setup API
+// Raindrop impact on sea water
 
-#include "defines.hpp"
-#include "lbm.hpp"
 #include "setup/setup.hpp"
 
-void main_setup() { // raindrop impact; required extensions: FP16C, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, SURFACE, INTERACTIVE_GRAPHICS or GRAPHICS
+void main_setup() { // extensions: FP16C, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, SURFACE, INTERACTIVE_GRAPHICS or GRAPHICS
 	// drop diameters and their impact (terminal) speeds; 13 is for validation
 	const int select_drop_size = 12;
 	//                              0      1      2      3      4      5      6      7      8      9     10     11     12     13
@@ -18,27 +16,24 @@ void main_setup() { // raindrop impact; required extensions: FP16C, VOLUME_FORCE
 	const FluidProperties sea_water = { 1024.8103_kgpm3, 1.0508E-6_m2ps, {}, {} }; // at 20 °C and 35 g/l salinity
 	const SurfaceTension surface_tension = 73.81E-3_Npm;
 
-	SimulationSetup sim(Domain::box(5.0f * D, 5.0f * D, 4.25f * D).vram(4000_mb)); // 419 x 419 x 356 cells, as the original
-	sim.setup();
-	sim.configure_units(impact_speed, sea_water, LatticeMach(0.0866f)); // the original's lattice speed 0.05
+	Simulation sim(Domain::box(5.0f * D, 5.0f * D, 4.25f * D).vram(4000_mb), // 419 x 419 x 356 cells, as the original
+	               sea_water, impact_speed, LatticeMach(0.0866f)); // the original's lattice speed 0.05
+	sim.set_gravity(gravity).set_surface_tension(surface_tension);
 
 	const float d = D.si(), u = impact_speed.si(), nu = sea_water.kinematic_viscosity.si(), rho = sea_water.density.si();
 	const float sigma = surface_tension.si(), g = gravity.si();
 	print_info("D = " + to_string(d, 6u));
-	print_info("Re = " + to_string(units.si_Re(d, u, nu), 6u));
 	print_info("We = " + to_string(units.si_We(d, u, rho, sigma), 6u));
 	print_info("Fr = " + to_string(units.si_Fr(d, u, g), 6u));
 	print_info("Ca = " + to_string(units.si_Ca(u, rho, nu, sigma), 6u));
 	print_info("Bo = " + to_string(units.si_Bo(d, rho, g, sigma), 6u));
-
-	LBM lbm = sim.create_lbm_surface(sea_water.kinematic_viscosity, gravity, surface_tension);
 
 	// a pool 2 diameters deep; the drop 3 cells above it, falling at the inclination toward the domain's center
 	const Length depth = 2.0f * D, cell = sim.unit_scale().cell_size();
 	const Length width = 5.0f * D, height = 4.25f * D;
 	const float s = sinf(inclination.rad()), c = cosf(inclination.rad());
 	const Position drop { 0.5f * width, 0.5f * width - D * (s / c), depth + 0.5f * D + 3.0f * cell };
-	SurfaceBuilder(lbm)
+	sim.surface()
 		.set_water_level(depth)
 		.add_water(Shape::sphere(drop, 0.5f * D), { Speed{}, s * impact_speed, -c * impact_speed })
 		.set_solid_faces({ Face::Z_MIN })
@@ -47,19 +42,15 @@ void main_setup() { // raindrop impact; required extensions: FP16C, VOLUME_FORCE
 		           Shape::box({ 0_m, 0_m, depth + 0.25f * D }, { width, width, height }))
 		.apply();
 
-	GraphicsConfig(lbm)
+	sim.graphics()
 		.show_free_surface()
 		.apply();
 
-#if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
-	VideoRecorder()
+	sim.video()
 		.add("n", CameraView::orbit(-30_deg, 20_deg))
 		.add("p", CameraView::orbit(10_deg, 40_deg))
 		.add("o", CameraView::orbit(0_deg, 0_deg).field_of_view(45_deg))
 		.add("t", CameraView::orbit(0_deg, 90_deg).field_of_view(45_deg))
-		.set_video_length(20.0_s)
-		.record(lbm, simulation_time);
-#else
-	lbm.run();
-#endif
-} /**/
+		.set_length(20.0_s);
+	sim.run_for(simulation_time);
+}

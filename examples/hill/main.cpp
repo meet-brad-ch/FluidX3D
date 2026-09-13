@@ -1,40 +1,32 @@
-// Wind over hill terrain with an atmospheric boundary layer profile, using Setup API
+// Wind over hill terrain with an atmospheric boundary layer profile
 // Terrain: resources/hill.stl (Unity terrain export, 4000 m x 4000 m, 702 m high)
 // Voxelization: the STL is converted to a cached SDF (smooth terrain, no vertical-slice artifacts)
 
-#include "defines.hpp"
-#include "lbm.hpp"
 #include "setup/setup.hpp"
 
-void main_setup() { // required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS or GRAPHICS
+void main_setup() { // extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS or GRAPHICS
 	const Speed wind_speed = 10.0_kmh; // reference wind speed at the reference height
 	const Length wind_reference_height = 100.0_m;
 	const float32_t wind_profile_alpha = 0.25f; // power-law exponent for suburban terrain
 
-	SimulationSetup sim(Domain::around(Model("hill.stl")) // sized around the terrain; SDF voxelization by default
+	Simulation sim(Domain::around(Model("hill.stl")) // sized around the terrain; SDF voxelization by default
 		.clearances(2_m, 500_m, 100_m) // below, above, on each side
 		.cell_size(8_m)
-		.max_vram(20000_mb));
+		.vram_limit(20000_mb),
+		Fluid::AIR, wind_speed, LatticeMach(0.121f)); // the original's lattice speed 0.07
 
-	sim.setup();
-	sim.configure_units(wind_speed, Fluid::AIR, LatticeMach(0.121f)); // the original's lattice speed 0.07
-	sim.print_reynolds_number(Fluid::AIR);
-
-	LBM lbm = sim.create_lbm(Fluid::AIR);
-	sim.voxelize(lbm);
-
-	BoundaryBuilder(lbm)
+	sim.boundaries()
 		.set_solid_floor()
 		.set_open_boundaries()
 		.set_wind_profile_power_law(wind_speed, wind_reference_height, wind_profile_alpha)
 		.set_wind_direction(Face::Y_MIN)
 		.apply();
 
-	GraphicsConfig(lbm)
+	sim.graphics()
 		.show_surface()
 		.show_vortices()
 		.set_camera(CameraView::orbit(-40_deg, 25_deg).field_of_view(70_deg)) // orbits the domain center (above the terrain center)
 		.apply();
 
-	lbm.run();
+	sim.run();
 }

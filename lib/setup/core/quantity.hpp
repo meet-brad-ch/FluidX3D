@@ -95,10 +95,17 @@ struct Vector3 {
     friend constexpr Vector3 operator*(float factor, Vector3 v) { return v * factor; }
 };
 
+/// The length of a vector of quantities.
+template<typename Q>
+Q magnitude(const Vector3<Q>& v) {
+    return Q::from_si(std::sqrt(v.x.si() * v.x.si() + v.y.si() * v.y.si() + v.z.si() * v.z.si()));
+}
+
 /// A point in the domain in metres, measured from its origin corner (the cell at 0, 0, 0): {0.5_m, 1.0_m, 0.2_m}.
 using Position = Vector3<Length>;
 using Velocity = Vector3<Speed>;             ///< m/s
 using AccelerationVector = Vector3<Acceleration>; ///< m/s², e.g. gravity {0_mps2, 0_mps2, -9.81_mps2}
+using ForceVector = Vector3<Force>;          ///< N
 
 // Plane angle: dimensionless, but a distinct type so that degrees cannot be passed where radians are meant.
 class Angle {
@@ -136,7 +143,7 @@ private:
 
 constexpr AngularSpeed operator/(Angle angle, Duration time) { return AngularSpeed::from_deg_per_s(angle.deg() / time.si()); }
 
-/// @brief How compressible the simulation makes the flow: the reference velocity (configure_units()) as a fraction of
+/// @brief How compressible the simulation makes the flow: the reference velocity (Simulation's) as a fraction of
 /// the lattice's speed of sound.
 ///
 /// The LBM's speed of sound is not the fluid's: it is 1/sqrt(3) cells per time step, so this number sets the time step.

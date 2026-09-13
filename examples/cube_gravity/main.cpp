@@ -1,10 +1,8 @@
-// A cube of water under turning gravity, using Setup API
+// A cube of water under turning gravity
 
-#include "defines.hpp"
-#include "lbm.hpp"
 #include "setup/setup.hpp"
 
-void main_setup() { // cube with changing gravity; required extensions: FP16S, VOLUME_FORCE, SURFACE, INTERACTIVE_GRAPHICS
+void main_setup() { // extensions: FP16S, VOLUME_FORCE, SURFACE, INTERACTIVE_GRAPHICS
 	const Length size = 10.0_cm; // 96³ cells, as the original
 	const Acceleration g = 9.81_mps2;
 	// the original lattice setup: gravity 0.001, viscosity 0.02, surface tension 0.001; the speed sqrt(g*size) sets the scale
@@ -12,38 +10,32 @@ void main_setup() { // cube with changing gravity; required extensions: FP16S, V
 	const Speed speed = sqrt(g * size);               // 0.99 m/s
 	const float reynolds = lbm_speed * 96.0f / 0.02f; // 1490
 
-	SimulationSetup sim(Domain::box(size, size, size).cell_size(size / 96.0f));
-	sim.setup();
-	sim.configure_units(speed, Fluid::WATER, LatticeMach(sqrtf(3.0f) * lbm_speed)); // the original's lattice speed
+	Simulation sim(Domain::box(size, size, size).cell_size(size / 96.0f),
+	               Fluid::WATER.with_viscosity(speed * size / reynolds), speed,
+	               LatticeMach(sqrtf(3.0f) * lbm_speed)); // the original's lattice speed
+	sim.set_gravity(g).set_surface_tension(0.0106254_Npm); // the original lattice setup's 0.001 at this scale
 
-	LBM lbm = sim.create_lbm_surface(speed * size / reynolds, g, sim.unit_scale().si_surface_tension(0.001f)); // the original lattice setup's
-
-	SurfaceBuilder(lbm)
+	sim.surface()
 		.add_water(Shape::box({ 0_m, 0_m, 0_m }, { 2.0f / 3.0f * size, 2.0f / 3.0f * size, size }))
-		.set_solid_walls()
+		.set_solid_box()
 		.apply();
 
-	GraphicsConfig(lbm)
+	sim.graphics()
 		.show_free_surface()
 		.apply();
 
 	// gravity turns every 0.8 s: down, toward +Y, up, toward -Y, then it is off for 1 s (the original's 2500 to 3000 time steps)
 	const Acceleration none {};
-	const auto set_gravity = [&](const AccelerationVector& a) {
-		const float3 f = sim.to_lbm_acceleration(a);
-		lbm.set_f(f.x, f.y, f.z);
-	};
-	Runner runner(lbm);
 	while(true) { // main simulation loop
-		set_gravity({ none, none, -g });
-		runner.run_for(0.8_s);
-		set_gravity({ none, g, none });
-		runner.run_for(0.8_s);
-		set_gravity({ none, none, g });
-		runner.run_for(0.8_s);
-		set_gravity({ none, -g, none });
-		runner.run_for(0.65_s);
-		set_gravity({ none, none, none });
-		runner.run_for(1.0_s);
+		sim.set_body_force({ none, none, -g });
+		sim.run_for(0.8_s);
+		sim.set_body_force({ none, g, none });
+		sim.run_for(0.8_s);
+		sim.set_body_force({ none, none, g });
+		sim.run_for(0.8_s);
+		sim.set_body_force({ none, -g, none });
+		sim.run_for(0.65_s);
+		sim.set_body_force({ none, none, none });
+		sim.run_for(1.0_s);
 	}
-} /**/
+}

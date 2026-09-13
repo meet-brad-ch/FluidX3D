@@ -2,13 +2,14 @@
 
 #include "setup/core/types.hpp"
 #include "setup/core/quantity.hpp"
+#include "setup/core/unit_scale.hpp"
 #include "setup/core/boundary_utils.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
 #include "setup/domain/lattice.hpp"
 #include "setup/domain/shape.hpp"
 #include "lbm.hpp"
-#include "units.hpp"
 #include <array>
+#include <initializer_list>
 #include <optional>
 #include <vector>
 
@@ -16,17 +17,15 @@
 #error "setup/surface/surface_builder.hpp needs SURFACE in defines.hpp"
 #endif // SURFACE
 
-extern Units units; // global units object from lbm.cpp
-
 /// @brief Free surface setup (SURFACE extension) in physical units: water, gas bubbles, solid walls and objects,
-/// inflows, outflows and drains.
+/// inflows, outflows and drains (Simulation::surface()).
 ///
-/// Positions are in metres from the domain's origin corner and speeds in m/s, converted with the global units
-/// (SimulationSetup::configure_units() first). The water level and the inflows' heights become whole cells as CellSpan
-/// describes; shapes cover the cells whose centers they contain, smoothly (PLIC) at a sphere's surface. apply() writes
-/// the setup to the grid in this order: water, gas, solid faces and objects, inflows, outflows, drains.
+/// Positions are in metres from the domain's origin corner and speeds in m/s, converted with the simulation's unit
+/// scale. The water level and the inflows' heights become whole cells as CellSpan describes; shapes cover the cells
+/// whose centers they contain, smoothly (PLIC) at a sphere's surface. apply() writes the setup to the grid in this
+/// order: water, gas, solid faces and objects, inflows, outflows, drains.
 /// @code
-/// SurfaceBuilder(lbm)
+/// sim.surface()
 ///     .set_water_level(0.576_m)
 ///     .initialize_hydrostatic()
 ///     .set_solid_faces({Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Z_MIN})
@@ -37,8 +36,9 @@ extern Units units; // global units object from lbm.cpp
 /// @endcode
 class SurfaceBuilder {
 public:
-    /// @param lbm the free surface LBM, created with its gravity (SimulationSetup::create_lbm_surface())
-    explicit SurfaceBuilder(LBM& lbm) : lbm_(lbm) {}
+    /// @param lbm   the free surface LBM, created with its gravity
+    /// @param unit_scale the simulation's unit scale
+    SurfaceBuilder(LBM& lbm, const UnitScale& unit_scale) : lbm_(lbm), units_(unit_scale) {}
 
     /// Water in the whole domain below this height, flowing at this velocity.
     SurfaceBuilder& set_water_level(Length height, Velocity velocity = {}) {
@@ -58,14 +58,14 @@ public:
         return *this;
     }
 
-    /// Solid walls on all six faces.
-    SurfaceBuilder& set_solid_walls() {
+    /// Solid walls on all six faces: a closed box.
+    SurfaceBuilder& set_solid_box() {
         solid_faces_.fill(true);
         return *this;
     }
 
     /// Solid walls on these faces.
-    SurfaceBuilder& set_solid_faces(const std::vector<Face>& faces) {
+    SurfaceBuilder& set_solid_faces(std::initializer_list<Face> faces) {
         for(const Face face : faces) solid_faces_[static_cast<std::size_t>(face)] = true;
         return *this;
     }
@@ -102,7 +102,7 @@ public:
         return *this;
     }
 
-    /// Initial density from the hydrostatic pressure of the LBM's gravity below the water level (set_water_level()).
+    /// Initial density from the hydrostatic pressure of the simulation's gravity below the water level (set_water_level()).
     SurfaceBuilder& initialize_hydrostatic() {
         init_hydrostatic_ = true;
         return *this;
@@ -111,8 +111,8 @@ public:
     /// Writes the setup to the grid.
     void apply() {
         const uint3 N(lbm_.get_Nx(), lbm_.get_Ny(), lbm_.get_Nz());
-        const float32_t cell_size = units.si_x(1.0f);
-        const uint32_t water_height = water_level_ ? CellSpan::of(0.0f, units.x(water_level_->height.si()), N.z).end : 0u;
+        const float32_t cell_size = units_.cell_size().si();
+        const uint32_t water_height = water_level_ ? CellSpan::of(0.0f, units_.length(water_level_->height), N.z).end : 0u;
         const float3 level_velocity = water_level_ ? lattice(water_level_->velocity) : float3(0.0f);
         const float32_t gravity = -lbm_.get_fz(); // the LBM's gravity along -z, in lattice units
         if(init_hydrostatic_ && !water_level_) print_warning("SurfaceBuilder: initialize_hydrostatic() needs a water level; left out");
@@ -128,12 +128,12 @@ public:
         for(const Shape& shape : drains_) drains.push_back(shape.in_cells(cell_size, N));
         std::vector<CellFlow> inflows, outflows;
         for(const Inflow& inflow : inflows_) {
-            const float32_t velocity = units.u(inflow.speed.si());
+            const float32_t velocity = units_.velocity(inflow.speed);
             inflows.push_back({ inflow.face, is_min_face(inflow.face) ? velocity : -velocity, // into the domain
-                                CellSpan::of(units.x(inflow.from_height.si()), units.x(inflow.to_height.si()), N.z), 1u });
+                                CellSpan::of(units_.length(inflow.from_height), units_.length(inflow.to_height), N.z), 1u });
         }
         for(const Outflow& outflow : outflows_) {
-            const float32_t velocity = units.u(outflow.speed.si());
+            const float32_t velocity = units_.velocity(outflow.speed);
             outflows.push_back({ outflow.face, is_min_face(outflow.face) ? -velocity : velocity, // out of the domain
                                  CellSpan::of(0.0f, (float32_t)N.z, N.z), 0u });
         }
@@ -145,7 +145,7 @@ public:
             if(z < water_height) {
                 lbm_.flags[n] = TYPE_F;
                 set_velocity(n, level_velocity);
-                if(init_hydrostatic_) lbm_.rho[n] = units.rho_hydrostatic(gravity, (float32_t)z, (float32_t)water_height);
+                if(init_hydrostatic_) lbm_.rho[n] = hydrostatic_density(gravity, (float32_t)z, (float32_t)water_height);
             }
             for(std::size_t i = 0u; i < water.size(); i++) { // the core fills in phi of fluid and gas cells
                 const float32_t share = water[i].fill(x, y, z);
@@ -198,6 +198,7 @@ private:
     };
 
     LBM& lbm_;
+    UnitScale units_;
     std::optional<WaterLevel> water_level_;
     std::vector<Water> water_;
     std::vector<Shape> gas_;
@@ -210,7 +211,7 @@ private:
 
     static bool is_min_face(Face face) { return face == Face::X_MIN || face == Face::Y_MIN || face == Face::Z_MIN; }
 
-    static float3 lattice(const Velocity& u) { return float3(units.u(u.x.si()), units.u(u.y.si()), units.u(u.z.si())); }
+    float3 lattice(const Velocity& u) const { return float3(units_.velocity(u.x), units_.velocity(u.y), units_.velocity(u.z)); }
 
     static bool contains(const std::vector<Shape::Cells>& shapes, uint32_t x, uint32_t y, uint32_t z) {
         for(const Shape::Cells& shape : shapes) {

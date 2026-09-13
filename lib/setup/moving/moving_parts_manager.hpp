@@ -1,32 +1,43 @@
 #pragma once
 
 #include "setup/core/types.hpp"
-#include "lbm.hpp"
-#include "setup/moving/moving_part.hpp"
 #include "setup/core/setup_error.hpp"
+#include "setup/core/unit_scale.hpp"
+#include "setup/domain/domain_plan.hpp"
 #include "setup/domain/model_placement.hpp"
+#include "setup/moving/moving_part.hpp"
 #include "setup/simulation/runner.hpp"
-#include "setup/simulation/simulation_setup.hpp"
+#include "lbm.hpp"
 #include <algorithm>
-#include <vector>
 #include <memory>
 #include <optional>
+#include <vector>
 
-// Loads moving parts with the transform of the SimulationSetup model, and turns and re-voxelizes them as the simulation
-// runs. Call initialize() after the static geometry is voxelized, then run() (or VideoRecorder::record() with the parts).
+/// @brief The moving parts of the simulation (Simulation::parts()): loaded with the transform of its model, voxelized
+/// with their angular velocity, and turned and re-voxelized while it runs.
+///
+/// Call initialize() after the boundaries are set; it schedules the turns with the simulation's runner.
+/// @code
+/// sim.parts().add(MovingPart("rotor.stl").set_rotation_axis(Axis::Y).set_tip_speed(100.0_mps)).initialize();
+/// @endcode
 class MovingPartsManager {
 public:
-    MovingPartsManager(SimulationSetup& setup, LBM& lbm)
-        : setup_(setup), lbm_(lbm) {}
+    /// @param lbm    the LBM the parts are voxelized in
+    /// @param unit_scale  the simulation's unit scale
+    /// @param plan   the simulation's plan, for its model's transform (see MovingPart::centered_on_model())
+    /// @param runner the simulation's runner, which turns the parts
+    MovingPartsManager(LBM& lbm, const UnitScale& unit_scale, const DomainPlan& plan, Runner& runner)
+        : lbm_(lbm), units_(unit_scale), plan_(plan), runner_(runner) {}
 
     MovingPartsManager& add(const MovingPart& part) {
         configs_.push_back(part);
         return *this;
     }
 
-    /// Loads the parts with the model's transform (see MovingPart::centered_on_model()) and voxelizes them with their
-    /// angular velocity; call after configure_units().
+    /// Loads the parts with the model's transform, voxelizes them with their angular velocity and schedules their
+    /// turns, each at its update interval.
     MovingPartsManager& initialize() {
+        if(initialized_) print_error("MovingPartsManager: initialize() was already called");
         initialized_ = true;
         if(configs_.empty()) return *this;
 
@@ -46,55 +57,46 @@ public:
                 continue;
             }
 
-            RuntimePart rp;
-            rp.config = config;
+            auto rp = std::make_unique<RuntimePart>();
+            rp->config = config;
             if(const auto& offset = config.get_centered_offset()) {
-                const float3 offset_lbm(setup_.to_lbm_length(offset->x), setup_.to_lbm_length(offset->y), setup_.to_lbm_length(offset->z));
-                rp.mesh = placement.load_centered(part_path, offset_lbm);
+                const float3 offset_lbm(units_.length(offset->x), units_.length(offset->y), units_.length(offset->z));
+                rp->mesh = placement.load_centered(part_path, offset_lbm);
             } else {
-                rp.mesh = placement.load(part_path);
+                rp->mesh = placement.load(part_path);
             }
 
-            rp.mesh->set_center(rp.mesh->get_center_of_mass()); // rotate around the center of mass
-            rp.rotation_center = rp.mesh->get_center();
-            rp.rotation_axis = config.get_rotation_axis();
-            rp.tumbling = config.get_motion_type() == MotionType::TUMBLING;
-            rp.lbm_omega = lbm_angular_velocity(config, rp.mesh.get()) * config.get_direction_multiplier();
-            rp.update_interval = update_interval(config, rp.lbm_omega, rp.mesh.get());
+            rp->mesh->set_center(rp->mesh->get_center_of_mass()); // rotate around the center of mass
+            rp->rotation_center = rp->mesh->get_center();
+            rp->rotation_axis = config.get_rotation_axis();
+            rp->tumbling = config.get_motion_type() == MotionType::TUMBLING;
+            rp->lbm_omega = lbm_angular_velocity(config, rp->mesh.get()) * config.get_direction_multiplier();
+            rp->update_interval = update_interval(config, rp->lbm_omega, rp->mesh.get());
 
-            lbm_.voxelize_mesh_on_device(rp.mesh.get(), TYPE_S, rp.rotation_center, float3(0.0f), angular_velocity(rp));
+            lbm_.voxelize_mesh_on_device(rp->mesh.get(), TYPE_S, rp->rotation_center, float3(0.0f), angular_velocity(*rp));
 
+            if(rp->lbm_omega != 0.0f) {
+                RuntimePart& part = *rp;
+                runner_.every(part.update_interval, [this, &part](Duration) { turn(part); });
+            }
             parts_.push_back(std::move(rp));
         }
         return *this;
     }
 
-    /// Turns the parts while the runner runs, each at its update interval.
-    void add_to(Runner& runner) {
-        if(!initialized_) print_error("MovingPartsManager: call initialize() before running the simulation");
-        for(RuntimePart& rp : parts_) {
-            if(rp.lbm_omega != 0.0f) runner.every(rp.update_interval, [this, &rp](Duration) { turn(rp); });
-        }
-    }
-
-    /// Runs this long, turning the parts.
-    void run(Duration time) {
-        Runner runner(lbm_);
-        add_to(runner);
-        runner.run_for(time);
-    }
-
 private:
-    SimulationSetup& setup_;
     LBM& lbm_;
+    UnitScale units_;
+    const DomainPlan& plan_;
+    Runner& runner_;
     std::vector<MovingPart> configs_;
     bool initialized_{false};
 
-    // the transform of the setup's model (exits with a message if the setup has none)
+    // the transform of the simulation's model (exits with a message if it has none)
     ModelPlacement model_placement() const {
         std::optional<ModelPlacement> placement;
         try {
-            placement.emplace(ModelPlacement::of(setup_.get_results()));
+            placement.emplace(ModelPlacement::of(plan_));
         } catch(const SetupError& error) {
             print_error(error.what()); // waits for Enter (Windows) and exits; nothing may follow it (C4702 with /GL)
         }
@@ -112,7 +114,7 @@ private:
         uint64_t last_update_t{0};
     };
 
-    std::vector<RuntimePart> parts_;
+    std::vector<std::unique_ptr<RuntimePart>> parts_; ///< stable addresses: the runner's tasks refer to them
 
     // the angular velocity on the part's cells: tumbling parts turn in steps and have none
     static float3 angular_velocity(const RuntimePart& rp) {
@@ -122,10 +124,10 @@ private:
     // rad per time step: a tumbling part's rate, or the tip speed at half the part's largest dimension
     float32_t lbm_angular_velocity(const MovingPart& config, const Mesh* mesh) const {
         if(config.get_motion_type() == MotionType::TUMBLING) {
-            return config.get_tumble_rate().rad_per_s() * setup_.unit_scale().time_step().si();
+            return config.get_tumble_rate().rad_per_s() * units_.time_step().si();
         }
         const float32_t radius_lbm = 0.5f * mesh->get_max_size();
-        return setup_.to_lbm_velocity(config.get_tip_speed()) / radius_lbm;
+        return units_.velocity(config.get_tip_speed()) / radius_lbm;
     }
 
     // the part's update interval, by default the time its tip takes to move half a cell (at least one time step)
@@ -133,7 +135,7 @@ private:
         if(const auto& interval = config.get_update_interval()) return *interval;
         const float32_t tip_speed_lbm = fabs(lbm_omega) * 0.5f * mesh->get_max_size();
         const float32_t steps = tip_speed_lbm > 0.0f ? std::max(1.0f, floorf(0.5f / tip_speed_lbm)) : 1.0f;
-        return setup_.unit_scale().si_time((uint64_t)steps);
+        return units_.si_time((uint64_t)steps);
     }
 
     // turns the part by the angle since its last update and re-voxelizes it

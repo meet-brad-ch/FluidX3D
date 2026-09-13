@@ -40,51 +40,46 @@ This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for
 | Component | Purpose |
 |-----------|---------|
 | `Domain`, `Model` | The domain in physical units: `Domain::box(1.0_m, 5.0_m, 0.75_m)` or `Domain::around(Model("hill.stl")).clearances(...)`, with `.vram(2000_mb)` or `.cell_size(8_m)`; a model is an STL or an SDF file |
-| `SimulationSetup` | Domain sizing, unit conversion, LBM creation (plain, with a body force, thermal, free surface, particles), voxelization (STL converted to a cached SDF) |
+| `Simulation` | The simulation: the domain, the fluid and the reference speed set the units; gravity, surface tension, temperatures and particles are set before its first use; it owns the core's LBM (created on first use, the model voxelized, an STL converted to a cached SDF), hands out the builders and components below, and runs for a simulated time with tasks every interval |
 | `Shape` | Regions in metres for objects, water and gas: sphere, cylinder, box, triangle, torus, combined with `!`, `&` and `\|` |
 | `BoundaryBuilder` | Solid, open and periodic faces, solid and moving shapes, initial velocity and pressure (uniform or a field in metres), force field, wind profile, lid-driven cavity |
 | `SurfaceBuilder`, `WaveBoundary` | Free surface in metres and m/s: water level and shapes (columns, drops) with a velocity, gas bubbles, solid objects, inflows, outflows and drains; oscillating wave maker (SURFACE) |
 | `ThermalBuilder`, `TemperatureScale` | Hot and cold walls in Kelvin, hydrostatic and perturbed start; the lattice temperatures and buoyancy of a temperature range (TEMPERATURE) |
-| `MovingPartsManager`, `MovingPart` | Rotating and tumbling parts, re-voxelized while the simulation runs |
-| `Runner` | Runs the simulation for a simulated time, with tasks every interval of simulated time (wave makers, moving walls, convergence checks) |
-| `ParticleManager` | Particle seeding in m (PARTICLES) |
-| `ForceAnalyzer` | Force in N and drag coefficient on the tracked object (FORCE_FIELD) |
-| `GraphicsConfig`, `VideoRecorder`, `CameraView` | Visualization modes; video frames from several cameras, placed in metres and degrees, fixed or moving |
+| `MovingPartsManager`, `MovingPart` | Rotating and tumbling parts, re-voxelized while the simulation runs (`sim.parts()`) |
+| `ParticleManager` | Particle seeding in m (PARTICLES, `sim.particles()`) |
+| `ForceAnalyzer` | Force in N and drag coefficient on the measured solids (FORCE_FIELD, `sim.forces()`) |
+| `GraphicsConfig`, `VideoRecorder`, `CameraView` | Visualization modes (`sim.graphics()`); a video from several cameras, placed in metres and degrees, fixed or moving (`sim.video()`, written by `run_for()` when built for video) |
 
 ```cpp
-#include "defines.hpp"
-#include "lbm.hpp"
 #include "setup/setup.hpp"
 
-void main_setup() { // required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
+void main_setup() { // extensions (the example's CMakeLists.txt): FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
     const Speed flow_velocity = 1.0_mps;
     const Length cow_length = 2.4_m;
     const Length domain_length = cow_length / 0.65f; // the cow is 65 % of the domain length
 
-    SimulationSetup sim(Domain::around(Model("Cow_t.stl").rotation(180_deg, 0_deg, 180_deg).length(cow_length))
+    Simulation sim(Domain::around(Model("Cow_t.stl").rotation(180_deg, 0_deg, 180_deg).length(cow_length))
         .size(0.5f * domain_length, domain_length, 0.5f * domain_length)
         .gap_to_inlet(0.1f * cow_length) // the cow's nose
         .on_floor()                      // its hooves one cell above z = 0, on the solid floor
-        .vram(1000_mb));                 // resolution from the VRAM budget
+        .vram(1000_mb),                  // resolution from the VRAM budget
+        Fluid::AIR, flow_velocity, LatticeMach(0.13f)); // the units; optional: how compressible the flow is simulated
 
-    sim.setup();
-    sim.configure_units(flow_velocity, Fluid::AIR, LatticeMach(0.13f)); // optional: how compressible the flow is simulated
-    sim.print_reynolds_number(Fluid::AIR);
-
-    LBM lbm = sim.create_lbm(Fluid::AIR);
-    sim.voxelize(lbm);
-
-    BoundaryBuilder(lbm)
+    sim.boundaries()
         .set_solid_floor()
         .set_open_boundaries()
         .initialize_velocity_y(flow_velocity)
         .apply();
 
-    GraphicsConfig(lbm)
+    sim.graphics()
         .show_surface()
         .show_vortices()
         .apply();
 
-    lbm.run();
+    sim.video()
+        .add(CameraView::orbit(-40_deg, 20_deg).field_of_view(78_deg).view_height(domain_length / 1.25f))
+        .set_length(10.0_s);
+    sim.run_for(10.0_s); // 10 s of simulated time; writes the video when built with GRAPHICS but not INTERACTIVE_GRAPHICS
 }
 ```
+CMake: `add_fluidx3d_example(NAME cow EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS)`.

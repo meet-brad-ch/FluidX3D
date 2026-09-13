@@ -2,12 +2,11 @@
 
 #include "setup/core/types.hpp"
 #include "setup/core/quantity.hpp"
+#include "setup/core/unit_scale.hpp"
 #include "setup/graphics/camera_view.hpp"
 #include "setup/graphics/graphics_config.hpp"
-#include "setup/moving/moving_parts_manager.hpp"
 #include "setup/simulation/runner.hpp"
 #include "lbm.hpp"
-#include "units.hpp"
 #include <functional>
 #include <string>
 #include <vector>
@@ -16,21 +15,24 @@
 #error "setup/graphics/video_recorder.hpp needs GRAPHICS (or INTERACTIVE_GRAPHICS) in defines.hpp"
 #endif // GRAPHICS
 
-extern Units units; // global units object from lbm.cpp
-
-/// @brief Runs the simulation and renders it from each camera: 60 frames per second of a video set_video_length() long,
-/// spread over the simulated time. Named cameras write to export/<name>/, an unnamed one to export/.
+/// @brief The video of the simulation (Simulation::video()), rendered from each camera: 60 frames per second of a
+/// video set_length() long, spread over the simulated time of Simulation::run_for(). Named cameras write to
+/// export/<name>/, an unnamed one to export/. Written when built with GRAPHICS but not INTERACTIVE_GRAPHICS.
 /// @code
-/// VideoRecorder()
+/// sim.video()
 ///     .add("side", CameraView::orbit(0_deg, 0_deg).field_of_view(25_deg))
 ///     .add("pan", [](float progress) { return CameraView::orbit(-70_deg + progress * 100_deg, 2_deg); })
-///     .set_video_length(10_s)
-///     .record(lbm, 2_s);
+///     .set_length(10_s);
+/// sim.run_for(2_s);
 /// @endcode
 class VideoRecorder {
 public:
     /// A moving camera: its view at the progress of the recording, from 0 to 1.
     using CameraPath = std::function<CameraView(float progress)>;
+
+    /// @param lbm   the LBM whose graphics render the frames
+    /// @param unit_scale the simulation's unit scale, for the cameras
+    VideoRecorder(LBM& lbm, const UnitScale& unit_scale) : lbm_(lbm), units_(unit_scale) {}
 
     VideoRecorder& add(const CameraView& view) { return add("", view); }
     VideoRecorder& add(CameraPath path) { return add("", std::move(path)); }
@@ -43,19 +45,18 @@ public:
     }
 
     /// The length of the video (default 10 s).
-    VideoRecorder& set_video_length(Duration length) {
+    VideoRecorder& set_length(Duration length) {
         video_length_s_ = length.si();
         return *this;
     }
 
-    /// Runs this much simulated time (converted with the global units) and records it.
-    void record(LBM& lbm, Duration time) {
-        run_and_record(lbm, time, nullptr);
-    }
+    bool has_views() const { return !views_.empty(); }
 
-    /// As record(LBM&, Duration), turning the moving parts.
-    void record(LBM& lbm, Duration time, MovingPartsManager& parts) {
-        run_and_record(lbm, time, &parts);
+    /// Points the camera at the first view and schedules the frames: this much simulated time from now makes the video.
+    void start(Runner& runner, Duration simulated_time) {
+        GraphicsConfig::apply_camera(lbm_, units_, views_.front().path(0.0f)); // the first view from the start
+        const uint64_t total_steps = lbm_.get_t() + units_.time_steps(simulated_time);
+        runner.every_step([this, total_steps](Duration) { write_frames(total_steps); });
     }
 
 private:
@@ -64,28 +65,19 @@ private:
         CameraPath path;
     };
 
+    LBM& lbm_;
+    UnitScale units_;
     std::vector<View> views_;
     float32_t video_length_s_ = 10.0f;
 
-    void run_and_record(LBM& lbm, Duration time, MovingPartsManager* parts) {
-        Runner runner(lbm);
-        if(parts) parts->add_to(runner);
-        if(!views_.empty()) {
-            GraphicsConfig::apply_camera(lbm, views_.front().path(0.0f)); // the first view from the start
-            const uint64_t total_steps = lbm.get_t() + units.t(time.si());
-            runner.every_step([this, &lbm, total_steps](Duration) { write_frames(lbm, total_steps); });
-        }
-        runner.run_for(time);
-    }
-
     // a frame from each camera when the next video frame is due
-    void write_frames(LBM& lbm, uint64_t total_steps) const {
-        if(!lbm.graphics.next_frame(total_steps, video_length_s_)) return;
-        const float progress = (float)lbm.get_t() / (float)total_steps;
+    void write_frames(uint64_t total_steps) const {
+        if(!lbm_.graphics.next_frame(total_steps, video_length_s_)) return;
+        const float progress = (float)lbm_.get_t() / (float)total_steps;
         for(const View& view : views_) {
-            GraphicsConfig::apply_camera(lbm, view.path(progress));
-            if(view.name.empty()) lbm.graphics.write_frame();
-            else lbm.graphics.write_frame(get_exe_path() + "export/" + view.name + "/");
+            GraphicsConfig::apply_camera(lbm_, units_, view.path(progress));
+            if(view.name.empty()) lbm_.graphics.write_frame();
+            else lbm_.graphics.write_frame(get_exe_path() + "export/" + view.name + "/");
         }
     }
 };
