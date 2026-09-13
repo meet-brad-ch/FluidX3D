@@ -18,24 +18,26 @@ void main_setup() { // extensions: VOLUME_FORCE
 		.set_solid_box()
 		.apply();
 
-	// the mean pressure of the liquid in cell layer z, in Pa (the lattice pressure is (rho-1)/3)
-	LBM& lbm = sim.lbm();
-	const uint Nx = lbm.get_Nx(), Ny = lbm.get_Ny(), Nz = lbm.get_Nz();
-	const auto pressure = [&](uint z) {
-		double rho = 0.0;
-		for(uint y = 1u; y < Ny - 1u; y++) {
-			for(uint x = 1u; x < Nx - 1u; x++) rho += (double)lbm.rho[lbm.index(x, y, z)];
-		}
-		const double mean_rho = rho / (double)((Nx - 2u) * (Ny - 2u));
-		return (double)sim.unit_scale().si_pressure((float)((mean_rho - 1.0) / 3.0)).si();
+	// the mean pressure of the liquid in the layer of cells at a height, in Pa
+	const auto layer_pressure = [&](const FieldReader& fields, Length z) {
+		const Length layer = fields.cell_at({ 0.5f * width, 0.5f * width, z }).center.z; // the center of the layer containing z
+		double pressure_sum = 0.0;
+		uint32_t cells = 0u;
+		fields.for_each_cell([&](const FieldReader::Cell& c) {
+			if(c.solid || fabs((c.center.z - layer).si()) > 0.1f * cell.si()) return;
+			pressure_sum += (double)c.pressure.si();
+			cells++;
+		});
+		return pressure_sum / (double)cells;
 	};
-	const uint z_low = Nz / 4u, z_high = 3u * Nz / 4u;
-	const double expected = glycerol.density.si() * g.si() * (double)(z_high - z_low) * cell.si(); // Pa
+	const Length z_low = 0.25f * height, z_high = 0.75f * height;
+	const double expected = glycerol.density.si() * g.si() * (sim.fields().cell_at({ 0.5f * width, 0.5f * width, z_high }).center.z -
+	                                                          sim.fields().cell_at({ 0.5f * width, 0.5f * width, z_low }).center.z).si(); // Pa
 
 	double P1 = 0.0, P2 = 0.0;
 	sim.every(0.1_s, [&](Duration t) {
-		lbm.rho.read_from_device();
-		const double P0 = pressure(z_low) - pressure(z_high);
+		const FieldReader fields = sim.fields();
+		const double P0 = layer_pressure(fields, z_low) - layer_pressure(fields, z_high);
 		if((t > 1.0_s && converged(P2, P1, P0, 1E-5)) || t > 60.0_s) { // settled (or not settling)
 			PhysicsCheck::report("hydrostatic pressure difference", fabs(P0 / expected - 1.0), 0.01);
 			sim.stop();

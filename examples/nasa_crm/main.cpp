@@ -11,20 +11,15 @@ void main_setup() {
 	const Length aircraft_length = 62.0_m; // full-scale CRM length
 	const Speed flow_velocity = 80.0_mps;  // approach speed (about 155 knots)
 
-	// Check for the required STL file
-	if(get_resource_path("crm-hl_reference_ldg.stl").empty()) {
-		print_info("This example requires the NASA Common Research Model (CRM) high-lift geometry.");
-		print_info("Steps:");
-		print_info("  1. Download .stp file from https://commonresearchmodel.larc.nasa.gov/high-lift-crm/high-lift-crm-geometry/assembled-geometry/");
-		print_info("  2. Convert .stp to .stl using https://imagetostl.com/convert/file/stp/to/stl");
-		print_info("  3. Save as crm-hl_reference_ldg.stl in resources/");
-		wait();
-		return;
-	}
-
 	// half model, mirrored into the full aircraft; the aircraft (Y) is as long as the domain
-	Simulation sim(Domain::around(Model("crm-hl_reference_ldg.stl").rotation(0_deg, 0_deg, 90_deg).angle_of_attack(-10_deg)
-			.length(aircraft_length).mirrored(Axis::X))
+	const Model half_model = Model("crm-hl_reference_ldg.stl").rotation(0_deg, 0_deg, 90_deg).angle_of_attack(-10_deg)
+		.length(aircraft_length).mirrored(Axis::X)
+		.instructions({ "This example requires the NASA Common Research Model (CRM) high-lift geometry.",
+		                "Steps:",
+		                "  1. Download .stp file from https://commonresearchmodel.larc.nasa.gov/high-lift-crm/high-lift-crm-geometry/assembled-geometry/",
+		                "  2. Convert .stp to .stl using https://imagetostl.com/convert/file/stp/to/stl",
+		                "  3. Save as crm-hl_reference_ldg.stl in resources/" });
+	Simulation sim(Domain::around(half_model)
 		.size(aircraft_length / 1.5f, aircraft_length, aircraft_length / 4.5f)
 		.vram(2000_mb),
 		Fluid::AIR, flow_velocity);

@@ -23,6 +23,8 @@ public:
     static Shape box(Position from, Position to);                                    ///< between two corners
     static Shape triangle(Position a, Position b, Position c);                       ///< a plate about one cell thick
     static Shape torus(Position center, Axis axis, Length ring_radius, Length tube_radius); ///< a ring about the axis
+    /// Everything on one side of the plane through a point: the side the normal points away from (a sloped beach, a wall).
+    static Shape half_space(Position point, float3 outward_normal);
 
     friend Shape operator!(const Shape& shape);             ///< everywhere outside the shape
     friend Shape operator&(const Shape& a, const Shape& b); ///< in both
@@ -50,12 +52,13 @@ public:
     Cells in_cells(float cell_size, const uint3& cells) const;
 
 private:
-    enum Kind { SPHERE, CYLINDER, BOX, TRIANGLE, TORUS, NOT, AND, OR };
+    enum Kind { SPHERE, CYLINDER, BOX, TRIANGLE, TORUS, HALF_SPACE, NOT, AND, OR };
 
     Kind kind_ = SPHERE;
     Position a_{}, b_{}, c_{};
     Length r1_{}, r2_{};
     Axis axis_ = Axis::X;
+    float3 normal_{}; ///< HALF_SPACE
     std::vector<Shape> operands_;
 
     static Shape combined(Kind kind, std::vector<Shape> operands);

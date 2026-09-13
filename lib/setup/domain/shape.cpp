@@ -48,6 +48,14 @@ Shape Shape::torus(Position center, Axis axis, Length ring_radius, Length tube_r
     return shape;
 }
 
+Shape Shape::half_space(Position point, float3 outward_normal) {
+    Shape shape;
+    shape.kind_ = HALF_SPACE;
+    shape.a_ = point;
+    shape.normal_ = outward_normal;
+    return shape;
+}
+
 Shape operator!(const Shape& shape) { return Shape::combined(Shape::NOT, { shape }); }
 Shape operator&(const Shape& a, const Shape& b) { return Shape::combined(Shape::AND, { a, b }); }
 Shape operator|(const Shape& a, const Shape& b) { return Shape::combined(Shape::OR, { a, b }); }
@@ -83,6 +91,9 @@ Shape::Cells Shape::in_cells(float cell_size, const uint3& cells) const {
             result.y_ = CellSpan::of(a_.y.si() / cell_size, b_.y.si() / cell_size, cells.y);
             result.z_ = CellSpan::of(a_.z.si() / cell_size, b_.z.si() / cell_size, cells.z);
             break;
+        case HALF_SPACE: // the normal is a direction: no conversion
+            result.p1_ = normal_;
+            break;
         default:
             break;
     }
@@ -96,6 +107,7 @@ bool Shape::Cells::contains(uint32_t x, uint32_t y, uint32_t z) const {
         case CYLINDER: return ::cylinder(x, y, z, p0_, p1_, r1_);
         case BOX: return x_.contains(x) && y_.contains(y) && z_.contains(z);
         case TRIANGLE: return ::triangle(x, y, z, p0_, p1_, p2_);
+        case HALF_SPACE: return ::plane(x, y, z, p0_, p1_); // the core's plane(): behind the normal
         case TORUS:
             switch(axis_) {
                 case Axis::X: return torus_x(x, y, z, p0_, r2_, r1_);

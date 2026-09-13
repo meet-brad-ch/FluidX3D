@@ -27,11 +27,9 @@ void main_setup() { // extensions: none (D3Q19, one cell high)
 		})
 		.apply();
 
-	LBM& lbm = sim.lbm();
-	const auto kinetic_energy = [&]() { // in lattice units: only its decay is compared
-		lbm.u.read_from_device();
+	const auto kinetic_energy = [&]() { // per density, summed over the cells: only its decay is compared
 		double energy = 0.0;
-		for(ulong n = 0ull; n < lbm.get_N(); n++) energy += sq((double)lbm.u.x[n]) + sq((double)lbm.u.y[n]) + sq((double)lbm.u.z[n]);
+		sim.fields().for_each_cell([&](const FieldReader::Cell& c) { energy += sq((double)magnitude(c.velocity).si()); });
 		return energy;
 	};
 

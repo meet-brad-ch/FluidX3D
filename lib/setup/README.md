@@ -12,7 +12,7 @@ calls to them.
 | `domain/` | `Domain`, `Model`, `DomainPlanner`, `Shape`, lattice sizing (`lattice.hpp`), `ModelPlacement`, `GeometryScaler` | library |
 | `graphics/` | `CameraView` (library); `GraphicsConfig`, `VideoRecorder` | library, with each example |
 | `sdf/` | The cached SDF of an STL model | library |
-| `simulation/` | `StepSchedule` (library); `Simulation`, `Runner`, `MeshLoader` | library, with each example |
+| `simulation/` | `StepSchedule` (library); `Simulation`, `Runner`, `FieldReader`, `MeshLoader` | library, with each example |
 | `boundaries/`, `surface/`, `moving/`, `particles/`, `analysis/` | The builders that write to the LBM | with each example |
 
 The static library `fluidx3d::setup` holds the code that does not need the LBM: it is compiled once and unit-tested on

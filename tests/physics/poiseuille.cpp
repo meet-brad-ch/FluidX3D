@@ -19,23 +19,15 @@ void main_setup() { // extensions: VOLUME_FORCE
 		.apply();
 
 	// the L2 error of the simulated velocities across the pipe against the analytic profile (Krüger p. 138)
-	LBM& lbm = sim.lbm();
-	const uint Nx = lbm.get_Nx(), Nz = lbm.get_Nz();
-	const double R = radius.si(), u_center = center_speed.si(), dx = cell.si();
 	const auto profile_error = [&]() {
-		lbm.u.read_from_device();
 		double error_dif = 0.0, error_sum = 0.0;
-		for(uint z = 0u; z < Nz; z++) {
-			for(uint x = 0u; x < Nx; x++) {
-				const double r = dx * sqrt(sq(x + 0.5f - 0.5f * (float)Nx) + sq(z + 0.5f - 0.5f * (float)Nz)); // from the axis, m
-				if(r >= R) continue;
-				const uint n = x + z * Nx;
-				const double u_simulated = sim.unit_scale().si_velocity(sqrt(sq(lbm.u.x[n]) + sq(lbm.u.y[n]) + sq(lbm.u.z[n]))).si();
-				const double u_analytic = u_center * (1.0 - sq(r) / sq(R));
-				error_dif += sq(u_simulated - u_analytic);
-				error_sum += sq(u_analytic);
-			}
-		}
+		sim.fields().for_each_cell([&](const FieldReader::Cell& c) {
+			const Length r = magnitude(Position{ c.center.x - 0.5f * diameter, Length{}, c.center.z - 0.5f * diameter }); // from the axis
+			if(c.solid || r >= radius) return;
+			const double u_analytic = center_speed.si() * (1.0 - sq(r.si()) / sq(radius.si()));
+			error_dif += sq(magnitude(c.velocity).si() - u_analytic);
+			error_sum += sq(u_analytic);
+		});
 		return sqrt(error_dif / error_sum);
 	};
 

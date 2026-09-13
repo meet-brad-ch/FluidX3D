@@ -1,7 +1,6 @@
 // Breaking waves on a beach
 
 #include "setup/setup.hpp"
-#include "shapes.hpp" // the core's plane(), for the beach
 
 void main_setup() { // extensions: FP16S, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, SURFACE, INTERACTIVE_GRAPHICS
 	// physical parameters (SI units)
@@ -31,22 +30,14 @@ void main_setup() { // extensions: FP16S, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, 
 	               LatticeMach(sqrtf(3.0f*0.001f*48.0f))); // the wave speed as in the original lattice setup (0.22 cells per time step)
 	sim.set_gravity(9.81_mps2);
 
+	// the beach: a slope rising 1 in 8 from the floor at the beach position toward the far end; solid walls on all
+	// sides (the wave inlet overrides Y_MIN)
 	sim.surface()
 		.set_water_level(water_depth)
 		.initialize_hydrostatic()
-		.set_solid_box() // solid walls on all sides (the wave inlet overrides Y_MIN)
+		.set_solid_box()
+		.add_solid(Shape::half_space({ 0.5f * domain_x, beach_position, 0.5f * sim.unit_scale().cell_size() }, float3(0.0f, -1.0f, 8.0f)))
 		.apply();
-
-	// the sloped beach as a solid
-	LBM& lbm = sim.lbm();
-	const float beach_y = sim.unit_scale().length(beach_position);
-	parallel_for(lbm.get_N(), [&](ulong n) {
-		uint x = 0u, y = 0u, z = 0u;
-		lbm.coordinates(n, x, y, z);
-		if(plane(x, y, z, float3(lbm.center().x, beach_y, 0.0f), float3(0.0f, -1.0f, 8.0f))) {
-			lbm.flags[n] = TYPE_S;
-		}
-	});
 
 	// the wave maker at the inlet (Y_MIN face), updated 14 times per wave period (every 100 time steps, as the original)
 	sim.wave_maker()

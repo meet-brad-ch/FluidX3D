@@ -13,22 +13,18 @@ void main_setup() {
 	const Speed tip_speed = rotor_speed * rotor_diameter * pif;
 	const Duration simulation_time = 2.0f / rotor_speed; // 2 revolutions of the main rotor
 
-	// Check for required STL files
-	if(get_resource_path("Bell-222-body.stl").empty() || get_resource_path("Bell-222-main.stl").empty() || get_resource_path("Bell-222-back.stl").empty()) {
-		print_info("This example requires manually splitting BELL222__FIXED.stl into body and rotor components.");
-		print_info("Steps:");
-		print_info("  1. Download BELL222__FIXED.stl: cd resources && python download_all_thingiverse_stl.py");
-		print_info("  2. Open BELL222__FIXED.stl in Microsoft 3D Builder");
-		print_info("  3. Separate fuselage, main rotor, and tail rotor into 3 meshes");
-		print_info("  4. Save as Bell-222-body.stl, Bell-222-main.stl, and Bell-222-back.stl");
-		print_info("  5. Place all 3 files in resources/");
-		wait();
-		return;
-	}
-
 	// the fuselage (Y) is 80 % of the domain width, as in the original
 	const Length domain_width = fuselage_length / 0.8f;
-	Simulation sim(Domain::around(Model("Bell-222-body.stl").length(fuselage_length))
+	const Model body = Model("Bell-222-body.stl").length(fuselage_length)
+		.needs({ "Bell-222-main.stl", "Bell-222-back.stl" })
+		.instructions({ "This example requires manually splitting BELL222__FIXED.stl into body and rotor components.",
+		                "Steps:",
+		                "  1. Download BELL222__FIXED.stl: cd resources && python download_all_thingiverse_stl.py",
+		                "  2. Open BELL222__FIXED.stl in Microsoft 3D Builder",
+		                "  3. Separate fuselage, main rotor, and tail rotor into 3 meshes",
+		                "  4. Save as Bell-222-body.stl, Bell-222-main.stl, and Bell-222-back.stl",
+		                "  5. Place all 3 files in resources/" });
+	Simulation sim(Domain::around(body)
 		.size(domain_width, 1.2f * domain_width, 0.3f * domain_width)
 		.vram(8000_mb),
 		Fluid::AIR, tip_speed, LatticeMach(0.277f)); // the original's lattice tip speed 0.16

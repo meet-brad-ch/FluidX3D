@@ -13,57 +13,41 @@ void main_setup() { // extensions: VOLUME_FORCE
 
 #ifndef D2Q9
 	Simulation sim(Domain::box(diameter, cell, diameter).cell_size(cell), Fluid::WATER, center_speed); // 128 x 1 x 128 cells, periodic along Y
-	const Acceleration drive = 4.0f * center_speed * viscosity / (radius * radius); // pressure gradient per density
-	sim.set_body_force({ Acceleration{}, drive, Acceleration{} });
+	sim.set_body_force({ Acceleration{}, 4.0f * center_speed * viscosity / (radius * radius), Acceleration{} }); // the pressure gradient per density
 	sim.boundaries()
 		.add_solid(!Shape::cylinder({ 0.5f * diameter, 0.5f * cell, 0.5f * diameter }, Axis::Y, radius, cell))
 		.apply();
+	const auto radius_of = [=](const Position& p) { return magnitude(Position{ p.x - 0.5f * diameter, Length{}, p.z - 0.5f * diameter }); }; // from the pipe's axis
 #else // D2Q9
 	Simulation sim(Domain::box(cell, diameter, cell).cell_size(cell), Fluid::WATER, center_speed); // 1 x 128 x 1 cells, periodic along X
-	const Acceleration drive = 2.0f * center_speed * viscosity / (radius * radius);
-	sim.set_body_force({ drive, Acceleration{}, Acceleration{} });
+	sim.set_body_force({ 2.0f * center_speed * viscosity / (radius * radius), Acceleration{}, Acceleration{} });
 	sim.boundaries()
 		.set_solid_faces({ Face::Y_MIN, Face::Y_MAX })
 		.apply();
+	const auto radius_of = [=](const Position& p) { return magnitude(Position{ Length{}, p.y - 0.5f * diameter, Length{} }); }; // from the channel's center
 #endif // D2Q9
 
 	// the simulated velocities across the pipe against the analytic profile
-	LBM& lbm = sim.lbm();
-	const uint Nx = lbm.get_Nx(), Ny = lbm.get_Ny(), Nz = lbm.get_Nz();
-	const double R = radius.si(), u_center = center_speed.si(), dx = cell.si();
 	double error_min = max_double;
 	sim.every(4.0_s, [&](Duration t) { // about every 1000 time steps, as the original
 		if(t == Duration{}) return; // no flow at the start
-		lbm.u.read_from_device();
 		double error_dif = 0.0, error_sum = 0.0;
-		for(uint z = 0u; z < Nz; z++) {
-			for(uint x = 0u; x < Nx; x++) {
-#ifndef D2Q9
-				const uint y = Ny / 2u;
-				const double r = dx * sqrt(sq(x + 0.5f - 0.5f * (float)Nx) + sq(z + 0.5f - 0.5f * (float)Nz)); // from the pipe's axis, m
-				if(r >= R) continue;
-				const uint n = x + (y + z * Ny) * Nx;
-#else // D2Q9
-				for(uint y = 1u; y < Ny - 1u; y++) {
-				const double r = dx * (y + 0.5f - 0.5f * (float)Ny); // from the channel's center, m
-				const uint n = x + y * Nx;
-#endif // D2Q9
-				const double u_simulated = sim.unit_scale().si_velocity(sqrt(sq(lbm.u.x[n]) + sq(lbm.u.y[n]) + sq(lbm.u.z[n]))).si(); // m/s
-				const double u_analytic = u_center * (1.0 - sq(r) / sq(R));
-				error_dif += sq(u_simulated - u_analytic); // L2 error (Krüger p. 138)
-				error_sum += sq(u_analytic);
-#ifdef D2Q9
-				}
-#endif // D2Q9
-			}
-		}
-		if(sqrt(error_dif / error_sum) >= error_min) { // stop when error has converged
-			print_info("Poiseuille flow error converged after " + to_string(t.si(), 0u) + " s (" + to_string(lbm.get_t()) + " time steps) to " + to_string(100.0 * error_min, 3u) + "%"); // typical expected L2 errors: 2-5% (Krüger p. 256)
+		sim.fields().for_each_cell([&](const FieldReader::Cell& c) {
+			const Length r = radius_of(c.center);
+			if(c.solid || r >= radius) return;
+			const double u_simulated = magnitude(c.velocity).si();
+			const double u_analytic = center_speed.si() * (1.0 - sq(r.si()) / sq(radius.si()));
+			error_dif += sq(u_simulated - u_analytic); // L2 error (Krüger p. 138)
+			error_sum += sq(u_analytic);
+		});
+		const double error = sqrt(error_dif / error_sum);
+		if(error >= error_min) { // stop when error has converged
+			print_info("Poiseuille flow error converged after " + to_string(t.si(), 0u) + " s (" + to_string(sim.lbm().get_t()) + " time steps) to " + to_string(100.0 * error_min, 3u) + "%"); // typical expected L2 errors: 2-5% (Krüger p. 256)
 			wait();
 			sim.stop();
 			return;
 		}
-		error_min = fmin(error_min, sqrt(error_dif / error_sum));
+		error_min = fmin(error_min, error);
 		print_info("Poiseuille flow error after " + to_string(t.si(), 0u) + " s is " + to_string(100.0 * error_min, 3u) + "%"); // typical expected L2 errors: 2-5% (Krüger p. 256)
 	});
 	sim.run();
