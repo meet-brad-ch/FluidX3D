@@ -58,3 +58,9 @@ fluidx3d_add_test(fluidx3d_setup_tests
 )
 # test geometry files are written here; Model finds them relative to resources/
 target_compile_definitions(fluidx3d_setup_tests PRIVATE FLUIDX3D_TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}")
+
+# The SDF cache: its hash and key, and an SDF generated with SDFGen (GPU, or CPU without one) in a temp cache
+fluidx3d_add_test(fluidx3d_sdf_cache_tests
+    SOURCES unit/sdf_cache_test.cpp
+    LINK fluidx3d::sdf_cache
+)
