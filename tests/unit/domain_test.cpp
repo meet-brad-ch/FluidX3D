@@ -17,7 +17,7 @@ TEST(Domain, AroundAModelKeepsTheClearances) {
     const BoxStl box(test_file("fluidx3d_test_domain_around.stl"), 4.0f, 2.0f, 1.0f);
     const std::string file = resource_name(box.path());
     const DomainPlan plan = DomainPlanner::plan(
-        Domain::around(Model(file).rotation(0_deg, 0_deg, 90_deg)).clearances(0.5_m, 1.0_m, 0.3_m).cell_size(0.1_m).max_vram(20_gb),
+        Domain::around(Model(file).rotation(0_deg, 0_deg, 90_deg)).clearances(0.5_m, 1.0_m, 0.3_m).cell_size(0.1_m).vram_limit(20_gb),
         d3q19_fp16);
     EXPECT_EQ(plan.Nx, 20u + 6u); // measured after the rotation: 2 m along X, 4 m along Y
     EXPECT_EQ(plan.Ny, 40u + 6u);
@@ -39,7 +39,7 @@ TEST(Domain, VramBudgetAroundAModel) {
 
 TEST(Domain, ConflictingSettingsThrow) {
     EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).clearances(0_m, 0_m, 0_m).validate(), SetupError);
-    EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).vram(1_gb).max_vram(2_gb).validate(), SetupError);
+    EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).vram(1_gb).vram_limit(2_gb).validate(), SetupError);
     EXPECT_THROW(Domain::around(Model("any.stl")).vram(1_gb).cell_size(1_cm).validate(), SetupError);
     EXPECT_NO_THROW(Domain::box(1_m, 1_m, 1_m).vram(1_gb).validate());
 }
@@ -51,7 +51,7 @@ TEST(Domain, BoxWithACellSizeHasWholeCells) {
     EXPECT_EQ(plan.Ny, 256u);
     EXPECT_EQ(plan.Nz, 256u);
     // 8.4 M cells need 536 MB
-    EXPECT_THROW(DomainPlanner::plan(Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(1.0_m / 256.0f).max_vram(100_mb), d3q19_fp16_surface), SetupError);
+    EXPECT_THROW(DomainPlanner::plan(Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(1.0_m / 256.0f).vram_limit(100_mb), d3q19_fp16_surface), SetupError);
     EXPECT_THROW(DomainPlanner::plan(Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(2_m), d3q19_fp16_surface), SetupError);
 }
 

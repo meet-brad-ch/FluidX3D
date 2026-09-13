@@ -3,12 +3,19 @@
 #include "setup/core/types.hpp"
 #include "setup/core/quantity.hpp"
 
-/// Material properties of a fluid.
+/// Material properties of a fluid. A custom fluid: FluidProperties{ .density = 1260_kgpm3, .kinematic_viscosity = 1.12E-3_m2ps }.
 struct FluidProperties {
     Density density;                        ///< kg/m³
     KinematicViscosity kinematic_viscosity; ///< m²/s
     KinematicViscosity thermal_diffusivity; ///< m²/s, alpha = k/(rho*cp)
     ThermalExpansion thermal_expansion;     ///< 1/K, beta
+
+    /// The same fluid with another viscosity, e.g. to match a Reynolds number: Fluid::WATER.with_viscosity(u * L / Re).
+    constexpr FluidProperties with_viscosity(KinematicViscosity viscosity) const {
+        FluidProperties fluid = *this;
+        fluid.kinematic_viscosity = viscosity;
+        return fluid;
+    }
 };
 
 /// Fluids at 20 °C and 1 atm: Fluid::AIR, Fluid::WATER.

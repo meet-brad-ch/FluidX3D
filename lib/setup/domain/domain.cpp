@@ -19,7 +19,8 @@ float3x3 Model::rotation_matrix(bool with_angle_of_attack) const {
 
 void Domain::validate() const {
     if(vram_ && cell_size_) throw SetupError("Domain: set the resolution with vram() or with cell_size(), not both");
-    if(max_vram_ && !cell_size_) throw SetupError("Domain: max_vram() limits cell_size(); with vram() the budget is the limit");
+    if(vram_limit_ && !cell_size_) throw SetupError("Domain: vram_limit() limits cell_size(); with vram() the budget is the limit");
+    if(gpus_.x == 0u || gpus_.y == 0u || gpus_.z == 0u) throw SetupError("Domain: gpus() needs at least one GPU along each axis");
     if(on_floor_ && gap_to_floor_) throw SetupError("Domain: place the model on_floor() or at a gap_to_floor(), not both");
     if(model_offset_ && has_gaps()) throw SetupError("Domain: place the model with model_offset() or with the gaps, not both");
 

@@ -31,7 +31,7 @@ TEST(DomainPlanner, BoxSizesTheGridFromTheVramBudget) {
 TEST(DomainPlanner, ClearancesAddCellsAroundTheModel) {
     const BoxStl box(test_file("fluidx3d_test_plan_geometry.stl"), 4.0f, 2.0f, 1.0f);
     const DomainPlan plan = DomainPlanner::plan(
-        Domain::around(Model(resource_name(box.path()))).clearances(0.5_m, 1.0_m, 0.3_m).cell_size(0.1_m).max_vram(20000_mb), d3q19_fp16);
+        Domain::around(Model(resource_name(box.path()))).clearances(0.5_m, 1.0_m, 0.3_m).cell_size(0.1_m).vram_limit(20000_mb), d3q19_fp16);
     EXPECT_EQ(plan.Nx, 40u + 2u * 3u);
     EXPECT_EQ(plan.Ny, 20u + 2u * 3u);
     EXPECT_EQ(plan.Nz, 10u + 5u + 10u);
@@ -110,6 +110,14 @@ TEST(DomainPlanner, MirroredModelIsInThePlan) {
         Domain::around(Model(resource_name(box.path())).length(1_m).mirrored(Axis::X)).size(2_m, 2_m, 1_m).vram(100_mb), d3q19_fp16);
     ASSERT_TRUE(plan.mirror);
     EXPECT_EQ(*plan.mirror, Axis::X);
+}
+
+TEST(DomainPlanner, GpusAreInThePlan) {
+    const DomainPlan plan = DomainPlanner::plan(Domain::box(1.0_m, 2.0_m, 1.0_m).vram(100_mb).gpus(2u, 4u, 1u), d3q19_fp16);
+    EXPECT_EQ(plan.gpus.x, 2u);
+    EXPECT_EQ(plan.gpus.y, 4u);
+    EXPECT_EQ(plan.gpus.z, 1u);
+    EXPECT_THROW(Domain::box(1.0_m, 1.0_m, 1.0_m).gpus(0u, 1u, 1u).validate(), SetupError);
 }
 
 } // namespace

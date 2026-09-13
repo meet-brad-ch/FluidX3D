@@ -1,11 +1,8 @@
-#include "defines.hpp"
-#include "info.hpp"
-#include "lbm.hpp"
-#include "graphics.hpp"
-#include "setup.hpp"
-#include "shapes.hpp"
+// Thermal convection: air between a hot and a cold wall
 
-void main_setup() { // thermal convection; required extensions: FP16S, VOLUME_FORCE, TEMPERATURE, INTERACTIVE_GRAPHICS
+#include "setup/setup.hpp"
+
+void main_setup() { // extensions: FP16S, VOLUME_FORCE, TEMPERATURE, INTERACTIVE_GRAPHICS
 	// physical parameters (SI units)
 	const Length domain_x = 0.1_m;     // wide
 	const Length domain_y = 0.6_m;     // long (flow direction)
@@ -18,38 +15,27 @@ void main_setup() { // thermal convection; required extensions: FP16S, VOLUME_FO
 	// buoyancy velocity scale for natural convection: u ~ sqrt(g * beta * dT * L)
 	const Speed u_buoyancy = sqrt(9.81_mps2 * Fluid::AIR.thermal_expansion * delta_T * domain_z);
 
-	// simulation setup (domain-only, no geometry)
 	// finer than the original's 32 x 196 x 60 cells: real air there would have a lattice viscosity of 0.00085 (the
 	// original's lattice fluid: 0.02) and blows up
-	SimulationSetup sim(Domain::box(domain_x, domain_y, domain_z).vram(2000_mb));
-
-	sim.setup();
-	sim.configure_units(u_buoyancy, Fluid::AIR);
-	sim.configure_temperatures(T_cold, T_hot); // 0.5 and 1.5 in lattice units
-
-	// create LBM with thermal parameters (air properties, gravity in -Z)
-	LBM lbm = sim.create_lbm_thermal(Fluid::AIR, 9.81_mps2, Axis::Z);
+	Simulation sim(Domain::box(domain_x, domain_y, domain_z).vram(2000_mb), Fluid::AIR, u_buoyancy);
+	sim.set_temperatures(T_cold, T_hot).set_gravity(9.81_mps2); // 0.5 and 1.5 in lattice units
 
 	// thermal boundary conditions (SI temperatures in Kelvin)
-	ThermalBuilder(lbm, sim.temperature_scale())
+	sim.thermal()
 		.set_hot_wall(Face::Y_MIN, T_hot)
 		.set_cold_wall(Face::Y_MAX, T_cold)
-		.set_gravity_axis(Axis::Z)
-		.initialize_hydrostatic_pressure()
+		.initialize_hydrostatic()
 		.apply();
 
 	// all six faces solid, as the original
-	BoundaryBuilder(lbm)
-		.set_solid_floor()
-		.set_solid_ceiling()
-		.set_solid_walls()
+	sim.boundaries()
+		.set_solid_box()
 		.apply();
 
-	// graphics
-	GraphicsConfig(lbm)
+	sim.graphics()
 		.show_flags()
 		.show_streamlines()
 		.apply();
 
-	lbm.run();
-} /**/
+	sim.run();
+}

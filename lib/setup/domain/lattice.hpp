@@ -42,6 +42,12 @@ private:
     }
 };
 
+/// The lattice density at a height under a force per volume toward lower heights, with the density 1 at the surface
+/// height (the core's Units::rho_hydrostatic(): the lattice pressure is (rho-1)/3).
+inline float hydrostatic_density(float force_per_volume, float height, float surface_height) {
+    return 3.0f * force_per_volume * (surface_height - height) + 1.0f;
+}
+
 // grid with the given aspect ratio that fills budget_mb, as the core's resolution() (same float operations)
 GridSize grid_for_memory(float aspect_x, float aspect_y, float aspect_z, std::uint32_t budget_mb, LatticeMemory lattice);
 

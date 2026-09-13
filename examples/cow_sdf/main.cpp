@@ -1,4 +1,4 @@
-// Aerodynamics of a cow, voxelized from a precomputed signed distance field (SDF), using Setup API
+// Aerodynamics of a cow, voxelized from a precomputed signed distance field (SDF)
 //
 // SDF voxelization interpolates the distance field trilinearly, for smooth surfaces: an alternative to an STL.
 // The model is the SDF file; its grid's extent is the model's size. To generate the SDF file from Cow_t.stl:
@@ -12,45 +12,33 @@
 //   Header (36 bytes): int32 Nx, Ny, Nz; float32 bounds_min[3], bounds_max[3]
 //   Data: float32[Nx*Ny*Nz] signed distance values (negative=inside, positive=outside)
 
-#include "defines.hpp"
-#include "lbm.hpp"
 #include "setup/setup.hpp"
 
-void main_setup() { // aerodynamics of a cow using SDF; required extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS or GRAPHICS
+void main_setup() { // extensions: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS or GRAPHICS
 	const Speed flow_velocity = 1.0_mps;
 	const Length cow_length = 2.4_m; // the SDF grid's length, along Y
 	const Length domain_length = cow_length / 0.65f; // the cow is 65 % of the domain length
 
-	SimulationSetup sim(Domain::around(Model("Cow_t_sdf_128x428x258.sdf").rotation(180_deg, 0_deg, 180_deg).length(cow_length))
+	Simulation sim(Domain::around(Model("Cow_t_sdf_128x428x258.sdf").rotation(180_deg, 0_deg, 180_deg).length(cow_length))
 		.size(0.5f * domain_length, domain_length, 0.5f * domain_length)
 		.gap_to_inlet(0.1f * cow_length) // the cow's nose
 		.on_floor()
-		.vram(1000_mb));
+		.vram(1000_mb),
+		Fluid::AIR, flow_velocity, LatticeMach(0.13f)); // the original's lattice speed 0.075
 
-	sim.setup();
-	sim.configure_units(flow_velocity, Fluid::AIR, LatticeMach(0.13f)); // the original's lattice speed 0.075
-	sim.print_reynolds_number(Fluid::AIR);
-
-	LBM lbm = sim.create_lbm(Fluid::AIR);
-	sim.voxelize(lbm);
-
-	BoundaryBuilder(lbm)
+	sim.boundaries()
 		.set_solid_floor()
 		.set_open_boundaries()
 		.initialize_velocity_y(flow_velocity)
 		.apply();
 
-	GraphicsConfig(lbm)
+	sim.graphics()
 		.show_surface()
 		.show_vortices()
 		.apply();
 
-#if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
-	VideoRecorder()
+	sim.video()
 		.add(CameraView::orbit(-40_deg, 20_deg).field_of_view(78_deg).view_height(domain_length / 1.25f))
-		.set_video_length(10.0_s)
-		.record(lbm, 10.0_s);
-#else
-	lbm.run();
-#endif
-} /**/
+		.set_length(10.0_s);
+	sim.run_for(10.0_s);
+}

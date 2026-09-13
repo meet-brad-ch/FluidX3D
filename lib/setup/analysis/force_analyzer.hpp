@@ -2,82 +2,84 @@
 
 #include "setup/core/types.hpp"
 #include "setup/core/quantity.hpp"
+#include "setup/core/unit_scale.hpp"
 #include "setup/core/fluids.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
 #include "lbm.hpp"
-#include "units.hpp"
 
 #ifndef FORCE_FIELD
 #error "setup/analysis/force_analyzer.hpp needs FORCE_FIELD in defines.hpp"
 #endif // FORCE_FIELD
 
-extern Units units; // global units object from lbm.cpp
-
-// Force and drag coefficient on the object voxelized with TYPE_S|TYPE_X (SimulationSetup::enable_force_tracking(),
-// FORCE_FIELD extension). Reference values in SI units; units must be configured.
+/// @brief The fluid's force in newtons and the drag coefficient on the measured solids (FORCE_FIELD extension:
+/// Simulation::measure_forces() or Solid::MEASURED; Simulation::forces()).
+/// @code
+/// sim.forces().set_reference_area(0.389_m * 0.288_m).set_reference_velocity(60.0_mps).set_fluid(Fluid::AIR).set_flow_direction(Axis::Y);
+/// sim.every(0.01_s, [&](Duration) { print_info("Cd = " + to_string(sim.forces().drag_coefficient(), 3u)); });
+/// @endcode
 class ForceAnalyzer {
 public:
-    explicit ForceAnalyzer(LBM& lbm, uchar flag_marker = TYPE_S | TYPE_X)
-        : lbm_(lbm), flag_marker_(flag_marker) {}
+    /// @param lbm   the LBM with the measured solids (TYPE_S|TYPE_X)
+    /// @param unit_scale the simulation's unit scale
+    ForceAnalyzer(LBM& lbm, const UnitScale& unit_scale) : lbm_(lbm), units_(unit_scale) {}
 
-    /// The area of the drag coefficient, usually the frontal area.
+    /// The area of the drag coefficient, usually the frontal area (default 1 m²).
     ForceAnalyzer& set_reference_area(Area area) {
-        reference_area_ = area.si();
+        reference_area_ = area;
         return *this;
     }
 
-    /// The velocity of the drag coefficient, usually the free stream.
+    /// The velocity of the drag coefficient, usually the free stream (default 1 m/s).
     ForceAnalyzer& set_reference_velocity(Speed velocity) {
-        reference_velocity_ = velocity.si();
+        reference_velocity_ = velocity;
         return *this;
     }
 
     /// The fluid, for its density (default: air).
     ForceAnalyzer& set_fluid(const FluidProperties& fluid) {
-        fluid_density_ = fluid.density.si();
+        fluid_density_ = fluid.density;
         return *this;
     }
 
-    ForceAnalyzer& set_flow_direction(Axis axis) { // drag is the force component along this axis
+    /// The drag is the force component along this axis (default Y).
+    ForceAnalyzer& set_flow_direction(Axis axis) {
         flow_axis_ = axis;
         return *this;
     }
 
-    float3 get_force_lbm() { return lbm_.object_force(flag_marker_); }
-    float3 get_center_of_mass_lbm() { return lbm_.object_center_of_mass(flag_marker_); } // cells
-
-    float3 get_force_si() { // N
-        const float3 lbm_force = get_force_lbm();
-        return float3(units.si_F(lbm_force.x), units.si_F(lbm_force.y), units.si_F(lbm_force.z));
+    /// The fluid's force on the measured solids (reads the device).
+    ForceVector force() {
+        const float3 lbm_force = lbm_.object_force(measured_flag);
+        return { units_.si_force(lbm_force.x), units_.si_force(lbm_force.y), units_.si_force(lbm_force.z) };
     }
 
-    // Cd = F_drag/(0.5*rho*u²*A)
-    float32_t get_drag_coefficient() {
-        const float32_t drag_force = get_force_component(get_force_si(), flow_axis_);
-        const float32_t q = get_dynamic_pressure();
-        if (q * reference_area_ < 1e-10f) return 0.0f;
-        return drag_force / (q * reference_area_);
+    /// The measured solids' center of mass, in metres from the domain's origin corner.
+    Position center_of_mass() {
+        const float3 cells = lbm_.object_center_of_mass(measured_flag); // the core's cell coordinates: cell i's center at i
+        return { units_.si_length(cells.x + 0.5f), units_.si_length(cells.y + 0.5f), units_.si_length(cells.z + 0.5f) };
     }
 
-    float32_t get_dynamic_pressure() const { // Pa
-        return 0.5f * fluid_density_ * reference_velocity_ * reference_velocity_;
+    /// Cd = F_drag / (0.5*rho*u²*A).
+    float32_t drag_coefficient() {
+        const ForceVector f = force();
+        const Force drag = flow_axis_ == Axis::X ? f.x : flow_axis_ == Axis::Y ? f.y : f.z;
+        const Pressure q = dynamic_pressure();
+        if(q.si() * reference_area_.si() < 1e-10f) return 0.0f;
+        return drag.si() / (q.si() * reference_area_.si());
+    }
+
+    /// 0.5*rho*u² of the reference velocity.
+    Pressure dynamic_pressure() const {
+        return Pressure::from_si(0.5f * fluid_density_.si() * reference_velocity_.si() * reference_velocity_.si());
     }
 
 private:
+    static constexpr uchar measured_flag = TYPE_S | TYPE_X; ///< the measured solids' cells
+
     LBM& lbm_;
-    uchar flag_marker_;
-
-    float32_t reference_area_ = 1.0f;      // m²
-    float32_t reference_velocity_ = 1.0f;  // m/s
-    float32_t fluid_density_ = 1.225f;     // kg/m³
+    UnitScale units_;
+    Area reference_area_ = Area::from_si(1.0f);
+    Speed reference_velocity_ = Speed::from_si(1.0f);
+    Density fluid_density_ = Fluid::AIR.density;
     Axis flow_axis_ = Axis::Y;
-
-    static float32_t get_force_component(const float3& force, Axis axis) {
-        switch (axis) {
-            case Axis::X: return force.x;
-            case Axis::Y: return force.y;
-            case Axis::Z: return force.z;
-            default: return force.y;
-        }
-    }
 };

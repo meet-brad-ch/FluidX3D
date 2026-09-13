@@ -2,51 +2,53 @@
 
 #include "setup/core/types.hpp"
 #include "setup/core/quantity.hpp"
+#include "setup/core/unit_scale.hpp"
 #include "setup/core/boundary_utils.hpp"
 #include "setup/boundaries/boundary_flags.hpp"
 #include "setup/domain/shape.hpp"
 #include "lbm.hpp"
-#include "units.hpp"
 #include <array>
 #include <functional>
 #include <initializer_list>
 #include <optional>
 #include <vector>
 
-extern Units units; // global units object from lbm.cpp
-
-/// @brief Domain boundaries, solid objects and the initial flow in physical units; apply() writes them to the grid.
+/// @brief Domain boundaries, solid objects and the initial flow in physical units; apply() writes them to the grid
+/// (Simulation::boundaries()).
 ///
-/// Speeds, pressures and positions (metres from the domain's origin corner) are converted with the global units
-/// (SimulationSetup::configure_units() first). Faces are periodic unless set solid or open. Order per cell: solid faces,
-/// open faces (TYPE_E, which win at the edges they share with solid faces), solid shapes, then the velocities and
-/// pressures of the non-solid cells and the velocities of moving solids.
+/// Speeds, pressures and positions (metres from the domain's origin corner) are converted with the simulation's unit
+/// scale. Faces are periodic unless set solid or open. Order per cell: solid faces, open faces (TYPE_E, which win at
+/// the edges they share with solid faces), solid shapes, then the velocities and pressures of the non-solid cells and
+/// the velocities of moving solids.
 /// @code
-/// BoundaryBuilder(lbm).set_solid_floor().set_open_boundaries().initialize_velocity_y(10.0_mps).apply();
-/// BoundaryBuilder(lbm).add_solid(Shape::sphere(center, 1_cm)).set_open_boundaries().initialize_velocity_x(1_mps).apply();
+/// sim.boundaries().set_solid_floor().set_open_boundaries().initialize_velocity_y(10.0_mps).apply();
+/// sim.boundaries().add_solid(Shape::sphere(center, 1_cm), Solid::MEASURED).set_open_boundaries().initialize_velocity_x(1_mps).apply();
 /// @endcode
 class BoundaryBuilder {
 public:
     using VelocityField = std::function<Velocity(Position)>; ///< a velocity at a point in metres from the origin corner
     using PressureField = std::function<Pressure(Position)>; ///< a pressure relative to the fluid's at rest
+    using AccelerationField = std::function<AccelerationVector(Position)>; ///< a body force per mass at a point
 
-    /// @param lbm the LBM whose flags, velocities and densities are set
-    explicit BoundaryBuilder(LBM& lbm) : lbm_(lbm) {}
+    /// @param lbm   the LBM whose flags, velocities and densities are set
+    /// @param unit_scale the simulation's unit scale
+    BoundaryBuilder(LBM& lbm, const UnitScale& unit_scale) : lbm_(lbm), units_(unit_scale) {}
 
-    /// Solid floor (z = 0) with this flag.
-    BoundaryBuilder& set_solid_floor(uchar flag = TYPE_S) { return set_solid_faces({ Face::Z_MIN }, flag); }
+    /// Solid floor (z = 0).
+    BoundaryBuilder& set_solid_floor() { return set_solid_faces({ Face::Z_MIN }); }
 
-    /// Solid ceiling (z = Nz-1) with this flag.
-    BoundaryBuilder& set_solid_ceiling(uchar flag = TYPE_S) { return set_solid_faces({ Face::Z_MAX }, flag); }
+    /// Solid ceiling (z = Nz-1).
+    BoundaryBuilder& set_solid_ceiling() { return set_solid_faces({ Face::Z_MAX }); }
 
-    /// Solid walls on the four x and y faces with this flag.
-    BoundaryBuilder& set_solid_walls(uchar flag = TYPE_S) {
-        return set_solid_faces({ Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Y_MAX }, flag);
-    }
+    /// Solid walls on the four X and Y faces.
+    BoundaryBuilder& set_solid_sides() { return set_solid_faces({ Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Y_MAX }); }
 
-    /// Solid walls on these faces with this flag.
-    BoundaryBuilder& set_solid_faces(std::initializer_list<Face> faces, uchar flag = TYPE_S) {
-        for(const Face face : faces) solid_faces_[index(face)] = flag;
+    /// Solid walls on all six faces: a closed box.
+    BoundaryBuilder& set_solid_box() { return set_solid_sides().set_solid_floor().set_solid_ceiling(); }
+
+    /// Solid walls on these faces.
+    BoundaryBuilder& set_solid_faces(std::initializer_list<Face> faces) {
+        for(const Face face : faces) solid_faces_[index(face)] = true;
         return *this;
     }
 
@@ -65,22 +67,20 @@ public:
 
     /// All walls solid; moving_face slides at this speed along +y (X and Z faces) or +x (Y faces).
     BoundaryBuilder& preset_lid_driven_cavity(Face moving_face, Speed speed) {
-        set_solid_floor();
-        set_solid_ceiling();
-        set_solid_walls();
+        set_solid_box();
         lid_ = Lid{ moving_face, speed };
         return *this;
     }
 
-    /// A solid object with this flag (TYPE_S|TYPE_X: its force is measured, see ForceAnalyzer).
-    BoundaryBuilder& add_solid(const Shape& shape, uchar flag = TYPE_S) {
-        solids_.push_back({ shape, flag, {} });
+    /// A solid object at rest; Solid::MEASURED: the fluid's force on it is measured (Simulation::forces()).
+    BoundaryBuilder& add_solid(const Shape& shape, Solid kind = Solid::FIXED) {
+        solids_.push_back({ shape, kind == Solid::MEASURED ? (uchar)(TYPE_S | TYPE_X) : (uchar)TYPE_S, {} });
         return *this;
     }
 
     /// A solid object whose surface moves at this velocity, such as a turning cylinder (MOVING_BOUNDARIES).
-    BoundaryBuilder& add_moving_solid(const Shape& shape, VelocityField wall_velocity, uchar flag = TYPE_S) {
-        solids_.push_back({ shape, flag, std::move(wall_velocity) });
+    BoundaryBuilder& add_moving_solid(const Shape& shape, VelocityField wall_velocity) {
+        solids_.push_back({ shape, TYPE_S, std::move(wall_velocity) });
         return *this;
     }
 
@@ -122,10 +122,11 @@ public:
         return *this;
     }
 
-    using AccelerationField = std::function<AccelerationVector(Position)>; ///< a body force per mass at a point
-
-    /// A body force per mass in every cell, in addition to the LBM's uniform one (FORCE_FIELD), e.g. a pull toward a point.
+    /// A body force per mass in every cell, in addition to the simulation's uniform one (FORCE_FIELD), e.g. a pull toward a point.
     BoundaryBuilder& set_force_field(AccelerationField force) {
+#ifndef FORCE_FIELD
+        print_error("BoundaryBuilder::set_force_field() needs FORCE_FIELD in the EXTENSIONS");
+#endif // FORCE_FIELD
         force_field_ = std::move(force);
         return *this;
     }
@@ -148,21 +149,17 @@ public:
         const uint32_t Nx = lbm_.get_Nx();
         const uint32_t Ny = lbm_.get_Ny();
         const uint32_t Nz = lbm_.get_Nz();
-        const float32_t cell_size = units.si_x(1.0f);
-        const float32_t pressure_unit = units.si_p(1.0f);
-#ifdef FORCE_FIELD
-        const float32_t acceleration_unit = units.si_x(1.0f) / sq((float32_t)units.si_t(1ull)); // m/s² per lattice unit
-#endif // FORCE_FIELD
+        const float32_t cell_size = units_.cell_size().si();
 
         std::vector<Shape::Cells> solid_cells;
-        for(const Solid& solid : solids_) solid_cells.push_back(solid.shape.in_cells(cell_size, uint3(Nx, Ny, Nz)));
+        for(const SolidShape& solid : solids_) solid_cells.push_back(solid.shape.in_cells(cell_size, uint3(Nx, Ny, Nz)));
 
-        const float32_t lbm_init_u_x = init_u_x_ ? units.u(init_u_x_->si()) : 0.0f;
-        const float32_t lbm_init_u_y = init_u_y_ ? units.u(init_u_y_->si()) : 0.0f;
-        const float32_t lbm_init_u_z = init_u_z_ ? units.u(init_u_z_->si()) : 0.0f;
-        const float32_t lbm_lid_velocity = lid_ ? units.u(lid_->speed.si()) : 0.0f;
-        const float32_t lbm_wind_ref_velocity = wind_ ? units.u(wind_->reference_speed.si()) : 0.0f;
-        const float32_t lbm_wind_ref_height = wind_ ? units.x(wind_->reference_height.si()) : 1.0f;
+        const float32_t lbm_init_u_x = init_u_x_ ? units_.velocity(*init_u_x_) : 0.0f;
+        const float32_t lbm_init_u_y = init_u_y_ ? units_.velocity(*init_u_y_) : 0.0f;
+        const float32_t lbm_init_u_z = init_u_z_ ? units_.velocity(*init_u_z_) : 0.0f;
+        const float32_t lbm_lid_velocity = lid_ ? units_.velocity(lid_->speed) : 0.0f;
+        const float32_t lbm_wind_ref_velocity = wind_ ? units_.velocity(wind_->reference_speed) : 0.0f;
+        const float32_t lbm_wind_ref_height = wind_ ? units_.length(wind_->reference_height) : 1.0f;
 
         parallel_for(lbm_.get_N(), [&](uint64_t n) {
             uint32_t x = 0u, y = 0u, z = 0u;
@@ -174,7 +171,7 @@ public:
             bool on_open_face = false;
             for(const Face face : all_faces) {
                 if(!boundary_utils::is_on_face(x, y, z, Nx, Ny, Nz, face)) continue;
-                if(solid_faces_[index(face)]) lbm_.flags[n] = *solid_faces_[index(face)];
+                if(solid_faces_[index(face)]) lbm_.flags[n] = TYPE_S;
                 else if(open_ && !periodic_[axis_index(face)]) on_open_face = true;
             }
             if(on_open_face) lbm_.flags[n] = TYPE_E;
@@ -185,27 +182,27 @@ public:
                 if(solids_[i].wall_velocity) set_velocity(n, solids_[i].wall_velocity(center));
             }
 
-            if (!(lbm_.flags[n] & TYPE_S)) {
-                if (init_u_x_) lbm_.u.x[n] = lbm_init_u_x;
-                if (init_u_y_) lbm_.u.y[n] = lbm_init_u_y;
-                if (init_u_z_) lbm_.u.z[n] = lbm_init_u_z;
-                if (velocity_field_) set_velocity(n, velocity_field_(center));
-                if (pressure_field_) lbm_.rho[n] = 1.0f + 3.0f * pressure_field_(center).si() / pressure_unit; // p = c²*rho, c² = 1/3
+            if(!(lbm_.flags[n] & TYPE_S)) {
+                if(init_u_x_) lbm_.u.x[n] = lbm_init_u_x;
+                if(init_u_y_) lbm_.u.y[n] = lbm_init_u_y;
+                if(init_u_z_) lbm_.u.z[n] = lbm_init_u_z;
+                if(velocity_field_) set_velocity(n, velocity_field_(center));
+                if(pressure_field_) lbm_.rho[n] = 1.0f + 3.0f * units_.pressure(pressure_field_(center)); // p = c²*rho, c² = 1/3
             }
 
 #ifdef FORCE_FIELD
-            if (force_field_) { // per volume at the lattice density 1: the acceleration in lattice units
+            if(force_field_) { // per volume at the lattice density 1: the acceleration in lattice units
                 const AccelerationVector a = force_field_(center);
-                lbm_.F.x[n] = a.x.si() / acceleration_unit;
-                lbm_.F.y[n] = a.y.si() / acceleration_unit;
-                lbm_.F.z[n] = a.z.si() / acceleration_unit;
+                lbm_.F.x[n] = units_.acceleration(a.x);
+                lbm_.F.y[n] = units_.acceleration(a.y);
+                lbm_.F.z[n] = units_.acceleration(a.z);
             }
 #endif // FORCE_FIELD
 
-            if (wind_ && !(lbm_.flags[n] & TYPE_S)) {
+            if(wind_ && !(lbm_.flags[n] & TYPE_S)) {
                 const float32_t height_ratio = ((float32_t)z + 0.5f) / lbm_wind_ref_height; // at the cell's center
                 const float32_t wind_velocity = lbm_wind_ref_velocity * pow(height_ratio, wind_->alpha);
-                switch (wind_direction_) {
+                switch(wind_direction_) {
                     case Face::X_MIN: lbm_.u.x[n] = wind_velocity; break;
                     case Face::X_MAX: lbm_.u.x[n] = -wind_velocity; break;
                     case Face::Y_MIN: lbm_.u.y[n] = wind_velocity; break;
@@ -215,8 +212,8 @@ public:
                 }
             }
 
-            if (lid_ && boundary_utils::is_on_face(x, y, z, Nx, Ny, Nz, lid_->face)) {
-                if (lid_->face == Face::Y_MIN || lid_->face == Face::Y_MAX) {
+            if(lid_ && boundary_utils::is_on_face(x, y, z, Nx, Ny, Nz, lid_->face)) {
+                if(lid_->face == Face::Y_MIN || lid_->face == Face::Y_MAX) {
                     lbm_.u.x[n] = lbm_lid_velocity;
                 } else {
                     lbm_.u.y[n] = lbm_lid_velocity;
@@ -228,25 +225,26 @@ public:
 private:
     struct Lid { Face face; Speed speed; };                                        ///< the moving wall of a lid-driven cavity
     struct WindProfile { Speed reference_speed; Length reference_height; float32_t alpha; }; ///< power-law wind
-    struct Solid { Shape shape; uchar flag; VelocityField wall_velocity; };         ///< wall_velocity empty: at rest
+    struct SolidShape { Shape shape; uchar flag; VelocityField wall_velocity; };    ///< wall_velocity empty: at rest
 
     static constexpr Face all_faces[] = { Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Y_MAX, Face::Z_MIN, Face::Z_MAX };
     static std::size_t index(Face face) { return static_cast<std::size_t>(face); }
     static std::size_t axis_index(Face face) { return index(face) / 2u; } ///< X faces 0, Y faces 1, Z faces 2
 
     void set_velocity(uint64_t n, const Velocity& u) {
-        lbm_.u.x[n] = units.u(u.x.si());
-        lbm_.u.y[n] = units.u(u.y.si());
-        lbm_.u.z[n] = units.u(u.z.si());
+        lbm_.u.x[n] = units_.velocity(u.x);
+        lbm_.u.y[n] = units_.velocity(u.y);
+        lbm_.u.z[n] = units_.velocity(u.z);
     }
 
     LBM& lbm_;
+    UnitScale units_;
 
-    std::array<std::optional<uchar>, 6> solid_faces_{}; ///< indexed by Face: the flag of a solid face
-    std::array<bool, 3> periodic_{};                    ///< indexed by Axis
-    bool open_ = false;                                 ///< the faces neither solid nor periodic
+    std::array<bool, 6> solid_faces_{}; ///< indexed by Face
+    std::array<bool, 3> periodic_{};    ///< indexed by Axis
+    bool open_ = false;                 ///< the faces neither solid nor periodic
 
-    std::vector<Solid> solids_;
+    std::vector<SolidShape> solids_;
     std::optional<Speed> init_u_x_, init_u_y_, init_u_z_;
     VelocityField velocity_field_;
     PressureField pressure_field_;

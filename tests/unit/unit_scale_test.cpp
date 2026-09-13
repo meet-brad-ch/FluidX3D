@@ -56,4 +56,12 @@ TEST(UnitScale, ForceBackToNewtons) {
     EXPECT_FLOAT_EQ(scale.si_force(1.0f).si(), unit_kg * 0.02f / (0.0002f * 0.0002f));
 }
 
+TEST(UnitScale, PressureAndDensityRoundTrip) {
+    const UnitScale scale = water_scale();
+    const float unit_kg = 1000.0f * 0.02f * 0.02f * 0.02f;
+    EXPECT_FLOAT_EQ(scale.si_pressure(1.0f).si(), unit_kg / (0.02f * 0.0002f * 0.0002f)); // Pa per lattice pressure unit
+    EXPECT_NEAR(scale.pressure(scale.si_pressure(0.3f)), 0.3f, 1e-6f);
+    EXPECT_FLOAT_EQ(scale.si_density(1.0f).si(), 1000.0f); // the lattice density 1 is the fluid's
+}
+
 } // namespace

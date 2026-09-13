@@ -2,29 +2,27 @@
 
 #include "setup/core/types.hpp"
 #include "setup/core/quantity.hpp"
+#include "setup/boundaries/boundary_flags.hpp"
 #include "utilities.hpp" // the core's float3 and string
 #include <optional>
 
-enum class RotationAxis { X, Y, Z };
-
 enum class MotionType {
-    ROTATION, // fixed axis (propellers, rotors): re-voxelized with angular velocity
-    TUMBLING  // arbitrary axis, turned in steps: unvoxelized and re-voxelized
+    ROTATION, ///< fixed axis (propellers, rotors): re-voxelized with angular velocity
+    TUMBLING  ///< arbitrary axis, turned in steps: unvoxelized and re-voxelized
 };
 
-// One moving part for MovingPartsManager; the STL (in resources/) gets the transform of the SimulationSetup model.
-//   MovingPart("rotor.stl").set_rotation_axis(RotationAxis::Z).set_tip_speed(100.0_mps)
-//   MovingPart("tie_fighter.stl").set_tumble(float3(0.2f, 1.0f, 0.1f), 180_deg / 1.0_s).set_update_interval(2.2_ms)
+/// @brief One moving part for MovingPartsManager: an STL (in resources/) that gets the transform of the simulation's model.
+/// @code
+/// MovingPart("rotor.stl").set_rotation_axis(Axis::Z).set_tip_speed(100.0_mps)
+/// MovingPart("tie_fighter.stl").set_tumble(float3(0.2f, 1.0f, 0.1f), 180_deg / 1.0_s).set_update_interval(2.2_ms)
+/// @endcode
 class MovingPart {
 public:
     explicit MovingPart(const string& stl_filename) : stl_filename_(stl_filename) {}
 
-    MovingPart& set_rotation_axis(RotationAxis axis) {
-        switch(axis) {
-            case RotationAxis::X: rotation_axis_ = float3(1.0f, 0.0f, 0.0f); break;
-            case RotationAxis::Y: rotation_axis_ = float3(0.0f, 1.0f, 0.0f); break;
-            case RotationAxis::Z: rotation_axis_ = float3(0.0f, 0.0f, 1.0f); break;
-        }
+    /// Turns about this axis (default Y) through its center of mass.
+    MovingPart& set_rotation_axis(Axis axis) {
+        rotation_axis_ = float3(axis == Axis::X ? 1.0f : 0.0f, axis == Axis::Y ? 1.0f : 0.0f, axis == Axis::Z ? 1.0f : 0.0f);
         return *this;
     }
 
@@ -41,10 +39,11 @@ public:
         return *this;
     }
 
-    /// Tumbles around this axis (in the domain's coordinates) at this rate, turned in steps at each update.
+    /// Tumbles around this axis (a direction in the domain's coordinates) at this rate, turned in steps at each update.
     MovingPart& set_tumble(float3 axis, AngularSpeed rate) {
-        motion_type_ = MotionType::TUMBLING;
         const float len = sqrt(axis.x*axis.x + axis.y*axis.y + axis.z*axis.z);
+        if(len == 0.0f) print_error("MovingPart::set_tumble(): the axis must not be the zero vector");
+        motion_type_ = MotionType::TUMBLING;
         rotation_axis_ = float3(axis.x/len, axis.y/len, axis.z/len);
         tumble_rate_ = rate;
         return *this;
@@ -57,7 +56,8 @@ public:
         return *this;
     }
 
-    MovingPart& reverse_direction() { // counter-rotating parts
+    /// Turns the other way (counter-rotating parts).
+    MovingPart& reverse_direction() {
         direction_multiplier_ = -1.0f;
         return *this;
     }

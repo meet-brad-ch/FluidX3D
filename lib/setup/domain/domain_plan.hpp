@@ -6,10 +6,11 @@
 #include <optional>
 
 // The simulation domain computed from a Domain: grid size, geometry placement, reference sizes, and the file to
-// voxelize. SimulationSetup::Results is this struct.
+// voxelize (Simulation::plan()).
 struct DomainPlan {
     float3 stl_size_si{};           // geometry size in m (without geometry: the domain size)
     uint32_t Nx{}, Ny{}, Nz{};      // domain size in cells
+    uint3 gpus = uint3(1u, 1u, 1u); // the grid's split among GPUs (Domain::gpus())
     uint3 base_grid{};              // geometry size in cells without clearances (SDF resolution)
     float3 center_lbm{};            // geometry center in cells
     float3x3 rotation_matrix{};
