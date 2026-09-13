@@ -1,8 +1,8 @@
 # Setup API (`lib/setup`)
 
 The Setup API describes a FluidX3D simulation in physical units. Examples include `setup/setup.hpp`; the
-[README](../../README.md#setup-api) lists the components, [porting_guide.md](../../porting_guide.md) maps the core's
-calls to them.
+[README](../../README.md#setup-api) lists the components, [SETUP_API.md](../../SETUP_API.md) shows how to write a
+simulation with them.
 
 ## Layout
 

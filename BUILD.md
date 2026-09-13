@@ -43,15 +43,15 @@ cd tools
 
 ### All Platforms
 - **CMake 3.20+**
-- **C++17-compatible compiler**
+- **C++20-compatible compiler** (the Setup API uses `consteval` literals and designated initializers)
 - **OpenCL Runtime** - Install GPU drivers or [Intel CPU Runtime](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-cpu-runtime-for-opencl-applications-with-sycl-support.html)
 
 ### Windows
-- **Visual Studio 2019+** with Desktop C++ development
+- **Visual Studio 2019 16.10 or later (2022 recommended)** with Desktop C++ development
 - **Python 3** (optional, for STL downloads)
 
 ### Linux
-- **g++ 8.0+** (C++17 support)
+- **g++ 10+** (C++20 support)
 - X11 libraries (usually pre-installed)
 
 ### macOS
@@ -135,7 +135,7 @@ cd tools
 
 ### Verifying API Changes
 
-When modifying shared code (e.g., `SimulationSetup`, `MovingPartsManager`, `BoundaryBuilder`),
+When modifying shared code (e.g., `Simulation`, `MovingPartsManager`, `BoundaryBuilder`),
 build all examples to verify nothing is broken:
 
 ```bash

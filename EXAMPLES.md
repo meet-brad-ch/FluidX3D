@@ -1,11 +1,12 @@
 # Examples
 
-Complete list of all 39 FluidX3D examples included in the CMake build system.
+Complete list of all 41 FluidX3D examples included in the CMake build system. Every example except `benchmark` uses
+the Setup API ([README.md](README.md#setup-api)); its extensions are named in its `CMakeLists.txt`.
 
 ## All Examples
 
-| Example | Key Extensions | STL Required |
-|---------|----------------|--------------|
+| Example | Extensions | Geometry file |
+|---------|------------|---------------|
 | **benchmark** | BENCHMARK | - |
 | **taylor_green_3d** | INTERACTIVE_GRAPHICS | - |
 | **taylor_green_2d** | D2Q9, INTERACTIVE_GRAPHICS | - |
@@ -14,43 +15,49 @@ Complete list of all 39 FluidX3D examples included in the CMake build system.
 | **cylinder_duct** | VOLUME_FORCE, INTERACTIVE_GRAPHICS | - |
 | **taylor_couette** | MOVING_BOUNDARIES, INTERACTIVE_GRAPHICS | - |
 | **lid_driven_cavity** | MOVING_BOUNDARIES, INTERACTIVE_GRAPHICS | - |
-| **karman_vortex_street** | D2Q9, FP16S, EQUILIBRIUM_BOUNDARIES | - |
-| **particle_test** | PARTICLES, FORCE_FIELD | - |
-| **delta_wing** | FP16S, SUBGRID | - |
-| **city** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, GRAPHICS | ✓ |
-| **city_rt** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
-| **nasa_crm** | FP16C, SUBGRID | ✓ |
-| **concorde** | FP16S, SUBGRID | ✓ |
-| **boeing_747** | FP16S, SUBGRID | ✓ |
-| **xwing** | FP16S, SUBGRID | ✓ |
-| **tie_fighter** | FP16S, SUBGRID | ✓ |
-| **radial_fan** | FP16S, MOVING_BOUNDARIES, SUBGRID | ✓ |
-| **edf** | FP16S, MOVING_BOUNDARIES, SUBGRID | ✓ |
-| **cow** | FP16S, SUBGRID | ✓ |
-| **space_shuttle** | FP16S, SUBGRID | ✓ |
-| **starship** | FP16S, SUBGRID | ✓ |
-| **ahmed_body** | FP16C, FORCE_FIELD, SUBGRID | ✓ |
-| **cessna_172** | FP16S, MOVING_BOUNDARIES, SUBGRID | ✓ |
-| **bell_222** | FP16C, MOVING_BOUNDARIES, SUBGRID | ✓ |
-| **mercedes_f1** | FP16S, MOVING_BOUNDARIES, SUBGRID | ✓ |
-| **hydraulic_jump** | FP16S, SURFACE, SUBGRID | - |
-| **dam_break** | FP16S, SURFACE | - |
-| **liquid_metal** | FP16S, SURFACE, MOVING_BOUNDARIES | - |
-| **breaking_waves** | FP16S, SURFACE | - |
-| **river** | FP16S, SURFACE | - |
-| **raindrop** | FP16C, SURFACE | - |
-| **bursting_bubble** | FP16C, SURFACE | - |
-| **cube_gravity** | FP16S, SURFACE | - |
-| **periodic_faucet** | FP16S, SURFACE | - |
-| **colliding_droplets** | FP16S, SURFACE, FORCE_FIELD | - |
-| **rayleigh_benard** | FP16S, TEMPERATURE | - |
-| **thermal_convection** | FP16S, TEMPERATURE | - |
+| **karman_vortex_street** | D2Q9, FP16S, EQUILIBRIUM_BOUNDARIES, INTERACTIVE_GRAPHICS | - |
+| **particle_test** | VOLUME_FORCE, FORCE_FIELD, MOVING_BOUNDARIES, PARTICLES, INTERACTIVE_GRAPHICS | - |
+| **delta_wing** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | - |
+| **city** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS (4K frames) | city.stl (included) |
+| **city_rt** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | city.stl (included) |
+| **hill** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | hill.stl (included) |
+| **nasa_crm** | FP16C, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **concorde** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **boeing_747** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **xwing** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **tie_fighter** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **radial_fan** | FP16S, MOVING_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **edf** | FP16S, EQUILIBRIUM_BOUNDARIES, MOVING_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **cow** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **cow_sdf** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | an SDF generated from Cow_t.stl (see the example) |
+| **space_shuttle** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS (8 GPUs) | ✓ |
+| **starship** | FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **ahmed_body** | FP16C, FORCE_FIELD, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **cessna_172** | FP16S, EQUILIBRIUM_BOUNDARIES, MOVING_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **bell_222** | FP16C, EQUILIBRIUM_BOUNDARIES, MOVING_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **mercedes_f1** | FP16S, EQUILIBRIUM_BOUNDARIES, MOVING_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS | ✓ |
+| **hydraulic_jump** | FP16S, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, MOVING_BOUNDARIES, SURFACE, SUBGRID, INTERACTIVE_GRAPHICS | - |
+| **dam_break** | FP16S, VOLUME_FORCE, SURFACE, INTERACTIVE_GRAPHICS | - |
+| **liquid_metal** | FP16S, VOLUME_FORCE, MOVING_BOUNDARIES, SURFACE, INTERACTIVE_GRAPHICS | - |
+| **breaking_waves** | FP16S, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, SURFACE, INTERACTIVE_GRAPHICS | - |
+| **river** | FP16S, VOLUME_FORCE, SURFACE, INTERACTIVE_GRAPHICS | - |
+| **raindrop** | FP16C, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, SURFACE, INTERACTIVE_GRAPHICS | - |
+| **bursting_bubble** | FP16C, VOLUME_FORCE, SURFACE, INTERACTIVE_GRAPHICS | - |
+| **cube_gravity** | FP16S, VOLUME_FORCE, SURFACE, INTERACTIVE_GRAPHICS | - |
+| **periodic_faucet** | FP16S, VOLUME_FORCE, SURFACE, INTERACTIVE_GRAPHICS | - |
+| **colliding_droplets** | FP16S, VOLUME_FORCE, FORCE_FIELD, SURFACE, INTERACTIVE_GRAPHICS | - |
+| **rayleigh_benard** | FP16S, VOLUME_FORCE, TEMPERATURE, INTERACTIVE_GRAPHICS | - |
+| **thermal_convection** | FP16S, VOLUME_FORCE, TEMPERATURE, INTERACTIVE_GRAPHICS | - |
+
+`INTERACTIVE_GRAPHICS` opens a window; built with `GRAPHICS` instead, the same example writes its video (`sim.video()`)
+without one. The baseline tests build every example that way.
 
 ---
 
 ## STL File Requirements
 
-16 examples require STL mesh files for geometry voxelization.
+18 examples need a geometry file: `city.stl` and `hill.stl` are included in `resources/`, `cow_sdf` needs an SDF
+generated from `Cow_t.stl`, and 15 examples need STL files to download.
 
 ### Obtaining STL Files
 
@@ -64,7 +71,8 @@ This script will download all STL files from Thingiverse to the `resources/` dir
 
 **Option 2: Manual Download**
 
-Download files from the sources below and place in `resources/` directory.
+Download files from the sources below and place in `resources/` directory. An example whose file is missing prints
+how to get it and stops.
 
 ### Thingiverse STL Files
 
@@ -88,8 +96,8 @@ Download files from the sources below and place in `resources/` directory.
 
 | Example | Files | Source |
 |---------|-------|--------|
-| **city** | Building.stl | Provide your own city building STL file |
-| **city_rt** (real-time) | Building.stl | Provide your own city building STL file |
+| **city**, **city_rt** | city.stl | included in `resources/` |
+| **hill** | hill.stl | included in `resources/` (a Unity terrain export, 4000 m x 4000 m) |
 | **mercedes_f1** | mercedesf1-body.stl, mercedesf1-front-wheels.stl, mercedesf1-back-wheels.stl | [downloadfree3d.com](https://downloadfree3d.com/3d-models/vehicles/sports-car/mercedes-f1-w14/) |
 | **ahmed_body** | ahmed_25deg_m.stl | [GitHub](https://github.com/nathanrooy/ahmed-bluff-body-cfd/blob/master/geometry/ahmed_25deg_m.stl) |
 | **nasa_crm** | crm-hl_reference_ldg.stl | [NASA LaRC](https://commonresearchmodel.larc.nasa.gov/high-lift-crm/high-lift-crm-geometry/assembled-geometry/) |
@@ -136,13 +144,14 @@ cmake --build build --target taylor_green_3d
 - **SRT / TRT**: Collision operator (Single/Two Relaxation Time)
 - **FP16S / FP16C**: 16-bit floating point compression (S=storage, C=compute)
 - **VOLUME_FORCE**: Body forces (gravity, etc.)
-- **FORCE_FIELD**: Non-uniform force fields
-- **EQUILIBRIUM_BOUNDARIES**: Equilibrium boundary conditions
+- **FORCE_FIELD**: Non-uniform force fields, forces on solids
+- **EQUILIBRIUM_BOUNDARIES**: Equilibrium boundary conditions (inflow, outflow)
 - **MOVING_BOUNDARIES**: Moving/rotating boundaries
 - **SURFACE**: Free surface tracking
 - **TEMPERATURE**: Temperature field
 - **SUBGRID**: Sub-grid scale turbulence model
 - **PARTICLES**: Particle tracking
+- **INTERACTIVE_GRAPHICS / GRAPHICS**: A window, or frames written to disk
 - **BENCHMARK**: Performance benchmark mode
 
 ---
@@ -154,21 +163,23 @@ cmake --build build --target taylor_green_3d
 
 ### Validation Cases
 - **taylor_green_3d** / **taylor_green_2d** - Taylor-Green vortex
-- **poiseuille_flow** - Laminar pipe flow
-- **stokes_drag** - Stokes drag on sphere
+- **poiseuille_flow** - Laminar pipe flow, compared with the analytic profile
+- **stokes_drag** - Stokes drag on sphere, compared with Stokes' law
 - **lid_driven_cavity** - Classic CFD validation
 
 ### Aerodynamics
 - **delta_wing** - Delta wing aircraft
 - **nasa_crm** - NASA Common Research Model
-- **concorde** / **boeing_747** / **xwing** / **tie_fighter** - Various aircraft
+- **concorde** / **boeing_747** / **xwing** / **tie_fighter** - Various aircraft (the TIE fighter tumbles)
 - **cessna_172** - Propeller aircraft with rotating prop
 - **bell_222** - Helicopter with rotating rotors
-- **space_shuttle** / **starship** - Spacecraft
+- **space_shuttle** / **starship** - Spacecraft (the shuttle on 8 GPUs)
 - **mercedes_f1** - Formula 1 race car
-- **city** - Urban wind simulation (graphics mode)
+- **city** - Urban wind simulation (video, 4K frames)
 - **city_rt** - Urban wind simulation (real-time interactive)
+- **hill** - Wind over terrain with an atmospheric boundary layer (clearances around an STL in metres)
 - **cow** - Cow aerodynamics (humor example)
+- **cow_sdf** - The cow voxelized from a signed distance field
 
 ### Rotating Machinery
 - **radial_fan** - Centrifugal fan
@@ -177,12 +188,12 @@ cmake --build build --target taylor_green_3d
 ### Free Surface Flows
 - **hydraulic_jump** - Hydraulic jump phenomenon
 - **dam_break** - Dam break simulation
-- **liquid_metal** - Liquid metal flow
-- **breaking_waves** - Ocean waves
+- **liquid_metal** - Liquid metal on a vibrating membrane
+- **breaking_waves** - Waves breaking on a beach
 - **river** - River flow
 - **raindrop** - Raindrop impact
 - **bursting_bubble** - Bubble bursting
-- **cube_gravity** - Cube dropping into fluid
+- **cube_gravity** - A cube of water under turning gravity
 - **periodic_faucet** - Dripping faucet
 - **colliding_droplets** - Droplet collision
 
@@ -195,7 +206,7 @@ cmake --build build --target taylor_green_3d
 - **taylor_couette** - Taylor-Couette flow
 - **karman_vortex_street** - Von Kármán vortex street
 - **particle_test** - Particle tracking test
-- **ahmed_body** - Ahmed body (automotive CFD reference)
+- **ahmed_body** - Ahmed body (automotive CFD reference), with its drag coefficient
 
 ---
 
@@ -203,4 +214,5 @@ cmake --build build --target taylor_green_3d
 
 - **[CMAKE.md](CMAKE.md)** - Architecture and how to add new examples
 - **[BUILD.md](BUILD.md)** - Build instructions
+- **[SETUP_API.md](SETUP_API.md)** - How to write a simulation with the Setup API
 - **[DOCUMENTATION.md](DOCUMENTATION.md)** - Original FluidX3D documentation

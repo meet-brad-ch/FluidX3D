@@ -1,7 +1,6 @@
 #pragma once
 
-// Setup API: one include for all components. A simulation in physical units (see README.md, porting_guide.md and
-// the examples):
+// Setup API: one include for all components. A simulation in physical units (see SETUP_API.md and the examples):
 //   Simulation sim(Domain::around(Model("mesh.stl")).clearances(1_m, 2_m, 1_m).vram(2000_mb), Fluid::AIR, 1.0_mps);
 //   sim.boundaries().set_solid_floor().set_open_boundaries().initialize_velocity_y(1.0_mps).apply();
 //   sim.graphics().show_surface().show_vortices().apply();
