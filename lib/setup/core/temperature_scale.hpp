@@ -10,7 +10,10 @@
 /// beta_lbm = beta*difference (expansion()).
 class TemperatureScale {
 public:
-    /// The scale between a cold and a hot temperature: they become 0.5 and 1.5, their mean 1.
+    /// @brief The scale between a cold and a hot temperature: they become 0.5 and 1.5, their mean 1.
+    /// @param cold the cold temperature
+    /// @param hot the hot temperature
+    /// @return the scale
     static TemperatureScale between(Temperature cold, Temperature hot) {
         return TemperatureScale(Temperature::from_si(0.5f * (hot.si() + cold.si())), hot - cold);
     }
@@ -19,16 +22,21 @@ public:
     /// @param difference the temperature difference that becomes the lattice temperature difference 1
     TemperatureScale(Temperature reference, Temperature difference) : reference_(reference), difference_(difference) {}
 
-    /// The lattice temperature of an absolute temperature.
+    /// @param t an absolute temperature
+    /// @return the lattice temperature
     float lattice(Temperature t) const { return 1.0f + (t.si() - reference_.si()) / difference_.si(); }
 
-    /// The lattice thermal expansion coefficient of a physical one.
+    /// @param beta a physical thermal expansion coefficient
+    /// @return the lattice thermal expansion coefficient
     float expansion(ThermalExpansion beta) const { return beta * difference_; }
 
-    Temperature reference() const { return reference_; }   ///< lattice temperature 1
-    Temperature difference() const { return difference_; } ///< lattice temperature difference 1
+    /// @return the temperature that is the lattice temperature 1
+    Temperature reference() const { return reference_; }
+
+    /// @return the temperature difference that is the lattice temperature difference 1
+    Temperature difference() const { return difference_; }
 
 private:
-    Temperature reference_;
-    Temperature difference_;
+    Temperature reference_;  ///< the lattice temperature 1
+    Temperature difference_; ///< the lattice temperature difference 1
 };

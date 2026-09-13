@@ -12,7 +12,9 @@
 class ModelPlacement {
 public:
     /// @brief The placement of the plan's model (reads its STL).
-    /// @throws SetupError if the plan has no model.
+    /// @param plan the plan
+    /// @return the placement
+    /// @throws SetupError if the plan has no model
     static ModelPlacement of(const DomainPlan& plan);
 
     /// @param rotated_model the model, rotated but not scaled or moved (read_stl(path, 1.0f, rotation))
@@ -21,22 +23,33 @@ public:
     /// @param center        the model's bounding box center in cells
     ModelPlacement(const Mesh& rotated_model, const float3x3& rotation, float voxel_size, const float3& center);
 
-    /// An STL of the same assembly with this transform (read_stl() exits if it cannot read the file).
+    /// @brief An STL of the same assembly with this transform (read_stl() exits if it cannot read the file).
+    /// @param path the STL file
+    /// @return the mesh, rotated, scaled and moved like the model
     std::unique_ptr<Mesh> load(const std::string& path) const;
 
     /// @brief An STL in other coordinates than the model's: rotated and scaled like it, its own bounding box center
     /// moved to the model's plus an offset.
-    /// @param offset in cells
+    /// @param path the STL file
+    /// @param offset the offset in cells
+    /// @return the mesh
     std::unique_ptr<Mesh> load_centered(const std::string& path, const float3& offset) const;
 
-    float cells_per_unit() const { return cells_per_unit_; }       ///< cells per STL unit
+    /// @return cells per STL unit
+    float cells_per_unit() const { return cells_per_unit_; }
+
+    /// @return the rotation
     const float3x3& rotation() const { return rotation_; }
-    const float3& center() const { return center_; }                ///< the model's bounding box center in cells
-    const float3& translation() const { return translation_; }      ///< in cells, after rotation and scaling
+
+    /// @return the model's bounding box center in cells
+    const float3& center() const { return center_; }
+
+    /// @return the move in cells, after rotation and scaling
+    const float3& translation() const { return translation_; }
 
 private:
-    float3x3 rotation_;
-    float cells_per_unit_;
-    float3 center_;
-    float3 translation_;
+    float3x3 rotation_;    ///< the rotation
+    float cells_per_unit_; ///< cells per STL unit
+    float3 center_;        ///< the model's bounding box center in cells
+    float3 translation_;   ///< the move in cells, after rotation and scaling
 };

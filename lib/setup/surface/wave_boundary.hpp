@@ -23,31 +23,40 @@
 /// @endcode
 class WaveBoundary {
 public:
-    /// @param lbm    the free surface LBM
-    /// @param unit_scale  the simulation's unit scale
-    /// @param runner the simulation's runner, which calls update()
+    /// @param lbm        the free surface LBM
+    /// @param unit_scale the simulation's unit scale
+    /// @param runner     the simulation's runner, which calls update()
     WaveBoundary(LBM& lbm, const UnitScale& unit_scale, Runner& runner) : lbm_(lbm), units_(unit_scale), runner_(runner) {}
 
-    /// The wave's amplitude and frequency; its peak velocity is 2*pi*frequency*amplitude.
+    /// @brief The wave's amplitude and frequency; its peak velocity is 2*pi*frequency*amplitude.
+    /// @param amplitude the amplitude
+    /// @param frequency the frequency
+    /// @return this wave maker
     WaveBoundary& set_wave(Length amplitude, Frequency frequency) {
         frequency_ = frequency;
         peak_velocity_ = (amplitude * frequency) * (2.0f * pif);
         return *this;
     }
 
-    /// The face the waves come from (default Y_MIN).
+    /// @brief The face the waves come from (default Y_MIN).
+    /// @param face the face
+    /// @return this wave maker
     WaveBoundary& set_inlet_face(Face face) {
         inlet_face_ = face;
         return *this;
     }
 
-    /// The vertical velocity as a fraction of the horizontal one (default 0.5; smaller for shallow water).
+    /// @brief The vertical velocity as a fraction of the horizontal one (default 0.5; smaller for shallow water).
+    /// @param factor the fraction
+    /// @return this wave maker
     WaveBoundary& set_vertical_factor(float32_t factor) {
         vertical_factor_ = factor;
         return *this;
     }
 
-    /// The simulated time between updates of the inlet velocities (default: a sixteenth of the wave's period).
+    /// @brief The simulated time between updates of the inlet velocities (default: a sixteenth of the wave's period).
+    /// @param interval the interval
+    /// @return this wave maker
     WaveBoundary& set_update_interval(Duration interval) {
         update_interval_ = interval;
         return *this;
@@ -86,7 +95,9 @@ public:
         runner_.every(interval, [this](Duration time) { update(time); });
     }
 
-    /// Sets the inlet velocities for this simulated time since the start (reads and writes the velocity field on the device).
+    /// @brief Sets the inlet velocities for a simulated time since the start (reads and writes the velocity field on
+    /// the device).
+    /// @param time the simulated time
     void update(Duration time) {
         if(!initialized_) return;
 
@@ -125,19 +136,19 @@ public:
     }
 
 private:
-    LBM& lbm_;
-    UnitScale units_;
-    Runner& runner_;
+    LBM& lbm_;        ///< the free surface LBM
+    UnitScale units_; ///< the simulation's unit scale
+    Runner& runner_;  ///< the simulation's runner
 
-    Frequency frequency_ = Frequency::from_si(0.5f);
-    Speed peak_velocity_;
-    std::optional<Duration> update_interval_;
+    Frequency frequency_ = Frequency::from_si(0.5f); ///< the wave's frequency
+    Speed peak_velocity_;                            ///< the wave's peak velocity
+    std::optional<Duration> update_interval_;        ///< set_update_interval()
 
-    float32_t u_wave_lbm_ = 0.0f;
-    float32_t omega_ = 0.0f; ///< rad/s
+    float32_t u_wave_lbm_ = 0.0f; ///< the peak velocity in lattice units
+    float32_t omega_ = 0.0f;      ///< the angular frequency in rad/s
 
-    Face inlet_face_ = Face::Y_MIN;
-    float32_t vertical_factor_ = 0.5f;
+    Face inlet_face_ = Face::Y_MIN;    ///< the face the waves come from
+    float32_t vertical_factor_ = 0.5f; ///< the vertical velocity as a fraction of the horizontal one
 
-    bool initialized_ = false;
+    bool initialized_ = false; ///< whether initialize() was called
 };

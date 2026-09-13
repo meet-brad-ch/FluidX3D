@@ -20,14 +20,17 @@
 /// @endcode
 class FieldReader {
 public:
+    /// One cell's state.
     struct Cell {
         Position center;   ///< the cell's center
-        Velocity velocity;
+        Velocity velocity; ///< the flow velocity
         Pressure pressure; ///< relative to the fluid at rest
-        Density density;
+        Density density;   ///< the density
         bool solid;        ///< a solid cell (its velocity is a wall's)
     };
 
+    /// @param lbm         the LBM whose fields are read
+    /// @param unit_scale  the simulation's unit scale
     /// @param from_device read the velocity, density and flags from the device (once the simulation has started)
     FieldReader(LBM& lbm, const UnitScale& unit_scale, bool from_device) : lbm_(lbm), units_(unit_scale) {
         if(!from_device) return;
@@ -36,7 +39,8 @@ public:
         lbm_.flags.read_from_device();
     }
 
-    /// The cell containing a point (the nearest one outside the domain).
+    /// @param point a point
+    /// @return the cell containing the point (the nearest one outside the domain)
     Cell cell_at(const Position& point) const {
         const float cell_size = units_.cell_size().si();
         const uint32_t x = clamp_index(point.x.si() / cell_size, lbm_.get_Nx());
@@ -45,11 +49,21 @@ public:
         return cell(lbm_.index(x, y, z), x, y, z);
     }
 
+    /// @param point a point
+    /// @return the velocity of the cell containing the point
     Velocity velocity_at(const Position& point) const { return cell_at(point).velocity; }
+
+    /// @param point a point
+    /// @return the pressure of the cell containing the point, relative to the fluid at rest
     Pressure pressure_at(const Position& point) const { return cell_at(point).pressure; }
+
+    /// @param point a point
+    /// @return the density of the cell containing the point
     Density density_at(const Position& point) const { return cell_at(point).density; }
 
-    /// Calls f(const Cell&) for every cell of the domain, on the host, in order of the cell index.
+    /// @brief Calls a function for every cell of the domain, on the host, in order of the cell index.
+    /// @tparam F a callable taking a const Cell&
+    /// @param f the function
     template<typename F>
     void for_each_cell(F&& f) const {
         for(uint64_t n = 0ull; n < lbm_.get_N(); n++) {
@@ -60,13 +74,19 @@ public:
     }
 
 private:
-    LBM& lbm_;
-    UnitScale units_;
+    LBM& lbm_;        ///< the LBM whose fields are read
+    UnitScale units_; ///< the simulation's unit scale
 
+    /// @param cells a coordinate in cells
+    /// @param count the cells along the axis
+    /// @return the index of the cell containing it, clamped to the axis
     static uint32_t clamp_index(float cells, uint32_t count) {
         return (uint32_t)std::clamp(std::floor(cells), 0.0f, (float)(count - 1u));
     }
 
+    /// @param n       the cell's index
+    /// @param x, y, z its coordinates
+    /// @return the cell's state in physical units
     Cell cell(uint64_t n, uint32_t x, uint32_t y, uint32_t z) const {
         const float cell_size = units_.cell_size().si();
         const float rho = lbm_.rho[n];

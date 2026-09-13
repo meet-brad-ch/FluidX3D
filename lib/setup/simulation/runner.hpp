@@ -21,17 +21,26 @@
 /// @endcode
 class Runner {
 public:
+    /// A task, called with the simulated time since the start.
     using Task = std::function<void(Duration time)>;
 
+    /// @param lbm        the LBM to run
+    /// @param unit_scale the simulation's unit scale, for the times
     Runner(LBM& lbm, const UnitScale& unit_scale) : lbm_(lbm), units_(unit_scale) {}
 
-    /// Calls the task every interval of simulated time.
+    /// @brief Calls a task every interval of simulated time.
+    /// @param interval the interval
+    /// @param task     the task
+    /// @return this runner
     Runner& every(Duration interval, Task task) { return add(units_.time_steps(interval), std::move(task)); }
 
-    /// Calls the task every time step.
+    /// @brief Calls a task every time step.
+    /// @param task the task
+    /// @return this runner
     Runner& every_step(Task task) { return add(1u, std::move(task)); }
 
-    /// Runs this much simulated time from now.
+    /// @brief Runs a simulated time from now.
+    /// @param time the simulated time
     void run_for(Duration time) {
         const uint64_t steps = units_.time_steps(time);
         if(lbm_.get_t() == 0u) print_info("Simulated time " + to_string(time.si(), 3u) + " s = " + to_string(steps) + " time steps");
@@ -45,19 +54,25 @@ public:
     void stop() { stopped_ = true; }
 
 private:
-    LBM& lbm_;
-    UnitScale units_;
-    StepSchedule schedule_;
-    std::vector<Task> tasks_; ///< indexed as in schedule_
+    LBM& lbm_;                            ///< the LBM to run
+    UnitScale units_;                     ///< the simulation's unit scale
+    StepSchedule schedule_;               ///< the tasks' intervals
+    std::vector<Task> tasks_;             ///< the tasks, indexed as in schedule_
     uint64_t last_task_step_ = max_ulong; ///< the time step at which the tasks were last called
-    bool stopped_ = false;
+    bool stopped_ = false;                ///< whether stop() was called in this run
 
+    /// @brief Adds a task.
+    /// @param interval its interval in time steps
+    /// @param task     the task
+    /// @return this runner
     Runner& add(uint64_t interval, Task task) {
         schedule_.add(interval);
         tasks_.push_back(std::move(task));
         return *this;
     }
 
+    /// @brief Runs until a time step, calling the tasks that are due, or until stop().
+    /// @param end the time step to run until
     void run_until(uint64_t end) {
         stopped_ = false;
         lbm_.run(0u, end); // initializes the LBM at its first run

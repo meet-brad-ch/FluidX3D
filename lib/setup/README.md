@@ -35,6 +35,9 @@ the CPU. The headers that use the LBM depend on each example's configuration (th
   extension (`SURFACE`, `TEMPERATURE`, `FORCE_FIELD`, `PARTICLES`, `GRAPHICS`) stops with an `#error` that names it.
 - Conflicting or impossible settings throw `SetupError` in the library; `Simulation` reports them with the core's
   `print_error()`, which stops the program.
+- Everything is documented for Doxygen: every class, enum value and member, and every function with its `@param`s
+  and `@return`. `doxygen` in the repository root (the `Doxyfile` covers `lib/setup` and `src/sdf_cache`) writes the
+  HTML to `build/doxygen/html` and fails on any missing comment.
 
 ## Tests
 

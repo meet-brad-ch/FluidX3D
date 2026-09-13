@@ -25,7 +25,10 @@ struct CameraPose {
 /// @endcode
 class CameraView {
 public:
-    /// Circles the domain's center, seen from this azimuth and elevation.
+    /// @brief Circles the domain's center.
+    /// @param azimuth   the azimuth the center is seen from
+    /// @param elevation the elevation
+    /// @return the view
     static CameraView orbit(Angle azimuth, Angle elevation) {
         CameraView view;
         view.azimuth_ = azimuth;
@@ -33,39 +36,54 @@ public:
         return view;
     }
 
-    /// At a position, looking at what it sees from this azimuth and elevation.
+    /// @brief At a position, looking at what it sees from an azimuth and an elevation.
+    /// @param position  the camera's position
+    /// @param azimuth   the azimuth of the direction from what it looks at to the camera
+    /// @param elevation the elevation of that direction
+    /// @return the view
     static CameraView at(Position position, Angle azimuth = {}, Angle elevation = {}) {
         CameraView view = orbit(azimuth, elevation);
         view.position_ = position;
         return view;
     }
 
-    /// at(): turned toward this point.
+    /// @brief at(): turned toward a point.
+    /// @param target the point
+    /// @return this view
     CameraView& look_at(Position target) {
         target_ = target;
         return *this;
     }
 
-    /// The horizontal field of view (default 100 degrees).
+    /// @brief The horizontal field of view (default 100 degrees).
+    /// @param fov the field of view
+    /// @return this view
     CameraView& field_of_view(Angle fov) {
         field_of_view_ = fov;
         return *this;
     }
 
-    /// orbit(): the frame's smaller side spans this length at the domain's center (default: the domain's longest side).
+    /// @brief orbit(): the frame's smaller side spans a length at the domain's center (default: the domain's longest
+    /// side).
+    /// @param height the length
+    /// @return this view
     CameraView& view_height(Length height) {
         view_height_ = height;
         return *this;
     }
 
-    /// @brief The core's parameters on a grid of this many cells of this size (in m).
+    /// @brief The core's parameters on a grid.
+    /// @param cells     the grid's cells along X, Y and Z
+    /// @param cell_size the cell size in m
+    /// @return the pose
     /// @throws SetupError for look_at() on an orbit() camera, or view_height() on an at() camera
     CameraPose pose(const uint3& cells, float cell_size) const;
 
 private:
-    std::optional<Position> position_; ///< at()
-    Angle azimuth_{}, elevation_{};
-    Angle field_of_view_ = Angle::from_deg(100.0f);
-    std::optional<Position> target_;
-    std::optional<Length> view_height_;
+    std::optional<Position> position_;               ///< at()
+    Angle azimuth_{};                                ///< the azimuth of the direction from what the camera looks at to the camera
+    Angle elevation_{};                              ///< the elevation of that direction
+    Angle field_of_view_ = Angle::from_deg(100.0f); ///< field_of_view()
+    std::optional<Position> target_;                 ///< look_at()
+    std::optional<Length> view_height_;              ///< view_height()
 };

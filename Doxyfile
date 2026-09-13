@@ -1,0 +1,45 @@
+# Doxygen configuration of the Setup API (lib/setup) and the SDF cache (src/sdf_cache).
+#
+# Run `doxygen` in the repository root: the HTML goes to build/doxygen/html, and every missing comment
+# (a class, a function, a parameter, a return value, a member, an enum value) is an error, so the run
+# fails until the code is completely documented.
+
+PROJECT_NAME           = "FluidX3D Setup API"
+OUTPUT_DIRECTORY       = build/doxygen
+INPUT                  = lib/setup src/sdf_cache
+FILE_PATTERNS          = *.hpp *.cpp
+RECURSIVE              = YES
+STRIP_FROM_PATH        = .
+INCLUDE_PATH           = lib src src/sdf_cache
+
+# The API's headers are compiled with an example's defines.hpp; every extension is documented at once.
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = NO
+SKIP_FUNCTION_MACROS   = NO
+PREDEFINED             = SURFACE TEMPERATURE FORCE_FIELD PARTICLES GRAPHICS VOLUME_FORCE MOVING_BOUNDARIES SUBGRID EQUILIBRIUM_BOUNDARIES FLUIDX3D_RESOURCE_DIR=\"resources\"
+
+# Everything is documented, private members and static functions included.
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = YES
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+EXTRACT_ANON_NSPACES   = YES
+HIDE_UNDOC_MEMBERS     = NO
+
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_IF_INCOMPLETE_DOC = YES
+WARN_NO_PARAMDOC       = YES
+WARN_IF_UNDOC_ENUM_VAL = YES
+WARN_AS_ERROR          = YES
+QUIET                  = YES
+
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+MULTILINE_CPP_IS_BRIEF = NO
+BUILTIN_STL_SUPPORT    = YES
+SOURCE_BROWSER         = NO

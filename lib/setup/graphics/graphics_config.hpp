@@ -9,21 +9,21 @@
 
 /// The field the graphics color (lbm.graphics.field_mode).
 enum class FieldMode {
-    VELOCITY = 0,
-    DENSITY = 1,
-    THERMAL = 2 ///< TEMPERATURE extension
+    VELOCITY = 0, ///< the velocity
+    DENSITY = 1,  ///< the density
+    THERMAL = 2   ///< the temperature (TEMPERATURE extension)
 };
 
 /// The slice planes drawn (lbm.graphics.slice_mode).
 enum class SliceMode {
-    NONE = 0,
-    X = 1,   ///< YZ plane
-    Y = 2,   ///< XZ plane
-    Z = 3,   ///< XY plane
-    XZ = 4,
-    XYZ = 5,
-    YZ = 6,
-    XY = 7
+    NONE = 0, ///< no slice
+    X = 1,    ///< the YZ plane
+    Y = 2,    ///< the XZ plane
+    Z = 3,    ///< the XY plane
+    XZ = 4,   ///< the YZ and XY planes
+    XYZ = 5,  ///< all three planes
+    YZ = 6,   ///< the XZ and XY planes
+    XY = 7    ///< the YZ and XZ planes
 };
 
 /// @brief Visualization modes and the camera of the LBM graphics (Simulation::graphics()); apply() writes them and
@@ -35,7 +35,7 @@ enum class SliceMode {
 /// @endcode
 class GraphicsConfig {
 public:
-    /// @param lbm   the LBM whose graphics are configured
+    /// @param lbm        the LBM whose graphics are configured
     /// @param unit_scale the simulation's unit scale, for the camera
     GraphicsConfig(LBM& lbm, const UnitScale& unit_scale) : lbm_(lbm), units_(unit_scale) {
 #ifdef GRAPHICS
@@ -43,7 +43,8 @@ public:
 #endif
     }
 
-    /// Keeps the modes the LBM has now (those of ParticleManager::initialize(), for example).
+    /// @brief Keeps the modes the LBM has now (those of ParticleManager::initialize(), for example).
+    /// @return this configuration
     GraphicsConfig& inherit_modes() {
 #ifdef GRAPHICS
         visualization_modes_ = lbm_.graphics.visualization_modes;
@@ -52,60 +53,75 @@ public:
         return *this;
     }
 
-    /// Solid surfaces (marching cubes).
+    /// @brief Solid surfaces (marching cubes).
+    /// @return this configuration
     GraphicsConfig& show_surface() {
         visualization_modes_ |= VIS_FLAG_SURFACE;
         return *this;
     }
 
-    /// The cell flags as a wireframe.
+    /// @brief The cell flags as a wireframe.
+    /// @return this configuration
     GraphicsConfig& show_flags() {
         visualization_modes_ |= VIS_FLAG_LATTICE;
         return *this;
     }
 
-    /// Vortices: the Q-criterion isosurface.
+    /// @brief Vortices: the Q-criterion isosurface.
+    /// @return this configuration
     GraphicsConfig& show_vortices() {
         visualization_modes_ |= VIS_Q_CRITERION;
         return *this;
     }
 
+    /// @brief The velocity field as colored arrows.
+    /// @return this configuration
     GraphicsConfig& show_velocity_field() {
         visualization_modes_ |= VIS_FIELD;
         field_mode_ = static_cast<int32_t>(FieldMode::VELOCITY);
         return *this;
     }
 
+    /// @brief The density field as colored arrows.
+    /// @return this configuration
     GraphicsConfig& show_density_field() {
         visualization_modes_ |= VIS_FIELD;
         field_mode_ = static_cast<int32_t>(FieldMode::DENSITY);
         return *this;
     }
 
+    /// @brief Streamlines.
+    /// @return this configuration
     GraphicsConfig& show_streamlines() {
         visualization_modes_ |= VIS_STREAMLINES;
         return *this;
     }
 
-    /// The free surface (SURFACE extension): raytraced on one GPU, rasterized on several.
+    /// @brief The free surface (SURFACE extension): raytraced on one GPU, rasterized on several.
+    /// @return this configuration
     GraphicsConfig& show_free_surface() {
         visualization_modes_ |= lbm_.get_D() == 1u ? VIS_PHI_RAYTRACE : VIS_PHI_RASTERIZE;
         return *this;
     }
 
-    /// The free surface rasterized (marching cubes) also on one GPU, e.g. with show_flags().
+    /// @brief The free surface rasterized (marching cubes) also on one GPU, e.g. with show_flags().
+    /// @return this configuration
     GraphicsConfig& show_free_surface_mesh() {
         visualization_modes_ |= VIS_PHI_RASTERIZE;
         return *this;
     }
 
-    /// Slice planes at the LBM's current slice positions.
+    /// @brief Slice planes at the LBM's current slice positions.
+    /// @param mode the planes
+    /// @return this configuration
     GraphicsConfig& set_slice_mode(SliceMode mode) {
         slice_mode_ = static_cast<int32_t>(mode);
         return *this;
     }
 
-    /// The view the graphics start with (also for interactive graphics).
+    /// @brief The view the graphics start with (also for interactive graphics).
+    /// @param view the view
+    /// @return this configuration
     GraphicsConfig& set_camera(const CameraView& view) {
         camera_ = view;
         return *this;
@@ -122,8 +138,11 @@ public:
 #endif
     }
 
-    /// Points the LBM's camera (the core's global camera) as this view; exits with a message for contradictory camera
-    /// settings.
+    /// @brief Points the LBM's camera (the core's global camera) as a view; exits with a message for contradictory
+    /// camera settings.
+    /// @param lbm        the LBM whose camera is pointed
+    /// @param unit_scale the simulation's unit scale
+    /// @param view       the view
     static void apply_camera(LBM& lbm, const UnitScale& unit_scale, const CameraView& view) {
 #ifdef GRAPHICS
         std::optional<CameraPose> pose;
@@ -142,10 +161,10 @@ public:
     }
 
 private:
-    LBM& lbm_;
-    UnitScale units_;
-    std::optional<CameraView> camera_;
-    int32_t visualization_modes_ = 0;
-    int32_t field_mode_ = 0;
-    int32_t slice_mode_ = 0;
+    LBM& lbm_;                         ///< the LBM whose graphics are configured
+    UnitScale units_;                  ///< the simulation's unit scale
+    std::optional<CameraView> camera_; ///< set_camera()
+    int32_t visualization_modes_ = 0;  ///< the core's VIS_* flags
+    int32_t field_mode_ = 0;           ///< the FieldMode
+    int32_t slice_mode_ = 0;           ///< the SliceMode
 };

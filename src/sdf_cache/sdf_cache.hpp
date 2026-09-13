@@ -30,8 +30,8 @@ struct SDFCacheConfig {
  * SDF is generated at exactly that size, plus padding cells on every side. The cache directory is created if it
  * does not exist.
  *
- * Cached files are named <stl>_sdf_<nx>x<ny>x<nz>_<key>.sdf, where the grid includes the padding and the key is
- * SDFCacheKey::format(). They are the core's binary SDF format (see read_sdf(): a header of the grid and its bounds,
+ * Cached files are named `STL_sdf_NXxNYxNZ_KEY.sdf` after the STL file's name, the grid (which includes the padding)
+ * and the key of SDFCacheKey::format(), e.g. `hill_sdf_502x502x90_d1332ade.sdf`. They are the core's binary SDF format (see read_sdf(): a header of the grid and its bounds,
  * then one float per cell, negative inside the model).
  */
 class SDFCacheManager {
