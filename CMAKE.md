@@ -187,16 +187,19 @@ add_fluidx3d_example(NAME benchmark
 
 2. **Name the extensions** in its `CMakeLists.txt` (step 4)
 
-3. **Create `main.cpp`**:
+3. **Create `main.cpp`** with the Setup API (see [SETUP_API.md](SETUP_API.md)):
    ```cpp
-   #include "defines.hpp"
-   #include "lbm.hpp"
-   #include "graphics.hpp"
+   #include "setup/setup.hpp"
 
    void main_setup() {
-       LBM lbm(128u, 128u, 128u, 0.02f);
-       // Your setup here
-       lbm.run();
+       const Speed flow = 10.0_mps;
+       Simulation sim(Domain::around(Model("my_model.stl").length(2.0_m))
+           .size(2.0_m, 6.0_m, 2.0_m).on_floor().vram(2000_mb),
+           Fluid::AIR, flow);
+       sim.boundaries().set_solid_floor().set_open_boundaries().initialize_velocity_y(flow).apply();
+       sim.graphics().show_surface().show_vortices().apply();
+       sim.video().add(CameraView::orbit(-40_deg, 20_deg)).set_length(10.0_s); // written when built for video
+       sim.run_for(10.0_s);
    }
    ```
 
@@ -224,14 +227,14 @@ add_fluidx3d_example(NAME benchmark
 
 ### Example with STL Files
 
-Place STL files in `resources/` directory and reference them using `get_resource_path()`:
+Place STL files in `resources/` directory and name them in the `Model`; the simulation finds, scales, places and voxelizes them:
 
 **main.cpp:**
 ```cpp
-Mesh* mesh = read_stl(get_resource_path("my_model.stl"), ...);
+Simulation sim(Domain::around(Model("my_model.stl").length(2.0_m)).size(...), Fluid::AIR, 10.0_mps);
 ```
 
-The `get_resource_path()` function searches:
+A missing file stops the program with a message; `Model::instructions({...})` adds how to get it. Underneath, the core's `get_resource_path()` function searches:
 1. `<project>/resources/` (development)
 2. `./resources/` (relative to executable for distributions)
 
@@ -314,10 +317,9 @@ inline string get_resource_path(const string& relative_path) {
 }
 ```
 
-**Usage:**
+**Usage** (the Setup API calls it for a `Model`'s files; by hand for other resources):
 ```cpp
 const string skybox = get_resource_path("skybox8k.png");
-Mesh* cow = read_stl(get_resource_path("Cow_t.stl"), ...);
 ```
 
 ---

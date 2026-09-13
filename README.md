@@ -12,19 +12,20 @@ This fork provides a **modern CMake build system** to make FluidX3D easier to bu
 **Key improvements:**
 - ✅ **Modern CMake**: Target-based build system with automatic dependency fetching
 - ✅ **IDE Integration**: Full support for Visual Studio, VS Code, CLion, Qt Creator
-- ✅ **Separate Examples**: Each of the 40 examples builds independently with 1-line CMakeLists.txt
+- ✅ **Separate Examples**: Each of the 41 examples builds independently; its CMakeLists.txt names its extensions
 - ✅ **Unity Build Architecture**: Examples can have different feature configurations simultaneously
 - ✅ **Resource Management**: Centralized `resources/` directory with `get_resource_path()` function
 - ✅ **Easy Build Selection**: `cmake --build build --target <example>` instead of editing source code
 - ✅ **SDF File Support**: Load signed distance fields from binary `.sdf` files for mesh voxelization
 - ✅ **SDF Caching**: Automatic hash-based caching of generated SDF files via `sdf_cache` module
-- ✅ **SimulationSetup API**: Fluent configuration API for domain sizing, STL loading, and voxelization
+- ✅ **Setup API**: A `Simulation` in physical units: domain sizing, STL loading, voxelization, boundaries, graphics and a run loop in simulated time
 - ✅ **Voxelization Fix**: Fixed vertical slice artifacts in mesh voxelization via ray jitter
 
 **New Documentation:**
 - **[CMAKE.md](CMAKE.md)** - Architecture, unity build design, and how to add examples
 - **[BUILD.md](BUILD.md)** - Build instructions for Windows, Linux, and macOS
-- **[EXAMPLES.md](EXAMPLES.md)** - Complete list of all 40 examples with STL download info
+- **[EXAMPLES.md](EXAMPLES.md)** - Complete list of all 41 examples with STL download info
+- **[SETUP_API.md](SETUP_API.md)** - How to write a simulation with the Setup API; **[lib/setup/README.md](lib/setup/README.md)** - its layout, conventions and tests (`ctest -L "unit|baseline|physics"`)
 
 
 ## How to get started?
@@ -35,7 +36,7 @@ Read the [FluidX3D Documentation](DOCUMENTATION.md)!
 
 ## Setup API
 
-This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for configuring simulations in SI units (meters, m/s, kg/m³) with fluent method chaining. Every example except `benchmark` (a speed test of the core) uses it; `poiseuille_flow` and `stokes_drag` compare the flow with analytic solutions in SI units. [porting_guide.md](porting_guide.md) maps the low-level calls to the API, [lib/setup/README.md](lib/setup/README.md) describes its layout and conventions.
+This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for configuring simulations in SI units (meters, m/s, kg/m³) with fluent method chaining. Every example except `benchmark` (a speed test of the core) uses it; `poiseuille_flow` and `stokes_drag` compare the flow with analytic solutions in SI units. [SETUP_API.md](SETUP_API.md) shows how to write a simulation with it, [lib/setup/README.md](lib/setup/README.md) describes its layout and conventions.
 
 | Component | Purpose |
 |-----------|---------|
