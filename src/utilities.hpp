@@ -13,6 +13,7 @@
 #pragma warning(disable:6386)
 #pragma warning(disable:6001)
 #include <cmath>
+#include <cstdlib> // getenv() in wait_on_error()
 #include <vector>
 #include <string>
 #ifdef UTILITIES_REGEX
@@ -4074,17 +4075,20 @@ inline void print_message(const string& message, const string& keyword="", const
 	}
 	println(p+"|");
 }
+inline bool wait_on_error() { // on Windows, an error waits for Enter so a double-clicked console stays open; FLUIDX3D_NO_WAIT (any value) turns that off for unattended runs, which would otherwise never exit
+#ifdef _WIN32
+	return std::getenv("FLUIDX3D_NO_WAIT")==nullptr;
+#else // _WIN32
+	return false;
+#endif // _WIN32
+}
 inline void print_error(const string& s) { // print formatted error message
 	print_message(s, "Error", color_red);
-#ifdef _WIN32
-	print_message("Press Enter to exit.", "     ", -1, false);
-#endif // _WIN32
+	if(wait_on_error()) print_message("Press Enter to exit.", "     ", -1, false);
 	string b = "";
 	for(int i=0; i<CONSOLE_WIDTH-2; i++) b += "-";
 	println("'"+b+"'");
-#ifdef _WIN32
-	wait();
-#endif //_WIN32
+	if(wait_on_error()) wait();
 	exit(1);
 }
 inline void print_warning(const string& s) { // print formatted warning message

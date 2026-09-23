@@ -203,6 +203,26 @@ The build system automatically applies optimal flags:
 2. For STL files: `python resources/download_all_thingiverse_stl.py`
 3. Verify: `dir resources`
 
+### Windows: an unattended run waits after an error
+
+**Problem:** A run started by a script or a scheduler stops on an error and never exits.
+
+**Cause:** On Windows an error prints "Press Enter to exit." and waits for a key, so that a console
+started by a double-click stays open long enough to read.
+
+**Solution:** Set the environment variable `FLUIDX3D_NO_WAIT` (any value) for unattended runs. The
+error is then printed, and the program exits with code 1.
+
+### Windows: "Filename too long" while configuring
+
+**Problem:** The first configure fails while it fetches OpenCL-CLHPP, with `Filename too long`.
+
+**Cause:** OpenCL-CLHPP's own test submodules nest deep, and under a deep build folder their paths
+pass the Windows limit of 260 characters.
+
+**Solution:** The build fetches OpenCL-CLHPP without its submodules (`GIT_SUBMODULES ""`), since only
+its headers are used. On a build from before that change, keep the checkout at a short path.
+
 ### Linux: X11 not found
 
 **Problem:** Cannot find X11 development libraries

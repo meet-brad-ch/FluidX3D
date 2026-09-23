@@ -18,6 +18,7 @@ FetchContent_Declare(opencl_headers
 FetchContent_Declare(opencl_clhpp
     GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-CLHPP.git
     GIT_TAG        v2024.10.24
+    GIT_SUBMODULES ""  # its CMock test submodules nest deep enough to pass the Windows path limit, and tests are off
     SYSTEM
 )
 
