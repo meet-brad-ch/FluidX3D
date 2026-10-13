@@ -33,7 +33,11 @@ public:
     /// @param domain the domain
     /// @param lattice the example's device memory per cell
     /// @return the plan
-    /// @throws SetupError for conflicting settings, a missing geometry file or a grid over the memory limit
+    /// @throws SetupError for conflicting settings, a missing geometry file, a grid over the memory limit, or a DDF
+    /// buffer over the device's buffer limit that no split fits
+    ///
+    /// A lattice whose DDF buffer would be larger than a device accepts (LatticeMemory::max_buffer_mb) is split into
+    /// domains (split_for_buffers()); the domains then run on the devices there are, all on one card if it is alone.
     static DomainPlan plan(const Domain& domain, LatticeMemory lattice);
 
     /// @brief Sets the voxelization file and kernel; with clearances() the STL is converted to a cached SDF at the
@@ -43,6 +47,27 @@ public:
     static void choose_voxelization(DomainPlan& plan, const Domain& domain);
 
 private:
+    /// @brief The split into domains that keeps each domain's DDF buffer within the device's limit.
+    ///
+    /// With gpus() set (other than 1, 1, 1) the split is the caller's, and it is refused if a domain's buffer is still
+    /// over the limit. Otherwise a lattice that fits stays whole; one that does not is split along its longest
+    /// horizontal axis (the smallest faces to exchange) into the fewest domains that fit, and the grid along that axis
+    /// is trimmed to a multiple of them at its far side (at most domains - 1 cells), so the core does not trim it
+    /// again; the model's centre stays where it is. A domain holds its share of the cells and one halo layer on each
+    /// side along a split axis, as the core builds it (LBM::LBM()).
+    /// @param plan the plan, its grid planned; its gpus and grid are set
+    /// @param domain the domain, with its gpus()
+    /// @param lattice the DDF buffer's bytes per cell and the devices' buffer limit
+    /// @throws SetupError when a domain's buffer is over the limit with the caller's split, or with any split
+    static void split_for_buffers(DomainPlan& plan, const Domain& domain, LatticeMemory lattice);
+
+    /// @brief The bytes of one domain's DDF buffer.
+    /// @param grid the whole grid
+    /// @param gpus the domains along each axis
+    /// @param lattice the DDF buffer's bytes per cell
+    /// @return the bytes
+    static std::uint64_t domain_buffer_bytes(GridSize grid, uint3 gpus, LatticeMemory lattice);
+
     /// @brief Domain::box(): the grid from the size in metres.
     /// @param domain the domain
     /// @param lattice the memory per cell

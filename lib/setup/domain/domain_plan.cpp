@@ -13,14 +13,54 @@ DomainPlan DomainPlanner::plan(const Domain& domain, LatticeMemory lattice) {
     domain.validate();
     if(!domain.model_) {
         DomainPlan plan = plan_box(domain, lattice);
-        plan.gpus = domain.gpus_;
+        split_for_buffers(plan, domain, lattice);
         return plan;
     }
     DomainPlan plan = domain.size_ ? plan_in_size(domain, *domain.model_, lattice)
                                    : plan_with_clearances(domain, *domain.model_, lattice);
     plan.mirror = domain.model_->mirror_;
-    plan.gpus = domain.gpus_;
+    split_for_buffers(plan, domain, lattice);
     return plan;
+}
+
+std::uint64_t DomainPlanner::domain_buffer_bytes(GridSize grid, uint3 gpus, LatticeMemory lattice) {
+    const std::uint64_t x = grid.x / gpus.x + 2u * (gpus.x > 1u);
+    const std::uint64_t y = grid.y / gpus.y + 2u * (gpus.y > 1u);
+    const std::uint64_t z = grid.z / gpus.z + 2u * (gpus.z > 1u);
+    return x * y * z * lattice.buffer_bytes_per_cell;
+}
+
+void DomainPlanner::split_for_buffers(DomainPlan& plan, const Domain& domain, LatticeMemory lattice) {
+    plan.gpus = domain.gpus_;
+    const GridSize grid { plan.Nx, plan.Ny, plan.Nz };
+    const std::uint64_t limit = (std::uint64_t)lattice.max_buffer_mb * 1048576ull;
+    const bool limited = limit > 0ull && lattice.buffer_bytes_per_cell > 0u;
+    const bool chosen = domain.gpus_.x != 1u || domain.gpus_.y != 1u || domain.gpus_.z != 1u;
+    if(!limited || domain_buffer_bytes(grid, plan.gpus, lattice) <= limit) return;
+    if(chosen) {
+        throw SetupError("Domain: with gpus(" + to_string(domain.gpus_.x) + ", " + to_string(domain.gpus_.y) + ", " +
+                         to_string(domain.gpus_.z) + ") each domain's DDF buffer is " +
+                         to_string(domain_buffer_bytes(grid, plan.gpus, lattice) / 1048576ull) + " MB, over the device's limit of " +
+                         to_string(lattice.max_buffer_mb) + " MB on one buffer");
+    }
+    // the longest horizontal axis: the faces the domains exchange each step are the smallest
+    const bool along_x = grid.x >= grid.y;
+    const std::uint32_t cells = along_x ? grid.x : grid.y;
+    for(std::uint32_t k = 2u; k <= cells / 2u; k++) {
+        const uint3 gpus = along_x ? uint3(k, 1u, 1u) : uint3(1u, k, 1u);
+        const std::uint64_t bytes = domain_buffer_bytes(grid, gpus, lattice);
+        if(bytes > limit) continue;
+        plan.gpus = gpus;
+        if(along_x) plan.Nx = (plan.Nx / k) * k;
+        else plan.Ny = (plan.Ny / k) * k;
+        print_info("Domain split in " + to_string(k) + " domains along " + (along_x ? "X" : "Y") + " (Nx=" + to_string(plan.Nx) +
+                   ", Ny=" + to_string(plan.Ny) + "): each domain's DDF buffer " + to_string(bytes / 1048576ull) +
+                   " MB, the device's limit " + to_string(lattice.max_buffer_mb) + " MB on one buffer");
+        return;
+    }
+    throw SetupError("Domain: the DDF buffer of " + to_string(domain_buffer_bytes(grid, plan.gpus, lattice) / 1048576ull) +
+                     " MB is over the device's limit of " + to_string(lattice.max_buffer_mb) +
+                     " MB on one buffer, and no split along " + (along_x ? "X" : "Y") + " fits it");
 }
 
 void DomainPlanner::choose_voxelization(DomainPlan& plan, const Domain& domain) {

@@ -112,6 +112,52 @@ TEST(DomainPlanner, MirroredModelIsInThePlan) {
     EXPECT_EQ(*plan.mirror, Axis::X);
 }
 
+// The lattices below: D3Q19 with FP16 DDFs, 38 bytes per cell in the DDF buffer, and the device's limit on one buffer.
+// A box 2.01 m x 1 m x 1 m at 1 cm: 201 x 100 x 100 cells, the whole DDF buffer 76 MB.
+constexpr LatticeMemory limited(std::uint32_t max_buffer_mb) { return { 55u, 3u, 38u, max_buffer_mb }; }
+
+TEST(DomainPlanner, ALatticeOverTheBufferLimitIsSplitAlongItsLongestHorizontalAxis) {
+    const Domain domain = Domain::box(2.01_m, 1.0_m, 1.0_m).cell_size(0.01_m);
+    const DomainPlan whole = DomainPlanner::plan(domain, d3q19_fp16);
+    const DomainPlan plan = DomainPlanner::plan(domain, limited(40u));
+    ASSERT_EQ(whole.Nx, 201u);
+    // the fewest domains that fit: two of 100 cells and their halos, 102 x 100 x 100 x 38 bytes = 37 MB
+    EXPECT_EQ(plan.gpus.x, 2u);
+    EXPECT_EQ(plan.gpus.y, 1u);
+    EXPECT_EQ(plan.gpus.z, 1u);
+    EXPECT_EQ(plan.Nx, 200u); // a multiple of the domains, so the core does not trim it again
+    EXPECT_EQ(plan.Ny, 100u);
+    EXPECT_EQ(plan.Nz, 100u);
+    EXPECT_FLOAT_EQ(plan.center_lbm.x, whole.center_lbm.x); // the model's centre stays where it was
+    const DomainPlan along_y = DomainPlanner::plan(Domain::box(1.0_m, 2.01_m, 1.0_m).cell_size(0.01_m), limited(40u));
+    EXPECT_EQ(along_y.gpus.x, 1u);
+    EXPECT_EQ(along_y.gpus.y, 2u);
+    EXPECT_EQ(along_y.Ny, 200u);
+}
+
+TEST(DomainPlanner, ALatticeWithinTheLimitOrWithNoLimitKnownStaysWhole) {
+    const Domain domain = Domain::box(2.01_m, 1.0_m, 1.0_m).cell_size(0.01_m);
+    const DomainPlan within = DomainPlanner::plan(domain, limited(1000u));
+    EXPECT_EQ(within.gpus.x, 1u);
+    EXPECT_EQ(within.Nx, 201u);
+    const DomainPlan unknown = DomainPlanner::plan(domain, limited(0u));
+    EXPECT_EQ(unknown.gpus.x, 1u);
+    EXPECT_EQ(unknown.Nx, 201u);
+}
+
+TEST(DomainPlanner, TheCallersSplitIsKeptAndRefusedOverTheBufferLimit) {
+    const DomainPlan kept = DomainPlanner::plan(Domain::box(2.01_m, 1.0_m, 1.0_m).cell_size(0.01_m).gpus(1u, 2u, 1u), limited(1000u));
+    EXPECT_EQ(kept.gpus.x, 1u);
+    EXPECT_EQ(kept.gpus.y, 2u);
+    // two domains along Y: 201 x 52 x 100 x 38 bytes = 38 MB, over 10 MB
+    EXPECT_THROW(DomainPlanner::plan(Domain::box(2.01_m, 1.0_m, 1.0_m).cell_size(0.01_m).gpus(1u, 2u, 1u), limited(10u)), SetupError);
+}
+
+TEST(DomainPlanner, ALatticeNoSplitFitsIsRefused) {
+    // the thinnest domain along X, 2 cells and 2 halo layers of 100 x 100 cells, is 1.5 MB, over a limit of 1 MB
+    EXPECT_THROW(DomainPlanner::plan(Domain::box(2.01_m, 1.0_m, 1.0_m).cell_size(0.01_m), limited(1u)), SetupError);
+}
+
 TEST(DomainPlanner, GpusAreInThePlan) {
     const DomainPlan plan = DomainPlanner::plan(Domain::box(1.0_m, 2.0_m, 1.0_m).vram(100_mb).gpus(2u, 4u, 1u), d3q19_fp16);
     EXPECT_EQ(plan.gpus.x, 2u);

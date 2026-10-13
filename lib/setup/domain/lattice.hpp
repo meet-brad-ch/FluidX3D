@@ -6,13 +6,18 @@
 /// @file lattice.hpp
 /// @brief Lattice sizing: device memory per cell, grids that fit a memory budget, cell spans (internal).
 
-/// @brief Device memory per lattice cell.
+/// @brief Device memory per lattice cell, and the device's limit on one buffer.
 ///
 /// It depends on the example's configuration (velocity set, FP16 compression, extensions), so the simulation layer
-/// passes in the core's bytes_per_cell_device(), and 2 dimensions for D2Q9.
+/// passes in the core's bytes_per_cell_device(), and 2 dimensions for D2Q9. A device accepts each buffer up to a
+/// limit (CL_DEVICE_MAX_MEM_ALLOC_SIZE, a quarter of the memory on NVIDIA cards), and the lattice's DDFs are one buffer
+/// per domain: the simulation layer passes the DDFs' bytes per cell and the smallest limit of the devices, and the
+/// planner splits a lattice whose DDF buffer would be over it (DomainPlanner::plan()).
 struct LatticeMemory {
-    std::uint32_t bytes_per_cell;   ///< bytes of device memory per cell
-    std::uint32_t dimensions = 3u;  ///< 3, or 2 for D2Q9
+    std::uint32_t bytes_per_cell;             ///< bytes of device memory per cell
+    std::uint32_t dimensions = 3u;            ///< 3, or 2 for D2Q9
+    std::uint32_t buffer_bytes_per_cell = 0u; ///< bytes per cell of the largest single buffer, the DDFs (0: not known)
+    std::uint32_t max_buffer_mb = 0u;         ///< the largest buffer a device accepts in MB (0: no limit known)
 };
 
 /// A grid's cells along each axis.

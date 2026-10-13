@@ -111,7 +111,7 @@ Domain::around(Model("X-Wing.stl").length(13.4_m))  // real length along Y (defa
 ```
 `Model::length(L, axis)` gives the model's real size along an axis after its rotation, before its angle of attack; it scales the whole model, the STL's own units then do not matter, and it is the reference length of the units and the Reynolds number. To make the model a fraction of the domain (65 %), write the size as `length / 0.65f`.
 
-The resolution is either `vram()` (the largest grid that fits the budget, default 2000 MB) or `cell_size()` with an optional `vram_limit()`. With `box()` and `size()`, the cell size gives whole cells along each side (rounded). `gpus(2, 4, 1)` splits the grid among GPUs (`space_shuttle`).
+The resolution is either `vram()` (the largest grid that fits the budget, default 2000 MB) or `cell_size()` with an optional `vram_limit()`. With `box()` and `size()`, the cell size gives whole cells along each side (rounded). `gpus(2, 4, 1)` splits the grid among GPUs (`space_shuttle`). Without `gpus()`, a grid whose DDF buffer is larger than a device accepts in one buffer (`CL_DEVICE_MAX_MEM_ALLOC_SIZE`, a quarter of the memory on NVIDIA cards: 6140 MB on a 24 GB card) is split by itself into the fewest domains that fit, along its longest horizontal axis, and the grid along that axis is trimmed to a multiple of them (at most domains - 1 cells); the domains run on the devices there are, all on one card if it is alone, and exchange their halos each time step. The run prints the split. With `gpus()` the split is yours, and a domain's buffer over the limit is refused.
 
 ### 2. Geometry
 

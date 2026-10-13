@@ -339,12 +339,36 @@ private:
         return domain;
     }
 
-    /// @return the device memory per cell of this example's lattice (it depends on its extensions)
+    /// @return the device memory per cell of this example's lattice (it depends on its extensions), the bytes per cell
+    /// of its DDF buffer, and the smallest buffer limit of the devices (the planner splits a lattice over it)
     static LatticeMemory lattice_memory() {
+        uint32_t max_buffer_mb = 0u;
+        for(const Device_Info& device : get_devices(false)) {
+            if(max_buffer_mb == 0u || device.max_global_buffer < max_buffer_mb) max_buffer_mb = device.max_global_buffer;
+        }
 #ifdef D2Q9
-        return { bytes_per_cell_device(), 2u };
+        return { bytes_per_cell_device(), 2u, ddf_bytes_per_cell(), max_buffer_mb };
 #else
-        return { bytes_per_cell_device(), 3u };
+        return { bytes_per_cell_device(), 3u, ddf_bytes_per_cell(), max_buffer_mb };
+#endif
+    }
+
+    /// @return the bytes per cell of the DDF buffer fi, the largest single buffer: the velocity set's DDFs, each 2 bytes
+    /// with FP16S or FP16C, else 4 (the core's fi, Memory<fpxx>(device, N, velocity_set), from the same defines)
+    static uint32_t ddf_bytes_per_cell() {
+#if defined(D2Q9)
+        const uint32_t ddfs = 9u;
+#elif defined(D3Q15)
+        const uint32_t ddfs = 15u;
+#elif defined(D3Q27)
+        const uint32_t ddfs = 27u;
+#else
+        const uint32_t ddfs = 19u; // D3Q19, the default
+#endif
+#if defined(FP16S) || defined(FP16C)
+        return ddfs * 2u;
+#else
+        return ddfs * 4u;
 #endif
     }
 
