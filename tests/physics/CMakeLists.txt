@@ -30,3 +30,4 @@ fluidx3d_add_physics_test(stokes_drag EXTENSIONS FORCE_FIELD EQUILIBRIUM_BOUNDAR
 fluidx3d_add_physics_test(taylor_green)
 fluidx3d_add_physics_test(hydrostatic EXTENSIONS VOLUME_FORCE)
 fluidx3d_add_physics_test(sdf_domains)
+fluidx3d_add_physics_test(domains_flow EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES SUBGRID)
