@@ -2385,9 +2385,10 @@ string opencl_c_container() { return R( // ########################## begin of O
 	const float3 rot_row1 = (float3)(sdf_params[14], sdf_params[15], sdf_params[16]);
 	const float3 rot_row2 = (float3)(sdf_params[17], sdf_params[18], sdf_params[19]);
 
-	// Get LBM coordinates
+	// Get LBM coordinates: the cell's in its domain plus the domain's offset (def_Ox, def_Oy, def_Oz, with its halo), so a
+	// lattice split into domains places each domain's cells in the whole lattice
 	const uint3 xyz = coordinates(n);
-	const float3 lbm_pos = (float3)(xyz.x + 0.5f, xyz.y + 0.5f, xyz.z + 0.5f);
+	const float3 lbm_pos = (float3)((float)((int)xyz.x + def_Ox) + 0.5f, (float)((int)xyz.y + def_Oy) + 0.5f, (float)((int)xyz.z + def_Oz) + 0.5f);
 
 	// Transform LBM -> World -> SDF coordinates
 	// 1. Compute offset from LBM center
