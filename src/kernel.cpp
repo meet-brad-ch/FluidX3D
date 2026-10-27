@@ -1537,11 +1537,8 @@ string opencl_c_container() { return R( // ########################## begin of O
 )+"#ifdef MOISTURE"+R(
 	, global fpxx* hi, global float* Q, const float moisture_rate, const float theta_0 // the moisture lattice, its field, the source per step in TYPE_Y cells, the mixed layer's theta (K) that T = 1 stands for (this fork)
 )+"#endif"+R( // MOISTURE
-)+"#ifdef DEBUG_PROBE"+R(
-	, global float* dbg, global float* trace, const uint trace_n // the cell probe (def_dbg_channels per cell), the trace ring of cell trace_n (src/debug_probe.hpp, this fork); last: the earlier indices stay
-)+"#endif"+R( // DEBUG_PROBE
 )+"#ifdef SCALAR_FV"+R(
-	, global float* fvD // the diffusivity of every cell for fv_scalars() (this fork); after DEBUG_PROBE's
+	, global float* fvD // the diffusivity of every cell for fv_scalars() (this fork)
 )+"#endif"+R( // SCALAR_FV
 )+") {"+R( // stream_collide()
 	const uxx n = get_global_id(0); // n = x+(y+z*Ny)*Nx
@@ -1549,10 +1546,6 @@ string opencl_c_container() { return R( // ########################## begin of O
 	const uchar flagsn = flags[n]; // cache flags[n] for multiple readings
 	const uchar flagsn_bo=flagsn&TYPE_BO, flagsn_su=flagsn&TYPE_SU; // extract boundary and surface flags
 	if(flagsn_bo==TYPE_S||flagsn_su==TYPE_G) return; // if cell is solid boundary or gas, just return
-)+"#ifdef DEBUG_PROBE"+R(
-	float dbgc[def_dbg_channels] = { 0.0f }; // the cell probe's values of this step, written at the end of the thermal block (C99: the rest is zero)
-	dbgc[def_dbg_flags] = (float)flagsn;
-)+"#endif"+R( // DEBUG_PROBE
 
 	uxx j[def_velocity_set]; // neighbor indices
 	neighbors(n, j); // calculate neighbor indices
@@ -1671,9 +1664,6 @@ string opencl_c_container() { return R( // ########################## begin of O
 				const float theta_v = moist_virtual_theta(thl, qt, p);
 				T_buoy = 1.0f+(theta_v-level[8u*lzb+5u])/def_T_scale;
 				T_ref = 1.0f;
-)+"#ifdef DEBUG_PROBE"+R(
-				dbgc[def_dbg_theta_v] = theta_v;
-)+"#endif"+R( // DEBUG_PROBE
 			}
 )+"#endif"+R( // MOISTURE
 		}
@@ -1687,20 +1677,6 @@ string opencl_c_container() { return R( // ########################## begin of O
 )+"#ifdef MOISTURE"+R(
 		calculate_g_eq(Qn, fma(fxn, rho2T, uxn), fma(fyn, rho2T, uyn), fma(fzn, rho2T, uzn), heqQ); // the moisture equilibrium with the same velocity
 )+"#endif"+R( // MOISTURE
-)+"#ifdef DEBUG_PROBE"+R(
-		dbgc[def_dbg_rho] = rhon;
-		dbgc[def_dbg_ux_j] = uxn; dbgc[def_dbg_ux_j+1u] = uyn; dbgc[def_dbg_ux_j+2u] = uzn;
-		dbgc[def_dbg_fx] = fxn; dbgc[def_dbg_fx+1u] = fyn; dbgc[def_dbg_fx+2u] = fzn;
-		dbgc[def_dbg_ux_eq] = fma(fxn, rho2T, uxn); dbgc[def_dbg_ux_eq+1u] = fma(fyn, rho2T, uyn); dbgc[def_dbg_ux_eq+2u] = fma(fzn, rho2T, uzn);
-		dbgc[def_dbg_T] = Tn;
-		dbgc[def_dbg_T_buoy] = T_buoy;
-		dbgc[def_dbg_T_ref] = T_ref;
-		dbgc[def_dbg_gflux] = ghn[1]-ghn[2]; dbgc[def_dbg_gflux+1u] = ghn[3]-ghn[4]; dbgc[def_dbg_gflux+2u] = ghn[5]-ghn[6]; // D3Q7 order +x -x +y -y +z -z (neighbors_temperature)
-)+"#ifdef MOISTURE"+R(
-		dbgc[def_dbg_Q] = Qn;
-		dbgc[def_dbg_hflux] = hhn[1]-hhn[2]; dbgc[def_dbg_hflux+1u] = hhn[3]-hhn[4]; dbgc[def_dbg_hflux+2u] = hhn[5]-hhn[6];
-)+"#endif"+R( // MOISTURE
-)+"#endif"+R( // DEBUG_PROBE
 	}
 )+"#endif"+R( // TEMPERATURE
 
@@ -1751,17 +1727,6 @@ string opencl_c_container() { return R( // ########################## begin of O
 
 )+"#ifdef TEMPERATURE"+R(
 	{ // separate block to avoid variable name conflicts
-)+"#ifdef DEBUG_PROBE"+R(
-		dbgc[def_dbg_w_flow] = w;
-		const bool traced = (uint)n==trace_n; // the trace cell: every population before and after the collision
-		const ulong trace_base = (t%(ulong)def_trace_steps)*(ulong)def_trace_channels;
-		if(traced) {
-			for(uint i=0u; i<7u; i++) { trace[trace_base+def_trace_g_pre+i] = ghn[i]; trace[trace_base+def_trace_g_eq+i] = geqT[i]; }
-)+"#ifdef MOISTURE"+R(
-			for(uint i=0u; i<7u; i++) { trace[trace_base+def_trace_h_pre+i] = hhn[i]; trace[trace_base+def_trace_h_eq+i] = heqQ[i]; }
-)+"#endif"+R( // MOISTURE
-		}
-)+"#endif"+R( // DEBUG_PROBE
 )+"#ifdef SCALAR_FV"+R(
 		fvD[n] = 0.25f*(1.0f/def_w_T-0.5f); // the molecular diffusivity alpha (THERMAL_DIFFUSIVITY_FIX); the eddy part is added below
 )+"#endif"+R( // SCALAR_FV
@@ -1778,9 +1743,6 @@ string opencl_c_container() { return R( // ########################## begin of O
 				wT = 1.0f/fma(4.0f*nu_t, inv_prandtl_t, 1.0f/def_w_T); // D3Q7 diffuses with D = c^2*(tauT-1/2), c^2 = 1/4, so the eddy part adds 4*nu_t/Pr_t to tauT
 			}
 )+"#endif"+R( // SUBGRID
-)+"#ifdef DEBUG_PROBE"+R(
-			dbgc[def_dbg_w_T] = wT;
-)+"#endif"+R( // DEBUG_PROBE
 )+"#ifdef SCALAR_FV"+R(
 			fvD[n] = 0.25f*(1.0f/wT-0.5f); // D = (tauT - 1/2)/4 = alpha + nu_t/Pr_t (THERMAL_DIFFUSIVITY_FIX), the same diffusivity as the D3Q7 lattice
 )+"#else"+R( // SCALAR_FV
@@ -1811,17 +1773,6 @@ string opencl_c_container() { return R( // ########################## begin of O
 )+"#endif"+R( // LEVEL_FORCING
 )+"#endif"+R( // SCALAR_FV
 		}
-)+"#ifdef DEBUG_PROBE"+R(
-		for(uint c=0u; c<def_dbg_channels; c++) dbg[(ulong)c*def_N+(ulong)n] = dbgc[c]; // structure of arrays: channel c of cell n at c*N+n
-		if(traced) {
-			for(uint c=0u; c<def_dbg_channels; c++) trace[trace_base+c] = dbgc[c];
-			for(uint i=0u; i<7u; i++) trace[trace_base+def_trace_g_post+i] = ghn[i];
-)+"#ifdef MOISTURE"+R(
-			for(uint i=0u; i<7u; i++) trace[trace_base+def_trace_h_post+i] = hhn[i];
-)+"#endif"+R( // MOISTURE
-			trace[trace_base+def_trace_step] = (float)t;
-		}
-)+"#endif"+R( // DEBUG_PROBE
 )+"#ifndef SCALAR_FV"+R(
 		store_g(n, ghn, gi, j7, t); // perform streaming (part 1)
 )+"#ifdef MOISTURE"+R(

@@ -9,10 +9,11 @@
 // layer's start). The buoyancy is fz * beta * (T - 1) with a tiny fz, so the constant part of the volume force
 // (fz itself) leaves the density almost uniform: beta = g dt^2/dx / (theta_0 fz). The floor (z = 0) and the lid are
 // TYPE_S (adiabatic); the floor flux is a heat source in the first fluid layer (TYPE_Y, LBM::set_heat_rate()), the
-// patch's 4x four such layers. SUBGRID with the eddy heat diffusivity (Pr_t = 1/3). FP32 DDFs (FP16 storage loses
-// 1.4-2.2 % of a source this small against the near-floor temperature, tests/physics/heat_source.cpp).
+// patch's 4x four such layers. SUBGRID with the eddy heat diffusivity (Pr_t = 1/3). T and Q move by the conservative
+// link-flux finite volumes (SCALAR_FV). The target convective_boundary_layer_fv stores the DDFs as FP32, the target
+// convective_boundary_layer_fv_fp16s as FP16S (the scalars stay FP32 in both).
 //
-//     convective_boundary_layer <output folder> [quick | <case> ...]
+//     convective_boundary_layer_fv <output folder> [quick | <case> ...]
 //
 // Writes into the output folder: header.json and frames.bin (format 2: per frame w, u, v as uint8 over the box, k up,
 // j north, i east, u and v less each level's mean over the domain, then the ql bits, all 0 in a dry run), w_f16.bin (w of the
@@ -71,7 +72,6 @@ struct CblSettings {
 	float interval = 20.0f;               // s between frames (and profile rows)
 	float nu = 1.0E-5f;                   // lattice; the Smagorinsky model carries the turbulence
 	float alpha = 2.0E-5f;                // lattice; tauT 0.50004 without THERMAL_DIFFUSIVITY_FIX: the unstable regime, see sullivan_patton()
-	float tracer = 1.0f;                  // the passive tracer's uniform start value of Q (MOISTURE builds, --tracer)
 	bool moist = false;                   // MOISTURE: total water from the sounding, the floor's moisture flux, the moist buoyancy and the clouds (--moist)
 	std::vector<float> profile_qt;        // kg/kg, the tabulated sounding's total water (its third column qt_kgkg, when present)
 	float bowen = 0.5f;                   // the Bowen ratio: the moisture flux is flux * cp / (Lv * bowen) (as in the MicroHH reference runs)
@@ -237,7 +237,7 @@ public:
 			if(s_.wind_speed>0.0f) std::printf(", wind off the power law %.1f %% of %.2f m/s", 100.0*wind_error_, s_.wind_speed);
 			std::puts("");
 #ifdef MOISTURE
-			if(s_.moist) report_cloud(time, means, clouds_, recording); else report_tracer(time);
+			if(s_.moist) report_cloud(time, means, clouds_, recording);
 #endif // MOISTURE
 			std::fflush(stdout);
 			if(!std::isfinite(w_max)||!std::isfinite(w_min)||w_max>40.0||w_min<-40.0) {
@@ -319,8 +319,7 @@ private:
 			if(h<s_.noise_top) theta += noise(random);
 			lbm_.T[n] = 1.0f+theta;
 #ifdef MOISTURE
-			// moist: the sounding's total water; dry: the passive tracer's uniform start value (--tracer; SCALAR_FV carries Q - 1, so 1 tests nothing there)
-			lbm_.Q[n] = s_.moist ? 1.0f+s_.qt_at(h)/0.01f : s_.tracer;
+			lbm_.Q[n] = s_.moist ? 1.0f+s_.qt_at(h)/0.01f : 1.0f; // moist: the sounding's total water; dry: no water
 #endif // MOISTURE
 			if(s_.wind_speed>0.0f) { lbm_.u.x[n] = wind_target_x(h)/s_.speed(); lbm_.u.y[n] = wind_target_y(h)/s_.speed(); } // the start wind is the target profile
 			const bool in_patch = s_.patch_layers>0u&&std::hypot((float)x+0.5f-cx, (float)y+0.5f-cy)<=r;
@@ -360,23 +359,6 @@ private:
 	}
 
 #ifdef MOISTURE
-	/// @brief The uniform-scalar drift of the moisture transport: Q starts at the tracer value (--tracer, default 1)
-	/// in every cell and has no source in a dry run, so it is a passive tracer that must stay uniform; prints the
-	/// largest relative change, its level and the rms over the fluid cells. With SCALAR_FV use a value other than 1:
-	/// the finite volumes carry Q - 1, and a zero field stays zero whatever the transport does.
-	/// @param time the model time (s)
-	void report_tracer(const float time) {
-		lbm_.Q.read_from_device();
-		double largest = 0.0, sum2 = 0.0, cells = 0.0;
-		uint largest_z = 0u;
-		for(uint z=1u; z+1u<s_.Nz; z++) for(uint y=0u; y<s_.Ny; y++) for(uint x=0u; x<s_.Nx; x++) {
-			const double d = (double)lbm_.Q[index(x, y, z)]/(double)s_.tracer-1.0;
-			if(std::fabs(d)>largest) { largest = std::fabs(d); largest_z = z; }
-			sum2 += d*d; cells += 1.0;
-		}
-		std::printf("TRACER t %.0f s: the uniform Q (start %g) max |dQ/Q| %.3e at level %u (%.0f m), rms %.3e\n", time, (double)s_.tracer, largest, largest_z, height(largest_z), std::sqrt(sum2/cells));
-	}
-
 	/// @brief The moist air's per-level terms: the hydrostatic pressure from 101325 Pa through the start sounding (as
 	/// the MicroHH reference runs integrate it: T = thl (p / 1e5)^(Rd/cp) (1 + 0.61 qt) per step), the reference theta_v
 	/// of the start sounding at each level (the buoyancy's level reference), theta_0 (the thl that T = 1 stands for)
@@ -667,10 +649,9 @@ void main_setup() { // extensions: VOLUME_FORCE, TEMPERATURE, SUBGRID
 		return false;
 	};
 	const float alpha_option = take_option("--alpha"); // the molecular diffusivity of T and Q in lattice units (0: the case's own value)
-	const float tracer_option = take_option("--tracer"); // the passive tracer's uniform start value of Q (0: 1)
 	const float zi_option = take_option("--zi"); // the sounding case's zi in m (0: 1864, the dry reference case's); the lid and the sponge count in it
 	const bool moist_option = take_flag("--moist"); // the sounding's qt, the moisture flux, the moist buoyancy and the clouds
-	if(main_arguments.empty()) print_error("convective_boundary_layer <output folder> [quick | sp2011 <cell m> <cells wide> [seed [domains [patch m [surface]]]] | sounding <cell m> <cells wide> <profile.csv> [seed [domains [lid zi [sponge from zi [wind m/s at 100 m [from deg]]]]]]] [--alpha <lattice units>] [--tracer <Q>] [--zi <m>] [--moist]");
+	if(main_arguments.empty()) print_error("convective_boundary_layer <output folder> [quick | sp2011 <cell m> <cells wide> [seed [domains [patch m [surface]]]] | sounding <cell m> <cells wide> <profile.csv> [seed [domains [lid zi [sponge from zi [wind m/s at 100 m [from deg]]]]]]] [--alpha <lattice units>] [--zi <m>] [--moist]");
 	CblSettings s;
 	if(main_arguments.size()>1u&&main_arguments[1]=="quick") { s = CblSettings::quick(); if(main_arguments.size()>2u&&main_arguments[2]=="surface") s.patch_surface = true; }
 	else if(main_arguments.size()>3u&&main_arguments[1]=="sp2011") {
@@ -698,19 +679,12 @@ void main_setup() { // extensions: VOLUME_FORCE, TEMPERATURE, SUBGRID
 #endif // SCALAR_FV
 		s.alpha = alpha_option;
 	}
-	if(tracer_option>0.0f) {
-#ifndef MOISTURE
-		print_error("--tracer needs MOISTURE: the tracer is the moisture field Q.");
-#endif // MOISTURE
-		s.tracer = tracer_option;
-	}
 	if(zi_option>0.0f&&!(main_arguments.size()>1u&&main_arguments[1]=="sounding")) print_error("--zi applies to the sounding case only.");
 	if(moist_option) {
 #ifndef MOISTURE
 		print_error("--moist needs MOISTURE: the total water is the moisture field Q.");
 #endif // MOISTURE
 		if(s.profile_qt.empty()) print_error("--moist needs the sounding case with a qt_kgkg column in its profile.");
-		if(tracer_option>0.0f) print_error("--moist and --tracer both set Q: give one of them.");
 		s.moist = true;
 	}
 	CblRun run(s, std::filesystem::path(main_arguments[0]));

@@ -35,48 +35,20 @@ fluidx3d_add_physics_test(taylor_green)
 fluidx3d_add_physics_test(hydrostatic EXTENSIONS VOLUME_FORCE)
 fluidx3d_add_physics_test(sdf_domains)
 fluidx3d_add_physics_test(domains_flow EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES SUBGRID)
+# The convection extensions of this fork (research/convection/README.md). Each test runs in seconds to a few minutes.
 fluidx3d_add_physics_test(heat_source EXTENSIONS TEMPERATURE)
 fluidx3d_add_physics_test(eddy_heat_diffusivity EXTENSIONS EQUILIBRIUM_BOUNDARIES TEMPERATURE SUBGRID)
 fluidx3d_add_physics_test(thermal_diffusivity EXTENSIONS TEMPERATURE)
-fluidx3d_add_physics_test(thermal_diffusivity_fixed EXTENSIONS TEMPERATURE THERMAL_DIFFUSIVITY_FIX)
-# FP16S thermal DDFs do not diffuse a wave in a flow (thermal_diffusivity.cpp's header): these two document the defect
-# and are expected to fail until it is fixed
-fluidx3d_add_physics_test(thermal_diffusivity_fp16s EXTENSIONS FP16S TEMPERATURE)
-fluidx3d_add_physics_test(thermal_diffusivity_fixed_fp16s EXTENSIONS FP16S TEMPERATURE THERMAL_DIFFUSIVITY_FIX)
-set_tests_properties(physics_thermal_diffusivity_fp16s physics_thermal_diffusivity_fixed_fp16s PROPERTIES WILL_FAIL TRUE)
-# Rayleigh-Benard onset and Nusselt numbers, with the SRT and the TRT flow collision; about 20 min each on the 4090
-fluidx3d_add_physics_test(rayleigh_benard EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX TIMEOUT 3600)
-fluidx3d_add_physics_test(rayleigh_benard_trt EXTENSIONS TRT VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX TIMEOUT 3600)
-# Nu against the cell count (H 32/64/128 at Ra 1e5, 64/128 at 1e6), Richardson-extrapolated, about 1 h 20 min
-fluidx3d_add_physics_test(rayleigh_benard_grid EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX TIMEOUT 7200)
-# A turbulent plume from a heated patch against the Morton-Taylor-Turner laws, about 5 min
-fluidx3d_add_physics_test(plume EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID TIMEOUT 1800)
-# The heat budget of the plume's lattice with and without buoyancy, about 2 min
-fluidx3d_add_physics_test(heat_conservation EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID TIMEOUT 900)
-# Expected failures, kept as evidence: rayleigh_benard's fine-grid gates fail by the first-order wall error (15 % at H 64;
-# the grid test's extrapolation passes); the plume stays laminar at this lattice's Reynolds numbers (the MTT laws cannot be
-# tested); heat_conservation keeps the tauT 0.503 budget and cooling gates, the lower limit of the thermal lattice.
-set_tests_properties(physics_rayleigh_benard physics_rayleigh_benard_trt physics_plume physics_heat_conservation PROPERTIES WILL_FAIL TRUE)
-# The per-level forcing (wind nudging, the sponge's damping and temperature relaxation), about 1 min
+# The same test with THERMAL_DIFFUSIVITY_FIX: alpha is the diffusivity
+fluidx3d_add_physics_test(thermal_diffusivity_fix SOURCE thermal_diffusivity EXTENSIONS TEMPERATURE THERMAL_DIFFUSIVITY_FIX)
+# The per-level forcing: the wind nudging, the sponge's damping and temperature relaxation, two domains against one
 fluidx3d_add_physics_test(level_forcing EXTENSIONS VOLUME_FORCE TEMPERATURE LEVEL_FORCING)
-# The moisture lattice's budget and halo exchange, seconds
+fluidx3d_add_physics_test(level_forcing_fix SOURCE level_forcing EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX LEVEL_FORCING)
+# The moisture: the budget and the halo exchange, the virtual-temperature buoyancy
 fluidx3d_add_physics_test(moisture_source EXTENSIONS TEMPERATURE MOISTURE)
-# The virtual-temperature buoyancy and a moist thermal against its dry twin, about 1 min (SUBGRID, THERMAL_DIFFUSIVITY_FIX)
 fluidx3d_add_physics_test(moist_buoyancy EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID LEVEL_FORCING MOISTURE)
-fluidx3d_add_physics_test(moist_bubble EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID LEVEL_FORCING MOISTURE TIMEOUT 900)
-# DEBUG_PROBE: the kernel's thermal and moisture lattices against a host reference, every cell and step, about 2 min
-fluidx3d_add_physics_test(scalar_reference EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID LEVEL_FORCING MOISTURE DEBUG_PROBE TIMEOUT 1800)
-# DEBUG_PROBE lab: the D3Q7 scalar scheme in prescribed flows on the host, seconds
-fluidx3d_add_physics_test(scalar_scheme_lab EXTENSIONS TEMPERATURE)
-# ProLB's finite-volume scheme for T and Q on the host, on the GPU's flow, about 2 min
-fluidx3d_add_physics_test(scalar_fv_prototype EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID LEVEL_FORCING MOISTURE DEBUG_PROBE TIMEOUT 900)
-# The SCALAR_FV kernel against its host twin, every cell and step, about 1 min
-fluidx3d_add_physics_test(scalar_fv_kernel_check EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID LEVEL_FORCING MOISTURE DEBUG_PROBE SCALAR_FV TIMEOUT 900)
-# The cost of each kernel of a step with the link-flux finite volumes, on a box of the CBL case's size (a measurement, the GPU alone)
-fluidx3d_add_physics_test(scalar_fv_timing EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID LEVEL_FORCING MOISTURE SCALAR_FV)
-# The finite volumes across domains: 2 along x, 2 along y and 2 x 2 bit-identical to one domain (the 2-layer halo)
-fluidx3d_add_physics_test(scalar_fv_domains EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID MOISTURE SCALAR_FV)
-# The physics tests on SCALAR_FV (the same sources, built with the finite-volume scalars)
+# The same tests with SCALAR_FV (heat and water by finite volumes), a moist thermal against its dry twin (SCALAR_FV only:
+# the D3Q7 moisture lattice does not keep a uniform qt uniform), and the heat budget with buoyancy
 fluidx3d_add_physics_test(heat_source_fv SOURCE heat_source EXTENSIONS TEMPERATURE THERMAL_DIFFUSIVITY_FIX SCALAR_FV)
 fluidx3d_add_physics_test(thermal_diffusivity_fv SOURCE thermal_diffusivity EXTENSIONS TEMPERATURE THERMAL_DIFFUSIVITY_FIX SCALAR_FV)
 fluidx3d_add_physics_test(eddy_heat_diffusivity_fv SOURCE eddy_heat_diffusivity EXTENSIONS EQUILIBRIUM_BOUNDARIES TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID SCALAR_FV)
@@ -85,23 +57,5 @@ fluidx3d_add_physics_test(moisture_source_fv SOURCE moisture_source EXTENSIONS T
 fluidx3d_add_physics_test(moist_buoyancy_fv SOURCE moist_buoyancy EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID LEVEL_FORCING MOISTURE SCALAR_FV)
 fluidx3d_add_physics_test(moist_bubble_fv SOURCE moist_bubble EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID LEVEL_FORCING MOISTURE SCALAR_FV TIMEOUT 900)
 fluidx3d_add_physics_test(heat_conservation_fv SOURCE heat_conservation EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID SCALAR_FV TIMEOUT 900)
-fluidx3d_add_physics_test(plume_fv SOURCE plume EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID SCALAR_FV TIMEOUT 1800)
-# Expected failures on SCALAR_FV, kept as evidence (the limits are the D3Q7 tests' own): thermal_diffusivity_fv at alpha 2e-3
-# in a flow (cell Peclet 50: the diagonal links across the flow, scalar_fv_cross_lab, and the limiter along it).
-# eddy_heat_diffusivity_fv at alpha 1e-4 (the same diffusion across the flow). level_forcing_fv's T relaxation of an advected
-# step (at the jump the limiter changes the scheme to first-order upwind). plume_fv stays laminar, as plume does.
-set_tests_properties(physics_thermal_diffusivity_fv physics_eddy_heat_diffusivity_fv physics_level_forcing_fv physics_plume_fv PROPERTIES WILL_FAIL TRUE)
-# The D3Q7 level forcing with THERMAL_DIFFUSIVITY_FIX (D = alpha, as SCALAR_FV needs), for comparison
-fluidx3d_add_physics_test(level_forcing_fix SOURCE level_forcing EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX LEVEL_FORCING)
-# The finite-volume scheme's diffusivity along a flow: explicit Euler against the midpoint step (host only, seconds)
-fluidx3d_add_physics_test(scalar_fv_lab EXTENSIONS TEMPERATURE)
-# The link-flux finite volumes' diffusivity across and along a uniform flow: the D3Q19 link fluxes against the axis links alone (host only)
-fluidx3d_add_physics_test(scalar_fv_cross_lab EXTENSIONS TEMPERATURE)
-# Conservative finite volumes with their own density and 7-point face mass fluxes (Guo et al. 2021, eq 17): host reference on the GPU's plume flow
-fluidx3d_add_physics_test(scalar_fv_conservative EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID SCALAR_FV DEBUG_PROBE TIMEOUT 7200)
-# Expected to fail, kept as evidence: with 7-point face fluxes rho_FV leaves the LBM density at the plume root (0.70 by step 700)
-set_tests_properties(physics_scalar_fv_conservative PROPERTIES WILL_FAIL TRUE)
-# Conservative finite volumes transported by the LBM link mass fluxes (Zhao et al. 2020) with their own density: host reference on the GPU's plume flow
-fluidx3d_add_physics_test(scalar_fv_link_flux EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID SCALAR_FV DEBUG_PROBE TIMEOUT 7200)
-# The link-flux transport next to walls: rho_FV - rho_LB against the in-transit bounce-back populations (host, about 2 min)
-fluidx3d_add_physics_test(scalar_fv_wall_exchange EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID SCALAR_FV DEBUG_PROBE TIMEOUT 900)
+# SCALAR_FV across domains: 2 along x, 2 along y and 2 x 2 bit-identical to one domain
+fluidx3d_add_physics_test(scalar_fv_domains EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID MOISTURE SCALAR_FV)

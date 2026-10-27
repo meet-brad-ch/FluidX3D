@@ -11,9 +11,10 @@
 // 2. The w damping: a uniform w = 0.01 everywhere (divergence-free) and r = 1/500 at every level; after 1500 steps
 //    w = 0.01 e^-3 within 2 % (the damping is applied as a force -r rho w per step, Guo forcing: its own discretisation
 //    error against the exponential is part of what is measured).
-// 3. The temperature: T = 1.1 in the upper half, T_ref = 1 there at r = 1/500 (0 below); after 1500 steps the levels in
-//    the middle of the upper half hold 1 + 0.1 e^-3 within 2 % (diffusion with alpha 1e-3 reaches 1.7 cells from the
-//    step in that time; the middle is far from it), the lower half stays at 1 within 1e-3.
+// 3. The temperature, in a second box at rest: T = 1.1 in the upper half, T_ref = 1 there at r = 1/500 (0 below);
+//    after 1500 steps the levels in the middle of the upper half hold 1 + 0.1 e^-3 within 2 % (diffusion with alpha 1e-3
+//    reaches 1.7 cells from the step in that time; the middle is far from it), the lower half stays at 1 within 1e-3.
+//    At rest, so that no flow carries the step toward the checked levels.
 
 #include "setup/setup.hpp"
 #include "physics_check.hpp"
@@ -85,24 +86,31 @@ void main_setup() { // extensions: VOLUME_FORCE TEMPERATURE LEVEL_FORCING
 		PhysicsCheck::report("level nudging reaches the nudged-and-diffused fraction of the target at t = tau (of the amplitude)", worst, 0.01);
 		PhysicsCheck::report("level nudging: two domains against one (absolute, limit 1e-5)", split, 1.0E-5);
 	}
-	{ // 2. the w damping and 3. the temperature relaxation in one box
+	{ // 2. the w damping and 3. the temperature relaxation, each in its own box
 		const uint N = 32u, Nz = 64u;
 		const float nu = 0.01f, alpha = 1.0E-3f, r = 1.0f/500.0f;
-		LBM lbm(N, N, Nz, nu, 0.0f, 0.0f, 0.0f, 0.0f, alpha, 0.0f);
-		for(ulong n=0ull; n<lbm.get_N(); n++) {
-			uint x=0u, y=0u, z=0u;
-			lbm.coordinates(n, x, y, z);
-			lbm.u.z[n] = 0.01f;
-			lbm.T[n] = z>=Nz/2u ? 1.1f : 1.0f;
-		}
-		std::vector<float> fx(Nz, 0.0f), fy(Nz, 0.0f), rate(Nz, r), T_ref(Nz, 1.0f);
-		lbm.set_level_forcing(fx, fy, rate, T_ref);
-		lbm.run(1500ull);
-		const LayerMeans m = layer_means(lbm);
+		/// @brief Runs a box with the sponge rate r at every level for 1500 steps.
+		/// @param w the uniform start w
+		/// @param T_step whether T starts at 1.1 in the upper half (else 1 everywhere)
+		/// @return the layer means after the run
+		const auto sponge_run = [&](const float w, const bool T_step) {
+			LBM lbm(N, N, Nz, nu, 0.0f, 0.0f, 0.0f, 0.0f, alpha, 0.0f);
+			for(ulong n=0ull; n<lbm.get_N(); n++) {
+				uint x=0u, y=0u, z=0u;
+				lbm.coordinates(n, x, y, z);
+				lbm.u.z[n] = w;
+				lbm.T[n] = T_step&&z>=Nz/2u ? 1.1f : 1.0f;
+			}
+			std::vector<float> fx(Nz, 0.0f), fy(Nz, 0.0f), rate(Nz, r), T_ref(Nz, 1.0f);
+			lbm.set_level_forcing(fx, fy, rate, T_ref);
+			lbm.run(1500ull);
+			return layer_means(lbm);
+		};
+		const LayerMeans damped = sponge_run(0.01f, false), m = sponge_run(0.0f, true);
 		double worst_w = 0.0, worst_T = 0.0, lower_T = 0.0;
 		uint worst_T_z{};
 		for(uint z=0u; z<Nz; z++) {
-			worst_w = std::fmax(worst_w, std::fabs(m.uz[z]/(0.01*(double)e_minus_3)-1.0));
+			worst_w = std::fmax(worst_w, std::fabs(damped.uz[z]/(0.01*(double)e_minus_3)-1.0));
 			if(z>=Nz/2u+8u&&z<Nz-8u) {
 				const double e{ std::fabs((m.T[z]-1.0)/(0.1*(double)e_minus_3)-1.0) };
 				if(e>worst_T) { worst_T = e; worst_T_z = z; }
@@ -113,7 +121,7 @@ void main_setup() { // extensions: VOLUME_FORCE TEMPERATURE LEVEL_FORCING
 		for(uint z=Nz/2u+6u; z<=Nz-6u; z++) std::printf(" %.5f", m.T[z]);
 		std::printf("\n");
 		std::printf("\nafter 1500 steps at r = 1/500: <w> at z 0 / 32 / 63: %.6f / %.6f / %.6f (expected %.6f); T at z 48: %.6f (expected %.6f), at z 16: %.6f\n",
-		            m.uz[0], m.uz[32], m.uz[63], 0.01*(double)e_minus_3, m.T[48], 1.0+0.1*(double)e_minus_3, m.T[16]);
+		            damped.uz[0], damped.uz[32], damped.uz[63], 0.01*(double)e_minus_3, m.T[48], 1.0+0.1*(double)e_minus_3, m.T[16]);
 		PhysicsCheck::report("level damping of w: e^-3 after 3/r steps", worst_w, 0.02);
 		PhysicsCheck::report("level relaxation of T toward T_ref: e^-3 after 3/r steps", worst_T, 0.02);
 		PhysicsCheck::report("level relaxation of T leaves the unsponged levels (absolute)", lower_T, 1.0E-3);

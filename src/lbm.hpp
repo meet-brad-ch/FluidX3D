@@ -5,12 +5,6 @@
 #include "graphics.hpp"
 #include "units.hpp"
 #include "info.hpp"
-#ifdef DEBUG_PROBE
-#include "debug_probe.hpp"
-#ifndef TEMPERATURE
-#error "DEBUG_PROBE probes the thermal and moisture collision: it needs TEMPERATURE."
-#endif // TEMPERATURE
-#endif // DEBUG_PROBE
 #if defined(SCALAR_FV)&&(!defined(TEMPERATURE)||!defined(THERMAL_DIFFUSIVITY_FIX))
 #error "SCALAR_FV carries T (and Q) by finite volumes with alpha as the diffusivity: it needs TEMPERATURE and THERMAL_DIFFUSIVITY_FIX."
 #endif // SCALAR_FV
@@ -52,15 +46,6 @@ inline uint fv_transfer_bytes() {
 /// fvD (the diffusivity) over 1 layer, flags_fv (the flags) over 2 layers once at initialize() (this fork).
 enum enum_transfer_field { fi, rho_u_flags, flags, F, phi_massex_flags, gi, T, hi, fv, fv_half, fvD, flags_fv, enum_transfer_field_length };
 
-#ifdef SCALAR_FV
-/// The time of each kernel of one time step, in ms, each measured with the queue finished before and after it (this
-/// fork, for the cost measurements of the finite-volume transport; LBM::time_fv_step()).
-struct FvKernelTimes {
-	double stream_collide{}; ///< kernel_stream_collide
-	double fv_half{};        ///< the midpoint step's half stage
-	double fv_full{};        ///< its full stage
-};
-#endif // SCALAR_FV
 
 class LBM_Domain {
 private:
@@ -153,21 +138,6 @@ public:
 #ifdef MOISTURE
 	Memory<float> Q; // total water of every cell as 1 + qt / def_q_scale (this fork)
 #endif // MOISTURE
-#ifdef DEBUG_PROBE
-	Memory<float> dbg; // the cell probe: DebugProbe::cell_channels per cell, channel c of cell n at c*N+n, written by stream_collide every step (this fork)
-	Memory<float> trace; // the trace ring of the cell trace_n: DebugProbe::trace_channels per step, DebugProbe::trace_steps steps
-	uint trace_n = 0xFFFFFFFFu; // the traced cell (domain index); the default matches no cell
-	/// @brief DEBUG_PROBE: the DDFs with a host buffer, added on the first call (the link-flux host reference reads the LBM's
-	/// link mass fluxes from them, tests/physics/scalar_fv_link_flux.cpp). Read them with read_from_device() after a step.
-	/// @return the DDF buffer, Esoteric-Pull layout (index_f(n, i) = i N + n), stored as f_i - w_i
-	Memory<fpxx>& debug_populations() {
-		if(!fi_host_added) { fi.add_host_buffer(); fi_host_added = true; }
-		return fi;
-	}
-private:
-	bool fi_host_added{}; // whether debug_populations() gave fi its host buffer
-public:
-#endif // DEBUG_PROBE
 #ifdef PARTICLES
 	Memory<float> particles; // particle positions
 #endif // PARTICLES
@@ -191,7 +161,6 @@ public:
 	void enqueue_fv_half();
 	/// @brief The midpoint step's full stage (SCALAR_FV): after the domains' exchange of the half-step fields.
 	void enqueue_fv_full();
-	FvKernelTimes* fv_times = nullptr; // when set, each kernel of the step finishes the queue before and after it and adds its time here (LBM::time_fv_step())
 #endif // SCALAR_FV
 #ifdef SURFACE
 	void enqueue_surface_0();
@@ -256,9 +225,6 @@ public:
 	void set_moisture_rate(const float moisture_rate) { this->moisture_rate = moisture_rate; } // set Q added per time step to TYPE_Y fluid cells (MOISTURE)
 	float get_moisture_rate() const { return moisture_rate; }
 	void set_theta_0(const float theta_0) { this->theta_0 = theta_0; }
-#ifdef DEBUG_PROBE
-	void set_trace_cell(const uint n) { trace_n = n; } // the cell whose populations stream_collide traces (DEBUG_PROBE)
-#endif // DEBUG_PROBE
 	void set_inv_prandtl_t(const float inv_prandtl_t) { this->inv_prandtl_t = inv_prandtl_t; } // set 1/Pr_t of the eddy heat diffusivity (needs SUBGRID)
 	void set_fx(const float fx) { this->fx = fx; } // set global froce per volume
 	void set_fy(const float fy) { this->fy = fy; } // set global froce per volume
@@ -571,9 +537,6 @@ public:
 	~LBM();
 
 	void run(const ulong steps=max_ulong, const ulong total_steps=max_ulong); // initializes the LBM simulation (copies data to device and runs initialize kernel), then runs LBM
-#ifdef SCALAR_FV
-	FvKernelTimes time_fv_step(); // one time step with the time of each kernel (one domain; call run(0) first): for the cost measurements of the finite volumes
-#endif // SCALAR_FV
 	void update_fields(); // update fields (rho, u, T) manually
 	void reset(); // reset simulation (takes effect in following run() call)
 #ifdef FORCE_FIELD
@@ -637,29 +600,6 @@ public:
 		for(uint d=0u; d<get_D(); d++) lbm_domain[d]->set_theta_0(theta_0);
 #endif // MOISTURE
 	}
-#ifdef DEBUG_PROBE
-	/// DEBUG_PROBE: the cell whose populations stream_collide writes into the trace ring every step (one domain only).
-	void set_trace_cell(const uint x, const uint y, const uint z) {
-		if(get_D()!=1u) print_error("LBM::set_trace_cell() supports one domain only.");
-		if(x>=Nx||y>=Ny||z>=Nz) print_error("LBM::set_trace_cell(): the cell is outside the box.");
-		lbm_domain[0]->set_trace_cell((uint)index(x, y, z));
-	}
-	/// DEBUG_PROBE: the cell probe of the one domain (DebugProbe::Cell channels, channel c of cell n at c*N+n); read it with read_from_device().
-	Memory<float>& debug_cells() {
-		if(get_D()!=1u) print_error("LBM::debug_cells() supports one domain only.");
-		return lbm_domain[0]->dbg;
-	}
-	/// DEBUG_PROBE: the DDFs of the one domain with a host buffer (LBM_Domain::debug_populations()).
-	Memory<fpxx>& debug_populations() {
-		if(get_D()!=1u) print_error("LBM::debug_populations() supports one domain only.");
-		return lbm_domain[0]->debug_populations();
-	}
-	/// DEBUG_PROBE: the trace ring of the traced cell; step t sits at (t % DebugProbe::trace_steps) * DebugProbe::trace_channels.
-	Memory<float>& debug_trace() {
-		if(get_D()!=1u) print_error("LBM::debug_trace() supports one domain only.");
-		return lbm_domain[0]->trace;
-	}
-#endif // DEBUG_PROBE
 	/// MOISTURE with LEVEL_FORCING: the per-level pressure and reference virtual potential temperature for every domain.
 	void set_level_moist(const std::vector<float>& pressure, const std::vector<float>& theta_v_ref) {
 #if !defined(MOISTURE)||!defined(LEVEL_FORCING)

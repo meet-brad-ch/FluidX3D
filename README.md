@@ -26,7 +26,7 @@ This fork provides a **modern CMake build system** to make FluidX3D easier to bu
 - **[CMAKE.md](CMAKE.md)** - Architecture, unity build design, and how to add examples
 - **[BUILD.md](BUILD.md)** - Build instructions for Windows, Linux, and macOS
 - **[EXAMPLES.md](EXAMPLES.md)** - Complete list of all 41 examples with STL download info
-- **[research/convection/README.md](research/convection/README.md)** - Atmospheric convection in FluidX3D: what was measured, what was added, the conservative scalar transport, the references; **[FORK_CHANGES.md](FORK_CHANGES.md)** - every change of this fork with its measurement
+- **[research/convection/README.md](research/convection/README.md)** - Atmospheric convection in FluidX3D: the features and how to use them, their limits, the validation, the references; **[FORK_CHANGES.md](FORK_CHANGES.md)** - every change of this fork with its measurement
 - **[SETUP_API.md](SETUP_API.md)** - How to write a simulation with the Setup API; **[lib/setup/README.md](lib/setup/README.md)** - its layout, conventions and tests (`ctest -L "unit|physics"`)
 
 

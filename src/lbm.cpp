@@ -36,9 +36,6 @@ uint bytes_per_cell_host() { // returns the number of Bytes per cell allocated i
 	bytes_per_cell += 4u; // Q
 #endif // MOISTURE
 #endif // TEMPERATURE
-#ifdef DEBUG_PROBE
-	bytes_per_cell += 4u*DebugProbe::cell_channels; // dbg
-#endif // DEBUG_PROBE
 	return bytes_per_cell;
 }
 uint bytes_per_cell_device() { // returns the number of Bytes per cell allocated in device memory
@@ -63,9 +60,6 @@ uint bytes_per_cell_device() { // returns the number of Bytes per cell allocated
 #endif // SCALAR_FV
 #endif // MOISTURE
 #endif // TEMPERATURE
-#ifdef DEBUG_PROBE
-	bytes_per_cell += 4u*DebugProbe::cell_channels; // dbg
-#endif // DEBUG_PROBE
 #ifdef SCALAR_FV
 	bytes_per_cell += 20u; // fvR, fvT, fvT_half, fvRT, fvD
 #ifdef MOISTURE
@@ -214,18 +208,13 @@ void LBM_Domain::allocate(Device& device) {
 	kernel_stream_collide.add_parameters(hi, Q, moisture_rate, theta_0);
 	kernel_update_fields.add_parameters(hi, Q, theta_0);
 #endif // MOISTURE
-#ifdef DEBUG_PROBE
-	dbg = Memory<float>(device, N, DebugProbe::cell_channels, true, true, 0.0f); // last in the argument list of stream_collide
-	trace = Memory<float>(device, (ulong)DebugProbe::trace_steps*(ulong)DebugProbe::trace_channels, 1u, true, true, 0.0f);
-	kernel_stream_collide.add_parameters(dbg, trace, trace_n);
-#endif // DEBUG_PROBE
 #ifdef SCALAR_FV
 	fvR = Memory<float>(device, N, 1u, false, true, 0.0f);
 	fvT = Memory<float>(device, N, 1u, false, true, 0.0f);
 	fvT_half = Memory<float>(device, N, 1u, false, true, 0.0f);
 	fvRT = Memory<float>(device, N, 1u, false, true, 0.0f);
 	fvD = Memory<float>(device, N, 1u, false, true, 0.0f);
-	kernel_stream_collide.add_parameters(fvD); // after DEBUG_PROBE's: the earlier indices stay
+	kernel_stream_collide.add_parameters(fvD);
 	// the midpoint step with the step's link mass fluxes (read from fi after stream_collide; t_next, index 3, is set every step);
 	// the full stage writes rho_FV, rho theta, theta and T in place
 	kernel_fv_half = Kernel(device, N, "fv_scalars", fi, flags, fvD, 0ull, heat_rate, 0u, fvR, fvT, fvT_half, fvRT, T); // the half stage: phi at the half step
@@ -279,47 +268,23 @@ void LBM_Domain::enqueue_stream_collide() { // call kernel_stream_collide to per
 		+2u; // hi, Q
 	kernel_stream_collide.set_parameters(moisture_parameter, moisture_rate, theta_0);
 #endif // MOISTURE
-#ifdef DEBUG_PROBE
-	const uint probe_parameter = heat_parameters+2u // heat_rate, inv_prandtl_t
-#ifdef LEVEL_FORCING
-		+1u // level
-#endif // LEVEL_FORCING
-#ifdef MOISTURE
-		+4u // hi, Q, moisture_rate, theta_0
-#endif // MOISTURE
-		+2u; // dbg, trace
-	kernel_stream_collide.set_parameters(probe_parameter, trace_n);
-#endif // DEBUG_PROBE
 #endif // TEMPERATURE
-#ifdef SCALAR_FV
-	Clock clock;
-	if(fv_times) { finish_queue(); clock.start(); } // the timed step (LBM::time_fv_step()): every kernel alone
-#endif // SCALAR_FV
 	kernel_stream_collide.enqueue_run();
-#ifdef SCALAR_FV
-	if(fv_times) { finish_queue(); fv_times->stream_collide += 1.0E3*clock.stop(); }
-#endif // SCALAR_FV
 }
 #ifdef SCALAR_FV
 void LBM_Domain::enqueue_fv_half() { // the half stage: after stream_collide stored fi and wrote fvD, and the domains exchanged both (LBM::do_time_step())
-	Clock clock;
-	if(fv_times) { finish_queue(); clock.start(); }
 	kernel_fv_half.set_parameters(3u, t+1ull, heat_rate); // t_next: the parity the next step's load_f uses, then heat_rate
 #ifdef MOISTURE
 	kernel_fv_half.set_parameters(15u, moisture_rate); // after fvQ, fvQ_half, fvRQ, Q
 #endif // MOISTURE
 	kernel_fv_half.enqueue_run();
-	if(fv_times) { finish_queue(); fv_times->fv_half += 1.0E3*clock.stop(); }
 }
 void LBM_Domain::enqueue_fv_full() { // the full stage: after the domains exchanged the half-step fields, before the next step reads T
-	Clock clock;
-	if(fv_times) { finish_queue(); clock.start(); }
 	kernel_fv_full.set_parameters(3u, t+1ull, heat_rate);
 #ifdef MOISTURE
 	kernel_fv_full.set_parameters(15u, moisture_rate);
 #endif // MOISTURE
 	kernel_fv_full.enqueue_run();
-	if(fv_times) { finish_queue(); fv_times->fv_full += 1.0E3*clock.stop(); }
 }
 #endif // SCALAR_FV
 void LBM_Domain::enqueue_update_fields() { // update fields (rho, u, T) manually
@@ -660,9 +625,6 @@ string LBM_Domain::device_defines(const Device_Info& device_info) const { return
 	"\n	#define def_particles_N "+to_string(particles_N)+"ul"
 	"\n	#define def_particles_rho "+to_string(particles_rho)+"f"
 #endif // PARTICLES
-#ifdef DEBUG_PROBE
-	+DebugProbe::opencl_defines() // the probe's buffer layout, from src/debug_probe.hpp (this fork)
-#endif // DEBUG_PROBE
 ;}
 
 #ifdef GRAPHICS
@@ -1190,16 +1152,6 @@ void LBM::do_time_step() { // call kernel_stream_collide to perform one LBM time
 	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->increment_time_step();
 }
 
-#ifdef SCALAR_FV
-FvKernelTimes LBM::time_fv_step() { // one time step with the time of each kernel, the queue finished around each (after run(0)); with domains each kernel's time summed over them, the exchanges not counted
-	if(!initialized) print_error("LBM::time_fv_step(): call run(0) first, so the simulation is initialized.");
-	FvKernelTimes times{};
-	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->fv_times = &times;
-	do_time_step();
-	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->fv_times = nullptr;
-	return times;
-}
-#endif // SCALAR_FV
 void LBM::run(const ulong steps, const ulong total_steps) { // initializes the LBM simulation (copies data to device and runs initialize kernel), then runs LBM
 	info.append(steps, total_steps, get_t()); // total_steps parameter is just for runtime estimation
 	if(!initialized) {

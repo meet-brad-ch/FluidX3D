@@ -1,6 +1,5 @@
 // The moist thermal in saturated, neutral air: the box, its physical scales
-// and its set-up, shared by moist_bubble.cpp (the moist thermal against its dry twin) and scalar_reference.cpp (the
-// kernel's scalar lattices against a host reference, DEBUG_PROBE).
+// and its set-up, used by moist_bubble.cpp (the moist thermal against its dry twin).
 #pragma once
 
 #include "setup/setup.hpp"
