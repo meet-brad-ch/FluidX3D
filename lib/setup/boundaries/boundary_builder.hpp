@@ -9,6 +9,7 @@
 #include "setup/simulation/runner.hpp"
 #include "lbm.hpp"
 #include <array>
+#include <cmath>
 #include <functional>
 #include <initializer_list>
 #include <optional>
@@ -255,7 +256,7 @@ public:
 
             if(wind_ && !(lbm_.flags[n] & TYPE_S)) {
                 const float32_t height_ratio = ((float32_t)z + 0.5f) / lbm_wind_ref_height; // at the cell's center
-                const float32_t wind_velocity = lbm_wind_ref_velocity * pow(height_ratio, wind_->alpha);
+                const float32_t wind_velocity = lbm_wind_ref_velocity * std::pow(height_ratio, wind_->alpha); // std::pow(float, float): the global pow is ambiguous with utilities.hpp's pow(float, uint), which would truncate alpha
                 switch(wind_direction_) {
                     case Face::X_MIN: lbm_.u.x[n] = wind_velocity; break;
                     case Face::X_MAX: lbm_.u.x[n] = -wind_velocity; break;

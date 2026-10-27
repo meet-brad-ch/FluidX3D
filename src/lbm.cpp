@@ -32,7 +32,13 @@ uint bytes_per_cell_host() { // returns the number of Bytes per cell allocated i
 #endif // SURFACE
 #ifdef TEMPERATURE
 	bytes_per_cell += 4u; // T
+#ifdef MOISTURE
+	bytes_per_cell += 4u; // Q
+#endif // MOISTURE
 #endif // TEMPERATURE
+#ifdef DEBUG_PROBE
+	bytes_per_cell += 4u*DebugProbe::cell_channels; // dbg
+#endif // DEBUG_PROBE
 	return bytes_per_cell;
 }
 uint bytes_per_cell_device() { // returns the number of Bytes per cell allocated in device memory
@@ -44,8 +50,28 @@ uint bytes_per_cell_device() { // returns the number of Bytes per cell allocated
 	bytes_per_cell += 12u; // phi, mass, flags
 #endif // SURFACE
 #ifdef TEMPERATURE
+#ifdef SCALAR_FV
+	bytes_per_cell += 4u; // T (the finite volumes carry T: gi has one cell only)
+#else // SCALAR_FV
 	bytes_per_cell += 7u*sizeof(fpxx)+4u; // gi, T
+#endif // SCALAR_FV
+#ifdef MOISTURE
+#ifdef SCALAR_FV
+	bytes_per_cell += 4u; // Q (hi has one cell only)
+#else // SCALAR_FV
+	bytes_per_cell += 7u*sizeof(fpxx)+4u; // hi, Q
+#endif // SCALAR_FV
+#endif // MOISTURE
 #endif // TEMPERATURE
+#ifdef DEBUG_PROBE
+	bytes_per_cell += 4u*DebugProbe::cell_channels; // dbg
+#endif // DEBUG_PROBE
+#ifdef SCALAR_FV
+	bytes_per_cell += 20u; // fvR, fvT, fvT_half, fvRT, fvD
+#ifdef MOISTURE
+	bytes_per_cell += 12u; // fvQ, fvQ_half, fvRQ
+#endif // MOISTURE
+#endif // SCALAR_FV
 	return bytes_per_cell;
 }
 uint bandwidth_bytes_per_cell_device() { // returns the bandwidth in Bytes per cell per time step from/to device memory
@@ -65,9 +91,12 @@ uint bandwidth_bytes_per_cell_device() { // returns the bandwidth in Bytes per c
 #ifdef SURFACE
 	bandwidth_bytes_per_cell += (1u+(2u*velocity_set-1u)*sizeof(fpxx)+8u+(velocity_set-1u)*4u) + 1u + 1u + (4u+velocity_set+4u+4u+4u); // surface_0 (flags, fi, mass, massex), surface_1 (flags), surface_2 (flags), surface_3 (rho, flags, mass, massex, phi)
 #endif // SURFACE
-#ifdef TEMPERATURE
+#if defined(TEMPERATURE)&&!defined(SCALAR_FV) // with SCALAR_FV, stream_collide neither loads nor stores gi and hi
 	bandwidth_bytes_per_cell += 7u*2u*sizeof(fpxx); // 2*gi
-#endif // TEMPERATURE
+#ifdef MOISTURE
+	bandwidth_bytes_per_cell += 7u*2u*sizeof(fpxx); // 2*hi
+#endif // MOISTURE
+#endif // TEMPERATURE && !SCALAR_FV
 	return bandwidth_bytes_per_cell;
 }
 uint3 resolution(const float3 box_aspect_ratio, const uint memory) { // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
@@ -157,12 +186,64 @@ void LBM_Domain::allocate(Device& device) {
 #endif // SURFACE
 
 #ifdef TEMPERATURE
+#ifdef SCALAR_FV
+	gi = Memory<fpxx>(device, 1ull, 7u, false); // a placeholder: the finite volumes carry T, no kernel reads or writes gi (the argument order stays)
+#else // SCALAR_FV
 	gi = Memory<fpxx>(device, N, 7u, false);
+#endif // SCALAR_FV
 	T = Memory<float>(device, N, 1u, true, true, 1.0f);
 	kernel_initialize.add_parameters(gi, T);
-	kernel_stream_collide.add_parameters(gi, T);
+	kernel_stream_collide.add_parameters(gi, T, heat_rate, inv_prandtl_t);
 	kernel_update_fields.add_parameters(gi, T);
 #endif // TEMPERATURE
+#ifdef LEVEL_FORCING
+	level = Memory<float>(device, 8ull*(ulong)Nz, 1u, true, true, 0.0f); // 8 floats per level; last in the argument lists: the indices of the earlier parameters stay
+	for(ulong z=0ull; z<(ulong)Nz; z++) level[8ull*z+3ull] = 1.0f; // the reference temperature defaults to 1: the buoyancy as without LEVEL_FORCING
+	level.write_to_device();
+	kernel_stream_collide.add_parameters(level);
+	kernel_update_fields.add_parameters(level);
+#endif // LEVEL_FORCING
+#ifdef MOISTURE
+#ifdef SCALAR_FV
+	hi = Memory<fpxx>(device, 1ull, 7u, false); // a placeholder: the finite volumes carry Q, no kernel reads or writes hi (the argument order stays)
+#else // SCALAR_FV
+	hi = Memory<fpxx>(device, N, 7u, false);
+#endif // SCALAR_FV
+	Q = Memory<float>(device, N, 1u, true, true, 1.0f);
+	kernel_initialize.add_parameters(hi, Q);
+	kernel_stream_collide.add_parameters(hi, Q, moisture_rate, theta_0);
+	kernel_update_fields.add_parameters(hi, Q, theta_0);
+#endif // MOISTURE
+#ifdef DEBUG_PROBE
+	dbg = Memory<float>(device, N, DebugProbe::cell_channels, true, true, 0.0f); // last in the argument list of stream_collide
+	trace = Memory<float>(device, (ulong)DebugProbe::trace_steps*(ulong)DebugProbe::trace_channels, 1u, true, true, 0.0f);
+	kernel_stream_collide.add_parameters(dbg, trace, trace_n);
+#endif // DEBUG_PROBE
+#ifdef SCALAR_FV
+	fvR = Memory<float>(device, N, 1u, false, true, 0.0f);
+	fvT = Memory<float>(device, N, 1u, false, true, 0.0f);
+	fvT_half = Memory<float>(device, N, 1u, false, true, 0.0f);
+	fvRT = Memory<float>(device, N, 1u, false, true, 0.0f);
+	fvD = Memory<float>(device, N, 1u, false, true, 0.0f);
+	kernel_stream_collide.add_parameters(fvD); // after DEBUG_PROBE's: the earlier indices stay
+	// the midpoint step with the step's link mass fluxes (read from fi after stream_collide; t_next, index 3, is set every step);
+	// the full stage writes rho_FV, rho theta, theta and T in place
+	kernel_fv_half = Kernel(device, N, "fv_scalars", fi, flags, fvD, 0ull, heat_rate, 0u, fvR, fvT, fvT_half, fvRT, T); // the half stage: phi at the half step
+	kernel_fv_full = Kernel(device, N, "fv_scalars", fi, flags, fvD, 0ull, heat_rate, 1u, fvR, fvT, fvT_half, fvRT, T); // the full stage, with the sources
+	kernel_fv_init = Kernel(device, N, "fv_init", rho, T, fvR, fvT, fvRT);
+#ifdef MOISTURE
+	fvQ = Memory<float>(device, N, 1u, false, true, 0.0f);
+	fvQ_half = Memory<float>(device, N, 1u, false, true, 0.0f);
+	fvRQ = Memory<float>(device, N, 1u, false, true, 0.0f);
+	kernel_fv_half.add_parameters(fvQ, fvQ_half, fvRQ, Q, moisture_rate);
+	kernel_fv_full.add_parameters(fvQ, fvQ_half, fvRQ, Q, moisture_rate);
+	kernel_fv_init.add_parameters(Q, fvQ, fvRQ);
+#endif // MOISTURE
+#ifdef LEVEL_FORCING
+	kernel_fv_half.add_parameters(level);
+	kernel_fv_full.add_parameters(level);
+#endif // LEVEL_FORCING
+#endif // SCALAR_FV
 
 #ifdef PARTICLES
 	particles = Memory<float>(device, (ulong)particles_N, 3u);
@@ -179,8 +260,68 @@ void LBM_Domain::enqueue_initialize() { // call kernel_initialize
 	kernel_initialize.enqueue_run();
 }
 void LBM_Domain::enqueue_stream_collide() { // call kernel_stream_collide to perform one LBM time step
-	kernel_stream_collide.set_parameters(4u, t, fx, fy, fz).enqueue_run();
+	kernel_stream_collide.set_parameters(4u, t, fx, fy, fz);
+#ifdef TEMPERATURE
+	const uint heat_parameters = 10u // after fi, rho, u, flags, t, fx, fy, fz, gi, T
+#ifdef FORCE_FIELD
+		+1u // F
+#endif // FORCE_FIELD
+#ifdef SURFACE
+		+1u // mass
+#endif // SURFACE
+	;
+	kernel_stream_collide.set_parameters(heat_parameters, heat_rate, inv_prandtl_t);
+#ifdef MOISTURE
+	const uint moisture_parameter = heat_parameters+2u // heat_rate, inv_prandtl_t
+#ifdef LEVEL_FORCING
+		+1u // level
+#endif // LEVEL_FORCING
+		+2u; // hi, Q
+	kernel_stream_collide.set_parameters(moisture_parameter, moisture_rate, theta_0);
+#endif // MOISTURE
+#ifdef DEBUG_PROBE
+	const uint probe_parameter = heat_parameters+2u // heat_rate, inv_prandtl_t
+#ifdef LEVEL_FORCING
+		+1u // level
+#endif // LEVEL_FORCING
+#ifdef MOISTURE
+		+4u // hi, Q, moisture_rate, theta_0
+#endif // MOISTURE
+		+2u; // dbg, trace
+	kernel_stream_collide.set_parameters(probe_parameter, trace_n);
+#endif // DEBUG_PROBE
+#endif // TEMPERATURE
+#ifdef SCALAR_FV
+	Clock clock;
+	if(fv_times) { finish_queue(); clock.start(); } // the timed step (LBM::time_fv_step()): every kernel alone
+#endif // SCALAR_FV
+	kernel_stream_collide.enqueue_run();
+#ifdef SCALAR_FV
+	if(fv_times) { finish_queue(); fv_times->stream_collide += 1.0E3*clock.stop(); }
+#endif // SCALAR_FV
 }
+#ifdef SCALAR_FV
+void LBM_Domain::enqueue_fv_half() { // the half stage: after stream_collide stored fi and wrote fvD, and the domains exchanged both (LBM::do_time_step())
+	Clock clock;
+	if(fv_times) { finish_queue(); clock.start(); }
+	kernel_fv_half.set_parameters(3u, t+1ull, heat_rate); // t_next: the parity the next step's load_f uses, then heat_rate
+#ifdef MOISTURE
+	kernel_fv_half.set_parameters(15u, moisture_rate); // after fvQ, fvQ_half, fvRQ, Q
+#endif // MOISTURE
+	kernel_fv_half.enqueue_run();
+	if(fv_times) { finish_queue(); fv_times->fv_half += 1.0E3*clock.stop(); }
+}
+void LBM_Domain::enqueue_fv_full() { // the full stage: after the domains exchanged the half-step fields, before the next step reads T
+	Clock clock;
+	if(fv_times) { finish_queue(); clock.start(); }
+	kernel_fv_full.set_parameters(3u, t+1ull, heat_rate);
+#ifdef MOISTURE
+	kernel_fv_full.set_parameters(15u, moisture_rate);
+#endif // MOISTURE
+	kernel_fv_full.enqueue_run();
+	if(fv_times) { finish_queue(); fv_times->fv_full += 1.0E3*clock.stop(); }
+}
+#endif // SCALAR_FV
 void LBM_Domain::enqueue_update_fields() { // update fields (rho, u, T) manually
 #ifndef UPDATE_FIELDS
 	if(t!=t_last_update_fields) { // only run kernel_update_fields if the time step has changed since last update
@@ -375,9 +516,10 @@ string LBM_Domain::device_defines(const Device_Info& device_info) const { return
 	"\n	#define def_N "+to_string(get_N())+"ul"
 	"\n	#define uxx "+(get_N()<=(ulong)max_uint ? "uint" : "ulong")+"" // switchable data type for index calculation (32-bit uint / 64-bit ulong)
 
-	"\n	#define def_GNx "+to_string((Nx-2u*(uint)(Dx>1u))*Dx)+"u" // global LBM grid resolution of all domains together
-	"\n	#define def_GNy "+to_string((Ny-2u*(uint)(Dy>1u))*Dy)+"u"
-	"\n	#define def_GNz "+to_string((Nz-2u*(uint)(Dz>1u))*Dz)+"u"
+	"\n	#define def_GNx "+to_string((Nx-2u*halo_width()*(uint)(Dx>1u))*Dx)+"u" // global LBM grid resolution of all domains together
+	"\n	#define def_GNy "+to_string((Ny-2u*halo_width()*(uint)(Dy>1u))*Dy)+"u"
+	"\n	#define def_GNz "+to_string((Nz-2u*halo_width()*(uint)(Dz>1u))*Dz)+"u"
+	"\n	#define def_H "+to_string(halo_width())+"u" // the halo layers on each side of a domain cut (this fork: 2 with SCALAR_FV)
 
 	"\n	#define def_Dx "+to_string(Dx)+"u"
 	"\n	#define def_Dy "+to_string(Dy)+"u"
@@ -391,9 +533,9 @@ string LBM_Domain::device_defines(const Device_Info& device_info) const { return
 	"\n	#define def_Ay "+to_string(Nz*Nx)+"u"
 	"\n	#define def_Az "+to_string(Nx*Ny)+"u"
 
-	"\n	#define def_domain_offset_x "+to_string(0.5f*(float)((int)Nx+2*Ox+(int)Dx*(2*(int)(Dx>1u)-(int)Nx)))+"f"
-	"\n	#define def_domain_offset_y "+to_string(0.5f*(float)((int)Ny+2*Oy+(int)Dy*(2*(int)(Dy>1u)-(int)Ny)))+"f"
-	"\n	#define def_domain_offset_z "+to_string(0.5f*(float)((int)Nz+2*Oz+(int)Dz*(2*(int)(Dz>1u)-(int)Nz)))+"f"
+	"\n	#define def_domain_offset_x "+to_string(0.5f*(float)((int)Nx+2*Ox+(int)Dx*(2*(int)halo_width()*(int)(Dx>1u)-(int)Nx)))+"f"
+	"\n	#define def_domain_offset_y "+to_string(0.5f*(float)((int)Ny+2*Oy+(int)Dy*(2*(int)halo_width()*(int)(Dy>1u)-(int)Ny)))+"f"
+	"\n	#define def_domain_offset_z "+to_string(0.5f*(float)((int)Nz+2*Oz+(int)Dz*(2*(int)halo_width()*(int)(Dz>1u)-(int)Nz)))+"f"
 
 	"\n	#define D"+to_string(dimensions)+"Q"+to_string(velocity_set)+"" // D2Q9/D3Q15/D3Q19/D3Q27
 	"\n	#define def_velocity_set "+to_string(velocity_set)+"u" // LBM velocity set (D2Q9/D3Q15/D3Q19/D3Q27)
@@ -488,7 +630,11 @@ string LBM_Domain::device_defines(const Device_Info& device_info) const { return
 
 #ifdef TEMPERATURE
 	"\n	#define TEMPERATURE"
-	"\n	#define def_w_T "+to_string(1.0f/(2.0f*alpha+0.5f))+"f" // wT = dt/tauT = 1/(2*alpha+1/2), alpha = thermal diffusion coefficient
+#ifdef THERMAL_DIFFUSIVITY_FIX
+	"\n	#define def_w_T "+to_string(1.0f/(4.0f*alpha+0.5f))+"f" // wT = dt/tauT = 1/(4*alpha+1/2): the D3Q7 lattice diffuses with D = (tauT-1/2)/4, so alpha is the thermal diffusion coefficient (tests/physics/thermal_diffusivity.cpp)
+#else // THERMAL_DIFFUSIVITY_FIX
+	"\n	#define def_w_T "+to_string(1.0f/(2.0f*alpha+0.5f))+"f" // wT = dt/tauT = 1/(2*alpha+1/2), alpha = thermal diffusion coefficient; measured: the lattice diffuses with alpha/2 (tests/physics/thermal_diffusivity.cpp, eddy_heat_diffusivity.cpp)
+#endif // THERMAL_DIFFUSIVITY_FIX
 	"\n	#define def_beta "+to_string(beta)+"f" // thermal expansion coefficient
 	"\n	#define def_T_avg "+to_string(T_avg)+"f" // average temperature
 #endif // TEMPERATURE
@@ -497,11 +643,26 @@ string LBM_Domain::device_defines(const Device_Info& device_info) const { return
 	"\n	#define SUBGRID"
 #endif // SUBGRID
 
+#ifdef LEVEL_FORCING
+	"\n	#define LEVEL_FORCING" // per-level forcing (this fork)
+#endif // LEVEL_FORCING
+#ifdef MOISTURE
+	"\n	#define MOISTURE" // the moisture lattice (this fork)
+	"\n	#define def_q_scale 0.01f" // Q = 1 + qt / def_q_scale
+	"\n	#define def_T_scale 1.0f" // T = 1 + (theta_l - theta_0) / def_T_scale, in K
+#endif // MOISTURE
+#ifdef SCALAR_FV
+	"\n	#define SCALAR_FV" // T (and Q) by finite volumes (this fork)
+#endif // SCALAR_FV
+
 #ifdef PARTICLES
 	"\n	#define PARTICLES"
 	"\n	#define def_particles_N "+to_string(particles_N)+"ul"
 	"\n	#define def_particles_rho "+to_string(particles_rho)+"f"
 #endif // PARTICLES
+#ifdef DEBUG_PROBE
+	+DebugProbe::opencl_defines() // the probe's buffer layout, from src/debug_probe.hpp (this fork)
+#endif // DEBUG_PROBE
 ;}
 
 #ifdef GRAPHICS
@@ -761,7 +922,7 @@ LBM::LBM(const uint Nx, const uint Ny, const uint Nz, const uint Dx, const uint 
 	this->Nx = NDx; this->Ny = NDy; this->Nz = NDz;
 	this->Dx = Dx; this->Dy = Dy; this->Dz = Dz;
 	const uint D = Dx*Dy*Dz;
-	const uint Hx=Dx>1u, Hy=Dy>1u, Hz=Dz>1u; // halo offsets
+	const uint Hx=(Dx>1u)*halo_width(), Hy=(Dy>1u)*halo_width(), Hz=(Dz>1u)*halo_width(); // halo offsets
 	const vector<Device_Info>& device_infos = smart_device_selection(D);
 	sanity_checks_constructor(device_infos, this->Nx, this->Ny, this->Nz, Dx, Dy, Dz, nu, fx, fy, fz, sigma, alpha, beta, particles_N, particles_rho);
 	lbm_domain = new LBM_Domain*[D];
@@ -799,6 +960,11 @@ LBM::LBM(const uint Nx, const uint Ny, const uint Nz, const uint Dx, const uint 
 		for(uint d=0u; d<D; d++) buffers_T[d] = &(lbm_domain[d]->T);
 		T = Memory_Container(this, buffers_T, "T");
 #endif // TEMPERATURE
+#ifdef MOISTURE
+		Memory<float>** buffers_Q = new Memory<float>*[D];
+		for(uint d=0u; d<D; d++) buffers_Q[d] = &(lbm_domain[d]->Q);
+		Q = Memory_Container(this, buffers_Q, "Q");
+#endif // MOISTURE
 	} {
 #ifdef PARTICLES
 		particles = &(lbm_domain[0]->particles);
@@ -919,6 +1085,12 @@ void LBM::initialize() { // write all data fields to device and call kernel_init
 #ifndef BENCHMARK
 	sanity_checks_initialization();
 #endif // BENCHMARK
+#ifdef SCALAR_FV
+	{ // the 2-layer exchange extracts each domain's first 2 interior layers: a domain needs at least 2 halo widths of interior cells along a split axis
+		const uint need = 2u*halo_width();
+		if((Dx>1u&&Nx/Dx<need)||(Dy>1u&&Ny/Dy<need)||(Dz>1u&&Nz/Dz<need)) print_error("SCALAR_FV in domains: each domain needs at least "+to_string(need)+" interior cells along a split axis (here "+to_string(Nx/Dx)+" x "+to_string(Ny/Dy)+" x "+to_string(Nz/Dz)+").");
+	}
+#endif // SCALAR_FV
 
 	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->rho.enqueue_write_to_device();
 	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->u.enqueue_write_to_device();
@@ -933,6 +1105,12 @@ void LBM::initialize() { // write all data fields to device and call kernel_init
 #ifdef TEMPERATURE
 	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->T.enqueue_write_to_device();
 #endif // TEMPERATURE
+#ifdef MOISTURE
+	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->Q.enqueue_write_to_device(); // the start moisture field: the initialize kernel sets hi from it, as gi from T
+#endif // MOISTURE
+#ifdef SCALAR_FV
+	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->enqueue_fv_init(); // the shifted fields from the fields just written (SCALAR_FV)
+#endif // SCALAR_FV
 #ifdef PARTICLES
 	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->particles.enqueue_write_to_device();
 	communicate_particles();
@@ -951,8 +1129,17 @@ void LBM::initialize() { // write all data fields to device and call kernel_init
 	communicate_fi(); // time step must be odd here
 #ifdef TEMPERATURE
 	communicate_T(); // T halo data is required for field_slice rendering
+#ifndef SCALAR_FV // with SCALAR_FV, gi and hi are one-cell placeholders: nothing to exchange
 	communicate_gi(); // time step must be odd here
+#ifdef MOISTURE
+	communicate_hi();
+#endif // MOISTURE
+#endif // SCALAR_FV
 #endif // TEMPERATURE
+#ifdef SCALAR_FV
+	communicate_flags_fv(); // fv_solid() reads the flags 2 cells along a link: both halo layers
+	communicate_fv(); // fv_init wrote the halo cells from fields the host left empty there: their values from the cells they mirror
+#endif // SCALAR_FV
 	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->finish_queue();
 	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->reset_time_step(); // set time step to 0 again
 	initialized = true;
@@ -979,8 +1166,22 @@ void LBM::do_time_step() { // call kernel_stream_collide to perform one LBM time
 #ifdef GRAPHICS
 	communicate_T(); // T halo data is required for field_slice rendering
 #endif // GRAPHICS
+#ifndef SCALAR_FV
 	communicate_gi();
+#ifdef MOISTURE
+	communicate_hi();
+#endif // MOISTURE
+#endif // SCALAR_FV
 #endif // TEMPERATURE
+#ifdef SCALAR_FV
+	// the finite volumes after the flow: a cell next to a cut reads its neighbour domain's link fluxes (fi, just
+	// exchanged), diffusivity and values up to 2 cells across the cut, so each stage follows an exchange
+	communicate_fvD();
+	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->enqueue_fv_half();
+	communicate_fv_half();
+	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->enqueue_fv_full();
+	communicate_fv();
+#endif // SCALAR_FV
 #ifdef PARTICLES
 	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->enqueue_integrate_particles(); // intgegrate particles forward in time and couple particles to fluid
 	communicate_particles(); // communicate_F() is not required in do_time_step()
@@ -989,6 +1190,16 @@ void LBM::do_time_step() { // call kernel_stream_collide to perform one LBM time
 	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->increment_time_step();
 }
 
+#ifdef SCALAR_FV
+FvKernelTimes LBM::time_fv_step() { // one time step with the time of each kernel, the queue finished around each (after run(0)); with domains each kernel's time summed over them, the exchanges not counted
+	if(!initialized) print_error("LBM::time_fv_step(): call run(0) first, so the simulation is initialized.");
+	FvKernelTimes times{};
+	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->fv_times = &times;
+	do_time_step();
+	for(uint d=0u; d<get_D(); d++) lbm_domain[d]->fv_times = nullptr;
+	return times;
+}
+#endif // SCALAR_FV
 void LBM::run(const ulong steps, const ulong total_steps) { // initializes the LBM simulation (copies data to device and runs initialize kernel), then runs LBM
 	info.append(steps, total_steps, get_t()); // total_steps parameter is just for runtime estimation
 	if(!initialized) {
@@ -1384,8 +1595,12 @@ void LBM_Domain::allocate_transfer(Device& device) { // allocate all memory for 
 	if(Dy>1u) Amax = max(Amax, (ulong)Nz*(ulong)Nx); // Ay
 	if(Dz>1u) Amax = max(Amax, (ulong)Nx*(ulong)Ny); // Az
 
-	transfer_buffer_p = Memory<char>(device, Amax, max(transfers*(uint)sizeof(fpxx), 17u), true, true, 0, false); // only allocate one set of transfer buffers in plus/minus directions, for all x/y/z transfers
-	transfer_buffer_m = Memory<char>(device, Amax, max(transfers*(uint)sizeof(fpxx), 17u), true, true, 0, false); // these transfer buffers must not be zero-copy!
+	uint bytes_per_area_cell = max(transfers*(uint)sizeof(fpxx), 17u); // fi, or rho, u and flags
+#ifdef SCALAR_FV
+	bytes_per_area_cell = max(bytes_per_area_cell, fv_transfer_bytes()); // theta and q over 2 halo layers
+#endif // SCALAR_FV
+	transfer_buffer_p = Memory<char>(device, Amax, bytes_per_area_cell, true, true, 0, false); // only allocate one set of transfer buffers in plus/minus directions, for all x/y/z transfers
+	transfer_buffer_m = Memory<char>(device, Amax, bytes_per_area_cell, true, true, 0, false); // these transfer buffers must not be zero-copy!
 
 	kernel_transfer[enum_transfer_field::fi              ][0] = Kernel(device, 0ull, "transfer_extract_fi"              , 0u, t, transfer_buffer_p, transfer_buffer_m, fi);
 	kernel_transfer[enum_transfer_field::fi              ][1] = Kernel(device, 0ull, "transfer__insert_fi"              , 0u, t, transfer_buffer_p, transfer_buffer_m, fi);
@@ -1404,9 +1619,29 @@ void LBM_Domain::allocate_transfer(Device& device) { // allocate all memory for 
 #ifdef TEMPERATURE
 	kernel_transfer[enum_transfer_field::gi              ][0] = Kernel(device, 0ull, "transfer_extract_gi"              , 0u, t, transfer_buffer_p, transfer_buffer_m, gi);
 	kernel_transfer[enum_transfer_field::gi              ][1] = Kernel(device, 0ull, "transfer__insert_gi"              , 0u, t, transfer_buffer_p, transfer_buffer_m, gi);
+#ifdef MOISTURE
+	kernel_transfer[enum_transfer_field::hi              ][0] = Kernel(device, 0ull, "transfer_extract_hi"              , 0u, t, transfer_buffer_p, transfer_buffer_m, hi);
+	kernel_transfer[enum_transfer_field::hi              ][1] = Kernel(device, 0ull, "transfer__insert_hi"              , 0u, t, transfer_buffer_p, transfer_buffer_m, hi);
+#endif // MOISTURE
 	kernel_transfer[enum_transfer_field::T               ][0] = Kernel(device, 0ull, "transfer_extract_T"               , 0u, t, transfer_buffer_p, transfer_buffer_m, T);
 	kernel_transfer[enum_transfer_field::T               ][1] = Kernel(device, 0ull, "transfer__insert_T"               , 0u, t, transfer_buffer_p, transfer_buffer_m, T);
 #endif // TEMPERATURE
+#ifdef SCALAR_FV
+	kernel_transfer[enum_transfer_field::fv              ][0] = Kernel(device, 0ull, "transfer_extract_fv"              , 0u, t, transfer_buffer_p, transfer_buffer_m, fvT);
+	kernel_transfer[enum_transfer_field::fv              ][1] = Kernel(device, 0ull, "transfer__insert_fv"              , 0u, t, transfer_buffer_p, transfer_buffer_m, fvT);
+	kernel_transfer[enum_transfer_field::fv_half         ][0] = Kernel(device, 0ull, "transfer_extract_fv"              , 0u, t, transfer_buffer_p, transfer_buffer_m, fvT_half);
+	kernel_transfer[enum_transfer_field::fv_half         ][1] = Kernel(device, 0ull, "transfer__insert_fv"              , 0u, t, transfer_buffer_p, transfer_buffer_m, fvT_half);
+#ifdef MOISTURE
+	kernel_transfer[enum_transfer_field::fv              ][0].add_parameters(fvQ);
+	kernel_transfer[enum_transfer_field::fv              ][1].add_parameters(fvQ);
+	kernel_transfer[enum_transfer_field::fv_half         ][0].add_parameters(fvQ_half);
+	kernel_transfer[enum_transfer_field::fv_half         ][1].add_parameters(fvQ_half);
+#endif // MOISTURE
+	kernel_transfer[enum_transfer_field::fvD             ][0] = Kernel(device, 0ull, "transfer_extract_fvD"             , 0u, t, transfer_buffer_p, transfer_buffer_m, fvD);
+	kernel_transfer[enum_transfer_field::fvD             ][1] = Kernel(device, 0ull, "transfer__insert_fvD"             , 0u, t, transfer_buffer_p, transfer_buffer_m, fvD);
+	kernel_transfer[enum_transfer_field::flags_fv        ][0] = Kernel(device, 0ull, "transfer_extract_flags_fv"        , 0u, t, transfer_buffer_p, transfer_buffer_m, flags);
+	kernel_transfer[enum_transfer_field::flags_fv        ][1] = Kernel(device, 0ull, "transfer__insert_flags_fv"        , 0u, t, transfer_buffer_p, transfer_buffer_m, flags);
+#endif // SCALAR_FV
 }
 
 ulong LBM_Domain::get_area(const uint direction) {
@@ -1478,10 +1713,29 @@ void LBM::communicate_phi_massex_flags() {
 void LBM::communicate_gi() {
 	communicate_field(enum_transfer_field::gi, sizeof(fpxx));
 }
+#ifdef MOISTURE
+void LBM::communicate_hi() {
+	communicate_field(enum_transfer_field::hi, sizeof(fpxx));
+}
+#endif // MOISTURE
 void LBM::communicate_T() {
 	communicate_field(enum_transfer_field::T, 4u);
 }
 #endif // TEMPERATURE
+#ifdef SCALAR_FV
+void LBM::communicate_fv() {
+	communicate_field(enum_transfer_field::fv, fv_transfer_bytes());
+}
+void LBM::communicate_fv_half() {
+	communicate_field(enum_transfer_field::fv_half, fv_transfer_bytes());
+}
+void LBM::communicate_fvD() {
+	communicate_field(enum_transfer_field::fvD, 4u);
+}
+void LBM::communicate_flags_fv() {
+	communicate_field(enum_transfer_field::flags_fv, halo_width());
+}
+#endif // SCALAR_FV
 #ifdef PARTICLES
 void LBM::communicate_particles() {
 	if(get_D()>1u) {

@@ -43,7 +43,7 @@ Velocities run(std::uint32_t domains) {
 
 } // namespace
 
-void main_setup() { // extensions: FP16S EQUILIBRIUM_BOUNDARIES SUBGRID, as the wind solver (tools/cfd in para-sim)
+void main_setup() { // extensions: FP16S EQUILIBRIUM_BOUNDARIES SUBGRID, as a terrain wind solver
 	const Velocities whole = run(1u);
 	const Velocities split = run(2u);
 	double largest = 0.0, wake_east = 0.0;

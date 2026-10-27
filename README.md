@@ -20,11 +20,13 @@ This fork provides a **modern CMake build system** to make FluidX3D easier to bu
 - ✅ **SDF Caching**: Automatic hash-based caching of generated SDF files via `sdf_cache` module
 - ✅ **Setup API**: A `Simulation` in physical units: domain sizing, STL loading, voxelization, boundaries, graphics and a run loop in simulated time
 - ✅ **Voxelization Fix**: Fixed vertical slice artifacts in mesh voxelization via ray jitter
+- ✅ **Atmospheric Convection**: A validated thermal model for the convective boundary layer (the `alpha / 2` diffusivity fix, surface heat flux, eddy heat diffusivity, wind nudging, a sponge layer, moisture with condensation) and a conservative finite-volume transport of heat and water by the LBM's own link mass fluxes, see [research/convection/README.md](research/convection/README.md)
 
 **New Documentation:**
 - **[CMAKE.md](CMAKE.md)** - Architecture, unity build design, and how to add examples
 - **[BUILD.md](BUILD.md)** - Build instructions for Windows, Linux, and macOS
 - **[EXAMPLES.md](EXAMPLES.md)** - Complete list of all 41 examples with STL download info
+- **[research/convection/README.md](research/convection/README.md)** - Atmospheric convection in FluidX3D: what was measured, what was added, the conservative scalar transport, the references; **[FORK_CHANGES.md](FORK_CHANGES.md)** - every change of this fork with its measurement
 - **[SETUP_API.md](SETUP_API.md)** - How to write a simulation with the Setup API; **[lib/setup/README.md](lib/setup/README.md)** - its layout, conventions and tests (`ctest -L "unit|physics"`)
 
 

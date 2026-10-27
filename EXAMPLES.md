@@ -97,7 +97,7 @@ how to get it and stops.
 | Example | Files | Source |
 |---------|-------|--------|
 | **city**, **city_rt** | city.stl | included in `resources/` |
-| **hill** | hill.stl | included in `resources/` (a Unity terrain export, 4000 m x 4000 m) |
+| **hill** | hill.stl | included in `resources/` (a terrain export, 4000 m x 4000 m) |
 | **mercedes_f1** | mercedesf1-body.stl, mercedesf1-front-wheels.stl, mercedesf1-back-wheels.stl | [downloadfree3d.com](https://downloadfree3d.com/3d-models/vehicles/sports-car/mercedes-f1-w14/) |
 | **ahmed_body** | ahmed_25deg_m.stl | [GitHub](https://github.com/nathanrooy/ahmed-bluff-body-cfd/blob/master/geometry/ahmed_25deg_m.stl) |
 | **nasa_crm** | crm-hl_reference_ldg.stl | [NASA LaRC](https://commonresearchmodel.larc.nasa.gov/high-lift-crm/high-lift-crm-geometry/assembled-geometry/) |

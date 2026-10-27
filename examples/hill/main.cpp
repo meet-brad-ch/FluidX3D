@@ -1,5 +1,5 @@
 // Wind over hill terrain with an atmospheric boundary layer profile
-// Terrain: resources/hill.stl (Unity terrain export, 4000 m x 4000 m, 702 m high)
+// Terrain: resources/hill.stl (terrain export, 4000 m x 4000 m, 702 m high)
 // Voxelization: the STL is converted to a cached SDF (smooth terrain, no vertical-slice artifacts)
 
 #include "setup/setup.hpp"

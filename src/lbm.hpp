@@ -5,6 +5,15 @@
 #include "graphics.hpp"
 #include "units.hpp"
 #include "info.hpp"
+#ifdef DEBUG_PROBE
+#include "debug_probe.hpp"
+#ifndef TEMPERATURE
+#error "DEBUG_PROBE probes the thermal and moisture collision: it needs TEMPERATURE."
+#endif // TEMPERATURE
+#endif // DEBUG_PROBE
+#if defined(SCALAR_FV)&&(!defined(TEMPERATURE)||!defined(THERMAL_DIFFUSIVITY_FIX))
+#error "SCALAR_FV carries T (and Q) by finite volumes with alpha as the diffusivity: it needs TEMPERATURE and THERMAL_DIFFUSIVITY_FIX."
+#endif // SCALAR_FV
 
 uint bytes_per_cell_host(); // returns the number of Bytes per cell allocated in host memory
 uint bytes_per_cell_device(); // returns the number of Bytes per cell allocated in device memory
@@ -14,8 +23,44 @@ uint3 resolution(const float3 box_aspect_ratio, const uint memory); // input: si
 string default_filename(const string& path, const string& name, const string& extension, const ulong t); // generate a default filename with timestamp
 string default_filename(const string& name, const string& extension, const ulong t); // generate a default filename with timestamp at exe_path/export/
 
+/// @brief The halo layers on each side of a domain cut (this fork). The LBM's streaming reaches 1 cell. With SCALAR_FV
+/// a cell's face values reach 2 cells along every link (kernel.cpp, fv_change: the value 1 cell behind and 2 ahead),
+/// and both cells of a face must see the same 4 values, or its flux differs on its two sides and the scalars leak.
+/// @return the halo width in cells: 2 with SCALAR_FV, else 1
+inline uint halo_width() {
+#ifdef SCALAR_FV
+	return 2u;
+#else // SCALAR_FV
+	return 1u;
+#endif // SCALAR_FV
+}
+
+#ifdef SCALAR_FV
+/// @brief The bytes per boundary cell of the exchange of theta (and q) over the 2 halo layers (this fork).
+/// @return halo_width() layers of one float per scalar
+inline uint fv_transfer_bytes() {
+#ifdef MOISTURE
+	return halo_width()*2u*4u;
+#else // MOISTURE
+	return halo_width()*4u;
+#endif // MOISTURE
+}
+#endif // SCALAR_FV
+
 #pragma warning(disable:26812)
-enum enum_transfer_field { fi, rho_u_flags, flags, F, phi_massex_flags, gi, T, enum_transfer_field_length };
+/// The fields the domains exchange. With SCALAR_FV: fv (theta, q) and fv_half (their half-step values) over 2 layers,
+/// fvD (the diffusivity) over 1 layer, flags_fv (the flags) over 2 layers once at initialize() (this fork).
+enum enum_transfer_field { fi, rho_u_flags, flags, F, phi_massex_flags, gi, T, hi, fv, fv_half, fvD, flags_fv, enum_transfer_field_length };
+
+#ifdef SCALAR_FV
+/// The time of each kernel of one time step, in ms, each measured with the queue finished before and after it (this
+/// fork, for the cost measurements of the finite-volume transport; LBM::time_fv_step()).
+struct FvKernelTimes {
+	double stream_collide{}; ///< kernel_stream_collide
+	double fv_half{};        ///< the midpoint step's half stage
+	double fv_full{};        ///< its full stage
+};
+#endif // SCALAR_FV
 
 class LBM_Domain {
 private:
@@ -28,6 +73,10 @@ private:
 	float fx=0.0f, fy=0.0f, fz=0.0f; // global force per volume
 	float sigma=0.0f; // surface tension coefficient
 	float alpha=1.0f, beta=1.0f, T_avg=1.0f; // alpha = thermal diffusion coefficient, beta = (volumetric) thermal expansion coefficient, T_avg = 1 = average temperature
+	float heat_rate=0.0f; // TEMPERATURE: temperature added per time step to each fluid cell flagged TYPE_Y (a heat source, e.g. a heated floor)
+	float inv_prandtl_t=0.0f; // TEMPERATURE with SUBGRID: 1/Pr_t, the eddy heat diffusivity is nu_t/Pr_t; 0 = no eddy heat diffusivity
+	float moisture_rate=0.0f; // MOISTURE: Q added per time step to each fluid cell flagged TYPE_Y (the surface moisture flux, this fork)
+	float theta_0=300.0f; // MOISTURE: the mixed layer's potential temperature (K) that T = 1 stands for, T = 1 + (theta_l - theta_0) / def_T_scale
 	uint particles_N = 0u;
 	float particles_rho = 1.0f;
 
@@ -59,6 +108,27 @@ private:
 #ifdef TEMPERATURE
 	Memory<fpxx> gi; // thermal DDFs
 #endif // TEMPERATURE
+#ifdef LEVEL_FORCING
+	Memory<float> level; // per level z: fx, fy (a force per step), the damping rate of w, the reference temperature, the pressure (Pa) and the reference virtual theta (K) for MOISTURE, 2 spare (8 floats per level; this fork)
+#endif // LEVEL_FORCING
+#ifdef MOISTURE
+	Memory<fpxx> hi; // moisture DDFs (the twin of gi, this fork)
+#endif // MOISTURE
+#ifdef SCALAR_FV
+	Kernel kernel_fv_half; // the midpoint step's half stage after stream_collide, with the step's link mass fluxes (this fork)
+	Kernel kernel_fv_full; // its full stage, with the sources: writes rho_FV, rho theta, theta and T (and Q) in place
+	Kernel kernel_fv_init; // rho_FV and the shifted fields from the start fields, once at initialize()
+	Memory<float> fvR; // rho_FV - 1, the scheme's own density (device only)
+	Memory<float> fvT; // theta = T - 1 = (rho theta) / rho_FV: the per-step changes survive the float storage (device only)
+	Memory<float> fvT_half; // theta at the half step (device only)
+	Memory<float> fvRT; // rho theta, the conserved quantity (device only)
+	Memory<float> fvD; // the diffusivity of every cell, alpha + nu_t/Pr_t, written by stream_collide (device only)
+#ifdef MOISTURE
+	Memory<float> fvQ; // q = Q - 1 (device only)
+	Memory<float> fvQ_half; // q at the half step (device only)
+	Memory<float> fvRQ; // rho q (device only)
+#endif // MOISTURE
+#endif // SCALAR_FV
 #ifdef PARTICLES
 	Kernel kernel_integrate_particles; // intgegrates particles forward in time and couples particles to fluid
 #endif // PARTICLES
@@ -80,6 +150,24 @@ public:
 #ifdef TEMPERATURE
 	Memory<float> T; // temperature of every cell
 #endif // TEMPERATURE
+#ifdef MOISTURE
+	Memory<float> Q; // total water of every cell as 1 + qt / def_q_scale (this fork)
+#endif // MOISTURE
+#ifdef DEBUG_PROBE
+	Memory<float> dbg; // the cell probe: DebugProbe::cell_channels per cell, channel c of cell n at c*N+n, written by stream_collide every step (this fork)
+	Memory<float> trace; // the trace ring of the cell trace_n: DebugProbe::trace_channels per step, DebugProbe::trace_steps steps
+	uint trace_n = 0xFFFFFFFFu; // the traced cell (domain index); the default matches no cell
+	/// @brief DEBUG_PROBE: the DDFs with a host buffer, added on the first call (the link-flux host reference reads the LBM's
+	/// link mass fluxes from them, tests/physics/scalar_fv_link_flux.cpp). Read them with read_from_device() after a step.
+	/// @return the DDF buffer, Esoteric-Pull layout (index_f(n, i) = i N + n), stored as f_i - w_i
+	Memory<fpxx>& debug_populations() {
+		if(!fi_host_added) { fi.add_host_buffer(); fi_host_added = true; }
+		return fi;
+	}
+private:
+	bool fi_host_added{}; // whether debug_populations() gave fi its host buffer
+public:
+#endif // DEBUG_PROBE
 #ifdef PARTICLES
 	Memory<float> particles; // particle positions
 #endif // PARTICLES
@@ -96,6 +184,15 @@ public:
 	void enqueue_initialize(); // write all data fields to device and call kernel_initialize
 	void enqueue_stream_collide(); // call kernel_stream_collide to perform one LBM time step
 	void enqueue_update_fields(); // update fields (rho, u, T) manually
+#ifdef SCALAR_FV
+	void enqueue_fv_init() { kernel_fv_init.enqueue_run(); } // the shifted fields T - 1 (and Q - 1) from the fields on the device (SCALAR_FV)
+	/// @brief The midpoint step's half stage (SCALAR_FV): after stream_collide and the domains' exchange of fi and fvD,
+	/// so a cell next to a cut reads its neighbour domain's link fluxes and diffusivity.
+	void enqueue_fv_half();
+	/// @brief The midpoint step's full stage (SCALAR_FV): after the domains' exchange of the half-step fields.
+	void enqueue_fv_full();
+	FvKernelTimes* fv_times = nullptr; // when set, each kernel of the step finishes the queue before and after it and adds its time here (LBM::time_fv_step())
+#endif // SCALAR_FV
 #ifdef SURFACE
 	void enqueue_surface_0();
 	void enqueue_surface_1();
@@ -136,8 +233,33 @@ public:
 	float get_sigma() const { return sigma; } // get surface tension coefficient
 	float get_alpha() const { return alpha; } // get thermal diffusion coefficient
 	float get_beta() const { return beta; } // get thermal expansion coefficient
+	float get_heat_rate() const { return heat_rate; } // get temperature added per time step to TYPE_Y fluid cells
+	float get_inv_prandtl_t() const { return inv_prandtl_t; } // get 1/Pr_t of the eddy heat diffusivity
 	ulong get_t() const { return t; } // get discrete time step in LBM units
 	uint get_velocity_set() const; // get LBM velocity set
+	void set_heat_rate(const float heat_rate) { this->heat_rate = heat_rate; } // set temperature added per time step to TYPE_Y fluid cells
+#ifdef LEVEL_FORCING
+	/// Writes the per-level terms (each vector holds Nz values): the force fx, fy per step, the damping rate r of w (a force -r rho w) and
+	/// the temperature T_ref that T relaxes toward at the rate r (a source r (T_ref - T) per step, TEMPERATURE only).
+	void set_level_forcing(const std::vector<float>& fx, const std::vector<float>& fy, const std::vector<float>& rate, const std::vector<float>& T_ref) {
+		if(fx.size()!=(size_t)Nz||fy.size()!=(size_t)Nz||rate.size()!=(size_t)Nz||T_ref.size()!=(size_t)Nz) print_error("LBM::set_level_forcing(): every vector needs Nz = "+to_string(Nz)+" values.");
+		for(uint z=0u; z<Nz; z++) { level[8ull*z] = fx[z]; level[8ull*z+1ull] = fy[z]; level[8ull*z+2ull] = rate[z]; level[8ull*z+3ull] = T_ref[z]; }
+		level.write_to_device();
+	}
+	/// MOISTURE: the per-level pressure (Pa) and reference virtual potential temperature (K) the buoyancy uses (p = 0 on a level: dry buoyancy).
+	void set_level_moist(const std::vector<float>& pressure, const std::vector<float>& theta_v_ref) {
+		if(pressure.size()!=(size_t)Nz||theta_v_ref.size()!=(size_t)Nz) print_error("LBM::set_level_moist(): every vector needs Nz = "+to_string(Nz)+" values.");
+		for(uint z=0u; z<Nz; z++) { level[8ull*z+4ull] = pressure[z]; level[8ull*z+5ull] = theta_v_ref[z]; }
+		level.write_to_device();
+	}
+#endif // LEVEL_FORCING
+	void set_moisture_rate(const float moisture_rate) { this->moisture_rate = moisture_rate; } // set Q added per time step to TYPE_Y fluid cells (MOISTURE)
+	float get_moisture_rate() const { return moisture_rate; }
+	void set_theta_0(const float theta_0) { this->theta_0 = theta_0; }
+#ifdef DEBUG_PROBE
+	void set_trace_cell(const uint n) { trace_n = n; } // the cell whose populations stream_collide traces (DEBUG_PROBE)
+#endif // DEBUG_PROBE
+	void set_inv_prandtl_t(const float inv_prandtl_t) { this->inv_prandtl_t = inv_prandtl_t; } // set 1/Pr_t of the eddy heat diffusivity (needs SUBGRID)
 	void set_fx(const float fx) { this->fx = fx; } // set global froce per volume
 	void set_fy(const float fy) { this->fy = fy; } // set global froce per volume
 	void set_fz(const float fz) { this->fz = fz; } // set global froce per volume
@@ -231,7 +353,16 @@ private:
 #ifdef TEMPERATURE
 	void communicate_gi();
 	void communicate_T();
+#ifdef MOISTURE
+	void communicate_hi();
+#endif // MOISTURE
 #endif // TEMPERATURE
+#ifdef SCALAR_FV
+	void communicate_fv(); // theta and q over the 2 halo layers (after the full stage and after fv_init)
+	void communicate_fv_half(); // their half-step values over the 2 halo layers (after the half stage)
+	void communicate_fvD(); // the diffusivity over the halo layer next to the cut (after stream_collide)
+	void communicate_flags_fv(); // the flags over the 2 halo layers (once at initialize(): fv_solid() reads 2 cells along a link)
+#endif // SCALAR_FV
 #ifdef PARTICLES
 	void communicate_particles();
 #endif // PARTICLES
@@ -254,7 +385,7 @@ public:
 			D = Dx*Dy*Dz; // number of domains
 			NxNy = (ulong)Nx*(ulong)Ny; // shortcut for Nx*Ny
 			NxDx=Nx/Dx; NyDy=Ny/Dy; NzDz=Nz/Dz; // shortcuts for N_/D_
-			Hx=Dx>1u; Hy=Dy>1u; Hz=Dz>1u; // halo offsets
+			Hx=(Dx>1u)*halo_width(); Hy=(Dy>1u)*halo_width(); Hz=(Dz>1u)*halo_width(); // halo offsets
 			local_Nx=(ulong)(NxDx+2u*Hx); local_Ny=(ulong)(NyDy+2u*Hy); local_Nz=(ulong)(NzDz+2u*Hz); // size of each domain
 			local_N = local_Nx*local_Ny*local_Nz; // number of cells in each domain
 		}
@@ -422,6 +553,9 @@ public:
 #ifdef TEMPERATURE
 	Memory_Container<float> T; // temperature of every cell
 #endif // TEMPERATURE
+#ifdef MOISTURE
+	Memory_Container<float> Q; // total water of every cell as 1 + qt / def_q_scale (this fork)
+#endif // MOISTURE
 #ifdef PARTICLES
 	Memory<float>* particles; // particle positions
 #endif // PARTICLES
@@ -437,6 +571,9 @@ public:
 	~LBM();
 
 	void run(const ulong steps=max_ulong, const ulong total_steps=max_ulong); // initializes the LBM simulation (copies data to device and runs initialize kernel), then runs LBM
+#ifdef SCALAR_FV
+	FvKernelTimes time_fv_step(); // one time step with the time of each kernel (one domain; call run(0) first): for the cost measurements of the finite volumes
+#endif // SCALAR_FV
 	void update_fields(); // update fields (rho, u, T) manually
 	void reset(); // reset simulation (takes effect in following run() call)
 #ifdef FORCE_FIELD
@@ -469,6 +606,74 @@ public:
 	float get_sigma() const { return lbm_domain[0]->get_sigma(); } // get surface tension coefficient
 	float get_alpha() const { return lbm_domain[0]->get_alpha(); } // get thermal diffusion coefficient
 	float get_beta() const { return lbm_domain[0]->get_beta(); } // get thermal expansion coefficient
+	float get_heat_rate() const { return lbm_domain[0]->get_heat_rate(); } // get temperature added per time step to TYPE_Y fluid cells
+	float get_inv_prandtl_t() const { return lbm_domain[0]->get_inv_prandtl_t(); } // get 1/Pr_t of the eddy heat diffusivity
+	void set_heat_rate(const float heat_rate) { // set temperature added per time step to each fluid cell flagged TYPE_Y (TEMPERATURE)
+#ifndef TEMPERATURE
+		if(heat_rate!=0.0f) print_error("LBM::set_heat_rate() needs TEMPERATURE enabled.");
+#endif // TEMPERATURE
+		for(uint d=0u; d<get_D(); d++) lbm_domain[d]->set_heat_rate(heat_rate);
+	}
+	/// LEVEL_FORCING: the per-level terms for every domain (the domains must not be split along z: the level index is the local z).
+	void set_level_forcing(const std::vector<float>& fx, const std::vector<float>& fy, const std::vector<float>& rate, const std::vector<float>& T_ref) {
+#ifndef LEVEL_FORCING
+		print_error("LBM::set_level_forcing() needs LEVEL_FORCING enabled.");
+#else // LEVEL_FORCING
+		if(get_Dz()>1u) print_error("LBM::set_level_forcing(): domains split along z are not supported (the level index is the local z).");
+		for(uint d=0u; d<get_D(); d++) lbm_domain[d]->set_level_forcing(fx, fy, rate, T_ref);
+#endif // LEVEL_FORCING
+	}
+	void set_moisture_rate(const float moisture_rate) { // set Q added per time step to each fluid cell flagged TYPE_Y (MOISTURE)
+#ifndef MOISTURE
+		if(moisture_rate!=0.0f) print_error("LBM::set_moisture_rate() needs MOISTURE enabled.");
+#endif // MOISTURE
+		for(uint d=0u; d<get_D(); d++) lbm_domain[d]->set_moisture_rate(moisture_rate);
+	}
+	/// MOISTURE: the potential temperature (K) that T = 1 stands for (the saturation adjustment needs the real temperature).
+	void set_theta_0(const float theta_0) {
+#ifndef MOISTURE
+		print_error("LBM::set_theta_0() needs MOISTURE enabled.");
+#else // MOISTURE
+		for(uint d=0u; d<get_D(); d++) lbm_domain[d]->set_theta_0(theta_0);
+#endif // MOISTURE
+	}
+#ifdef DEBUG_PROBE
+	/// DEBUG_PROBE: the cell whose populations stream_collide writes into the trace ring every step (one domain only).
+	void set_trace_cell(const uint x, const uint y, const uint z) {
+		if(get_D()!=1u) print_error("LBM::set_trace_cell() supports one domain only.");
+		if(x>=Nx||y>=Ny||z>=Nz) print_error("LBM::set_trace_cell(): the cell is outside the box.");
+		lbm_domain[0]->set_trace_cell((uint)index(x, y, z));
+	}
+	/// DEBUG_PROBE: the cell probe of the one domain (DebugProbe::Cell channels, channel c of cell n at c*N+n); read it with read_from_device().
+	Memory<float>& debug_cells() {
+		if(get_D()!=1u) print_error("LBM::debug_cells() supports one domain only.");
+		return lbm_domain[0]->dbg;
+	}
+	/// DEBUG_PROBE: the DDFs of the one domain with a host buffer (LBM_Domain::debug_populations()).
+	Memory<fpxx>& debug_populations() {
+		if(get_D()!=1u) print_error("LBM::debug_populations() supports one domain only.");
+		return lbm_domain[0]->debug_populations();
+	}
+	/// DEBUG_PROBE: the trace ring of the traced cell; step t sits at (t % DebugProbe::trace_steps) * DebugProbe::trace_channels.
+	Memory<float>& debug_trace() {
+		if(get_D()!=1u) print_error("LBM::debug_trace() supports one domain only.");
+		return lbm_domain[0]->trace;
+	}
+#endif // DEBUG_PROBE
+	/// MOISTURE with LEVEL_FORCING: the per-level pressure and reference virtual potential temperature for every domain.
+	void set_level_moist(const std::vector<float>& pressure, const std::vector<float>& theta_v_ref) {
+#if !defined(MOISTURE)||!defined(LEVEL_FORCING)
+		print_error("LBM::set_level_moist() needs MOISTURE and LEVEL_FORCING enabled.");
+#else
+		for(uint d=0u; d<get_D(); d++) lbm_domain[d]->set_level_moist(pressure, theta_v_ref);
+#endif
+	}
+	void set_inv_prandtl_t(const float inv_prandtl_t) { // set 1/Pr_t: the eddy heat diffusivity nu_t/Pr_t of the SUBGRID model is added to alpha (TEMPERATURE with SUBGRID)
+#if !defined(TEMPERATURE)||!defined(SUBGRID)
+		if(inv_prandtl_t!=0.0f) print_error("LBM::set_inv_prandtl_t() needs both TEMPERATURE and SUBGRID enabled.");
+#endif // TEMPERATURE and SUBGRID
+		for(uint d=0u; d<get_D(); d++) lbm_domain[d]->set_inv_prandtl_t(inv_prandtl_t);
+	}
 	ulong get_t() const { return lbm_domain[0]->get_t(); } // get discrete time step in LBM units
 	uint get_velocity_set() const { return lbm_domain[0]->get_velocity_set(); }
 	void set_fx(const float fx) { for(uint d=0u; d<get_D(); d++) lbm_domain[d]->set_fx(fx); } // set global froce per volume

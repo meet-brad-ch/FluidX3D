@@ -839,9 +839,9 @@ string opencl_c_container() { return R( // ########################## begin of O
 )+R(float3 mirror_distance(const float3 d) { // mirror distance vector into periodic boundaries
 	return mirror_position(d);
 }
-)+R(bool is_halo(const uxx n) {
+)+R(bool is_halo(const uxx n) { // the def_H halo layers on each side of a domain cut (this fork: def_H 2 with SCALAR_FV)
 	const uint3 xyz = coordinates(n);
-	return ((def_Dx>1u)&(xyz.x==0u||xyz.x>=def_Nx-1u))||((def_Dy>1u)&(xyz.y==0u||xyz.y>=def_Ny-1u))||((def_Dz>1u)&(xyz.z==0u||xyz.z>=def_Nz-1u));
+	return ((def_Dx>1u)&(xyz.x<def_H||xyz.x>=def_Nx-def_H))||((def_Dy>1u)&(xyz.y<def_H||xyz.y>=def_Ny-def_H))||((def_Dz>1u)&(xyz.z<def_H||xyz.z>=def_Nz-def_H));
 }
 
 )+R(float half_to_float_custom(const ushort x) { // custom 16-bit floating-point format, 1-4-11, exp-15, +-1.99951168, +-6.10351562E-5, +-2.98023224E-8, 3.612 digits
@@ -1389,6 +1389,31 @@ string opencl_c_container() { return R( // ########################## begin of O
 
 
 
+)+"#ifdef MOISTURE"+R(
+// Moist air (this fork): a moist-air model (saturation adjustment, virtual potential temperature), in float. Units K, kg/kg, Pa.
+)+R(float moist_qsat(const float kelvin, const float pascal) { // the saturation specific humidity (Bolton 1980)
+	const float celsius = kelvin-273.15f;
+	const float e = 611.2f*exp(17.67f*celsius/(celsius+243.5f));
+	return 0.62198f*e/(pascal-0.37802f*e); // Eps = Rd/Rv = 287.04/461.5
+}
+)+R(float moist_exner(const float pascal) { return pow(pascal*1.0E-5f, 0.28589f); } // (p / 1000 hPa)^(Rd/cp), Rd/cp = 287.04/1004
+)+R(float moist_virtual_theta(const float thl, const float qt, const float pascal) { // theta_v after the saturation adjustment (Newton)
+	const float ex = moist_exner(pascal);
+	float t = thl*ex;
+	float ql = 0.0f;
+	if(qt>moist_qsat(t, pascal)) {
+		for(uint i=0u; i<20u; i++) {
+			const float qs = moist_qsat(t, pascal);
+			const float f = t-thl*ex-2490.04f*(qt-qs); // Lv/cp = 2.5e6/1004
+			const float dqs = qs*17.67f*243.5f/sq(t-273.15f+243.5f);
+			t -= f/(1.0f+2490.04f*dqs);
+			if(fabs(f)<1.0E-4f) break;
+		}
+		ql = fmax(0.0f, qt-moist_qsat(t, pascal));
+	}
+	return t/ex*(1.0f+0.61f*(qt-ql)-ql);
+}
+)+"#endif"+R( // MOISTURE
 )+R(kernel void initialize)+"("+R(global fpxx* fi, const global float* rho, global float* u, global uchar* flags // ) { // initialize LBM
 )+"#ifdef SURFACE"+R(
 	, global float* mass, global float* massex, global float* phi // argument order is important
@@ -1396,6 +1421,9 @@ string opencl_c_container() { return R( // ########################## begin of O
 )+"#ifdef TEMPERATURE"+R(
 	, global fpxx* gi, const global float* T // argument order is important
 )+"#endif"+R( // TEMPERATURE
+)+"#ifdef MOISTURE"+R(
+	, global fpxx* hi, const global float* Q // the moisture lattice and its field (this fork)
+)+"#endif"+R( // MOISTURE
 )+") {"+R( // initialize()
 	const uxx n = get_global_id(0); // n = x+(y+z*Ny)*Nx
 	if(n>=(uxx)def_N||is_halo(n)) return; // don't execute initialize() on halo
@@ -1454,15 +1482,20 @@ string opencl_c_container() { return R( // ########################## begin of O
 		flags[n] = flagsn;
 	}
 )+"#endif"+R( // SURFACE
-)+"#ifdef TEMPERATURE"+R(
+)+"#if defined(TEMPERATURE)&&!defined(SCALAR_FV)"+R( // with SCALAR_FV, gi and hi are one-cell placeholders: fv_init() starts the finite volumes
 	{ // separate block to avoid variable name conflicts
 		float geq[7];
 		calculate_g_eq(T[n], uxn, uyn, uzn, geq);
 		uxx j7[7]; // neighbors of D3Q7 subset
 		neighbors_temperature(n, j7);
 		store_g(n, geq, gi, j7, 1ul);
+)+"#ifdef MOISTURE"+R(
+		float heq[7];
+		calculate_g_eq(Q[n], uxn, uyn, uzn, heq); // the moisture DDFs from the Q field, as the thermal ones
+		store_g(n, heq, hi, j7, 1ul);
+)+"#endif"+R( // MOISTURE
 	}
-)+"#endif"+R( // TEMPERATURE
+)+"#endif"+R( // TEMPERATURE && !SCALAR_FV
 	store_f(n, feq, fi, j, 1ul); // write to fi
 } // initialize()
 
@@ -1496,14 +1529,30 @@ string opencl_c_container() { return R( // ########################## begin of O
 	, const global float* mass // argument order is important
 )+"#endif"+R( // SURFACE
 )+"#ifdef TEMPERATURE"+R(
-	, global fpxx* gi, global float* T // argument order is important
+	, global fpxx* gi, global float* T, const float heat_rate, const float inv_prandtl_t // argument order is important
 )+"#endif"+R( // TEMPERATURE
+)+"#ifdef LEVEL_FORCING"+R(
+	, const global float* level // per level: fx, fy, the damping rate of w, the reference temperature (this fork)
+)+"#endif"+R( // LEVEL_FORCING
+)+"#ifdef MOISTURE"+R(
+	, global fpxx* hi, global float* Q, const float moisture_rate, const float theta_0 // the moisture lattice, its field, the source per step in TYPE_Y cells, the mixed layer's theta (K) that T = 1 stands for (this fork)
+)+"#endif"+R( // MOISTURE
+)+"#ifdef DEBUG_PROBE"+R(
+	, global float* dbg, global float* trace, const uint trace_n // the cell probe (def_dbg_channels per cell), the trace ring of cell trace_n (src/debug_probe.hpp, this fork); last: the earlier indices stay
+)+"#endif"+R( // DEBUG_PROBE
+)+"#ifdef SCALAR_FV"+R(
+	, global float* fvD // the diffusivity of every cell for fv_scalars() (this fork); after DEBUG_PROBE's
+)+"#endif"+R( // SCALAR_FV
 )+") {"+R( // stream_collide()
 	const uxx n = get_global_id(0); // n = x+(y+z*Ny)*Nx
 	if(n>=(uxx)def_N||is_halo(n)) return; // don't execute stream_collide() on halo
 	const uchar flagsn = flags[n]; // cache flags[n] for multiple readings
 	const uchar flagsn_bo=flagsn&TYPE_BO, flagsn_su=flagsn&TYPE_SU; // extract boundary and surface flags
 	if(flagsn_bo==TYPE_S||flagsn_su==TYPE_G) return; // if cell is solid boundary or gas, just return
+)+"#ifdef DEBUG_PROBE"+R(
+	float dbgc[def_dbg_channels] = { 0.0f }; // the cell probe's values of this step, written at the end of the thermal block (C99: the rest is zero)
+	dbgc[def_dbg_flags] = (float)flagsn;
+)+"#endif"+R( // DEBUG_PROBE
 
 	uxx j[def_velocity_set]; // neighbor indices
 	neighbors(n, j); // calculate neighbor indices
@@ -1529,6 +1578,14 @@ string opencl_c_container() { return R( // ########################## begin of O
 	}
 )+"#endif"+R( // EQUILIBRIUM_BOUNDARIES
 	float fxn=fx, fyn=fy, fzn=fz; // force starts as constant volume force, can be modified before call of calculate_forcing_terms(...)
+)+"#ifdef LEVEL_FORCING"+R(
+	{ // the per-level force and the damping of w (a force -r rho w per step), this fork
+		const uint lz = coordinates(n).z;
+		fxn += level[8u*lz];
+		fyn += level[8u*lz+1u];
+		fzn -= level[8u*lz+2u]*rhon*uzn;
+	}
+)+"#endif"+R( // LEVEL_FORCING
 	float Fin[def_velocity_set]; // forcing terms
 
 )+"#ifdef FORCE_FIELD"+R(
@@ -1554,11 +1611,41 @@ string opencl_c_container() { return R( // ########################## begin of O
 )+"#endif"+R( // SURFACE
 
 )+"#ifdef TEMPERATURE"+R(
+	uxx j7[7]; // neighbors of D3Q7 subset
+	float ghn[7]; // read from gA and stream to gh (D3Q7 subset, periodic boundary conditions)
+	float geqT[7]; // temperature equilibrium DDFs; the collision follows the SUBGRID model below, whose eddy viscosity sets the eddy heat diffusivity
+	float TnT = 0.0f; // the cell's temperature, kept for the sponge's relaxation below (LEVEL_FORCING, this fork)
+)+"#ifdef MOISTURE"+R(
+	float hhn[7]; // the moisture DDFs, streamed in with the thermal ones
+	float heqQ[7]; // the moisture equilibrium
+)+"#endif"+R( // MOISTURE
 	{ // separate block to avoid variable name conflicts
-		uxx j7[7]; // neighbors of D3Q7 subset
+)+"#ifdef SCALAR_FV"+R(
+		// SCALAR_FV (this fork): T and Q are fields carried by fv_scalars() after this kernel; here they
+		// are read for the buoyancy, and this kernel stores the velocity and diffusivity fv_scalars() needs
+		for(uint i=0u; i<7u; i++) ghn[i] = 0.0f;
+)+"#ifdef MOISTURE"+R(
+		for(uint i=0u; i<7u; i++) hhn[i] = 0.0f;
+		const float Qn = Q[n];
+)+"#endif"+R( // MOISTURE
+		const float Tn = T[n];
+)+"#else"+R( // SCALAR_FV
 		neighbors_temperature(n, j7);
-		float ghn[7]; // read from gA and stream to gh (D3Q7 subset, periodic boundary conditions)
 		load_g(n, ghn, gi, j7, t); // perform streaming (part 2)
+)+"#ifdef MOISTURE"+R(
+		load_g(n, hhn, hi, j7, t); // the moisture DDFs stream like the thermal ones
+		float Qn;
+		if(flagsn&TYPE_T) {
+			Qn = Q[n]; // a temperature boundary fixes the moisture too
+		} else {
+			Qn = 0.0f;
+			for(uint i=0u; i<7u; i++) Qn += hhn[i];
+			Qn += 1.0f;
+)+"#ifdef UPDATE_FIELDS"+R(
+			Q[n] = Qn;
+)+"#endif"+R( // UPDATE_FIELDS
+		}
+)+"#endif"+R( // MOISTURE
 		float Tn;
 		if(flagsn&TYPE_T) {
 			Tn = T[n]; // apply preset temperature
@@ -1566,22 +1653,54 @@ string opencl_c_container() { return R( // ########################## begin of O
 			Tn = 0.0f;
 			for(uint i=0u; i<7u; i++) Tn += ghn[i]; // calculate temperature from g
 			Tn += 1.0f; // add 1.0f last to avoid digit extinction effects when summing up gi (perturbation method / DDF-shifting)
-		}
-		fxn -= fx*def_beta*(Tn-def_T_avg);
-		fyn -= fy*def_beta*(Tn-def_T_avg);
-		fzn -= fz*def_beta*(Tn-def_T_avg);
-		float geq[7]; // cache f_equilibrium[n]
-		const float rho2 = 0.5f/rhon; // apply external volume force (Guo forcing, Krueger p.233f)
-		calculate_g_eq(Tn, fma(fxn, rho2, uxn), fma(fyn, rho2, uyn), fma(fzn, rho2, uzn), geq); // calculate equilibrium DDFs
-		if(flagsn&TYPE_T) {
-			for(uint i=0u; i<7u; i++) ghn[i] = geq[i]; // just write geq to ghn (no collision)
-		} else {
 )+"#ifdef UPDATE_FIELDS"+R(
 			T[n] = Tn; // update temperature field
 )+"#endif"+R( // UPDATE_FIELDS
-			for(uint i=0u; i<7u; i++) ghn[i] = fma(1.0f-def_w_T, ghn[i], def_w_T*geq[i]); // perform collision
 		}
-		store_g(n, ghn, gi, j7, t); // perform streaming (part 1)
+)+"#endif"+R( // SCALAR_FV
+		float T_ref = def_T_avg; // the buoyancy's reference temperature
+		float T_buoy = Tn; // the buoyant temperature: T, or the virtual potential temperature in lattice units with MOISTURE
+)+"#ifdef LEVEL_FORCING"+R(
+		{
+			const uint lzb = coordinates(n).z;
+			T_ref = level[8u*lzb+3u]; // the level's reference (the start profile the host set, 1 by default): a parcel's buoyancy against its own level, no hydrostatic ramp in the lattice (this fork)
+)+"#ifdef MOISTURE"+R(
+			const float p = level[8u*lzb+4u]; // the level's pressure (Pa); 0 = dry buoyancy as without MOISTURE
+			if(p>0.0f) { // theta_v of the cell against the level's reference theta_v, both in lattice units of def_T_scale
+				const float thl = theta_0+(Tn-1.0f)*def_T_scale, qt = (Qn-1.0f)*def_q_scale;
+				const float theta_v = moist_virtual_theta(thl, qt, p);
+				T_buoy = 1.0f+(theta_v-level[8u*lzb+5u])/def_T_scale;
+				T_ref = 1.0f;
+)+"#ifdef DEBUG_PROBE"+R(
+				dbgc[def_dbg_theta_v] = theta_v;
+)+"#endif"+R( // DEBUG_PROBE
+			}
+)+"#endif"+R( // MOISTURE
+		}
+)+"#endif"+R( // LEVEL_FORCING
+		fxn -= fx*def_beta*(T_buoy-T_ref); // the Boussinesq buoyancy, before the thermal equilibrium (upstream 4fb540e)
+		fyn -= fy*def_beta*(T_buoy-T_ref);
+		fzn -= fz*def_beta*(T_buoy-T_ref);
+		TnT = Tn;
+		const float rho2T = 0.5f/rhon; // the thermal equilibrium takes the force-corrected velocity (Guo forcing, Krueger p.233f; upstream 4fb540e)
+		calculate_g_eq(Tn, fma(fxn, rho2T, uxn), fma(fyn, rho2T, uyn), fma(fzn, rho2T, uzn), geqT); // calculate equilibrium DDFs; the collision follows SUBGRID below (this fork)
+)+"#ifdef MOISTURE"+R(
+		calculate_g_eq(Qn, fma(fxn, rho2T, uxn), fma(fyn, rho2T, uyn), fma(fzn, rho2T, uzn), heqQ); // the moisture equilibrium with the same velocity
+)+"#endif"+R( // MOISTURE
+)+"#ifdef DEBUG_PROBE"+R(
+		dbgc[def_dbg_rho] = rhon;
+		dbgc[def_dbg_ux_j] = uxn; dbgc[def_dbg_ux_j+1u] = uyn; dbgc[def_dbg_ux_j+2u] = uzn;
+		dbgc[def_dbg_fx] = fxn; dbgc[def_dbg_fx+1u] = fyn; dbgc[def_dbg_fx+2u] = fzn;
+		dbgc[def_dbg_ux_eq] = fma(fxn, rho2T, uxn); dbgc[def_dbg_ux_eq+1u] = fma(fyn, rho2T, uyn); dbgc[def_dbg_ux_eq+2u] = fma(fzn, rho2T, uzn);
+		dbgc[def_dbg_T] = Tn;
+		dbgc[def_dbg_T_buoy] = T_buoy;
+		dbgc[def_dbg_T_ref] = T_ref;
+		dbgc[def_dbg_gflux] = ghn[1]-ghn[2]; dbgc[def_dbg_gflux+1u] = ghn[3]-ghn[4]; dbgc[def_dbg_gflux+2u] = ghn[5]-ghn[6]; // D3Q7 order +x -x +y -y +z -z (neighbors_temperature)
+)+"#ifdef MOISTURE"+R(
+		dbgc[def_dbg_Q] = Qn;
+		dbgc[def_dbg_hflux] = hhn[1]-hhn[2]; dbgc[def_dbg_hflux+1u] = hhn[3]-hhn[4]; dbgc[def_dbg_hflux+2u] = hhn[5]-hhn[6];
+)+"#endif"+R( // MOISTURE
+)+"#endif"+R( // DEBUG_PROBE
 	}
 )+"#endif"+R( // TEMPERATURE
 
@@ -1629,6 +1748,88 @@ string opencl_c_container() { return R( // ########################## begin of O
 		w = 2.0f/(tau0+sqrt(sq(tau0)+0.76421222f*sqrt(Q)/rhon)); // 0.76421222 = 18*sqrt(2)*(C*Delta)^2, C = 1/pi*(2/(3*CK))^(3/4) = Smagorinsky-Lilly constant, CK = 3/2 = Kolmogorov constant, Delta = 1 = lattice constant
 	} // modity LBM relaxation rate by increasing effective viscosity in regions of high strain rate (add turbulent eddy viscosity), nu_eff = nu_0+nu_t
 )+"#endif"+R( // SUBGRID
+
+)+"#ifdef TEMPERATURE"+R(
+	{ // separate block to avoid variable name conflicts
+)+"#ifdef DEBUG_PROBE"+R(
+		dbgc[def_dbg_w_flow] = w;
+		const bool traced = (uint)n==trace_n; // the trace cell: every population before and after the collision
+		const ulong trace_base = (t%(ulong)def_trace_steps)*(ulong)def_trace_channels;
+		if(traced) {
+			for(uint i=0u; i<7u; i++) { trace[trace_base+def_trace_g_pre+i] = ghn[i]; trace[trace_base+def_trace_g_eq+i] = geqT[i]; }
+)+"#ifdef MOISTURE"+R(
+			for(uint i=0u; i<7u; i++) { trace[trace_base+def_trace_h_pre+i] = hhn[i]; trace[trace_base+def_trace_h_eq+i] = heqQ[i]; }
+)+"#endif"+R( // MOISTURE
+		}
+)+"#endif"+R( // DEBUG_PROBE
+)+"#ifdef SCALAR_FV"+R(
+		fvD[n] = 0.25f*(1.0f/def_w_T-0.5f); // the molecular diffusivity alpha (THERMAL_DIFFUSIVITY_FIX); the eddy part is added below
+)+"#endif"+R( // SCALAR_FV
+		if(flagsn&TYPE_T) {
+			for(uint i=0u; i<7u; i++) ghn[i] = geqT[i]; // just write geq to ghn (no collision)
+)+"#ifdef MOISTURE"+R(
+			for(uint i=0u; i<7u; i++) hhn[i] = heqQ[i];
+)+"#endif"+R( // MOISTURE
+		} else {
+			float wT = def_w_T; // thermal relaxation rate wT = 1/(2*alpha+1/2)
+)+"#ifdef SUBGRID"+R(
+			if(inv_prandtl_t>0.0f) { // eddy heat diffusivity: the subgrid eddies mix heat as they mix momentum, D_eff = D_0+nu_t/Pr_t
+				const float nu_t = (1.0f/w-1.0f/def_w)/3.0f; // eddy viscosity of the Smagorinsky model above, nu = (1/w-1/2)/3
+				wT = 1.0f/fma(4.0f*nu_t, inv_prandtl_t, 1.0f/def_w_T); // D3Q7 diffuses with D = c^2*(tauT-1/2), c^2 = 1/4, so the eddy part adds 4*nu_t/Pr_t to tauT
+			}
+)+"#endif"+R( // SUBGRID
+)+"#ifdef DEBUG_PROBE"+R(
+			dbgc[def_dbg_w_T] = wT;
+)+"#endif"+R( // DEBUG_PROBE
+)+"#ifdef SCALAR_FV"+R(
+			fvD[n] = 0.25f*(1.0f/wT-0.5f); // D = (tauT - 1/2)/4 = alpha + nu_t/Pr_t (THERMAL_DIFFUSIVITY_FIX), the same diffusivity as the D3Q7 lattice
+)+"#else"+R( // SCALAR_FV
+			for(uint i=0u; i<7u; i++) ghn[i] = fma(1.0f-wT, ghn[i], wT*geqT[i]); // perform collision
+)+"#ifdef MOISTURE"+R(
+			for(uint i=0u; i<7u; i++) hhn[i] = fma(1.0f-wT, hhn[i], wT*heqQ[i]); // the moisture collides with the thermal rate: the same molecular and eddy diffusivity
+			if(flagsn&TYPE_Y) { // the surface moisture source, as the heat source (the Bowen ratio on the host)
+				const float rateQ = (flagsn&TYPE_X) ? 4.0f*moisture_rate : moisture_rate;
+				hhn[0] = fma(0.25f, rateQ, hhn[0]);
+				for(uint i=1u; i<7u; i++) hhn[i] = fma(0.125f, rateQ, hhn[i]);
+			}
+)+"#endif"+R( // MOISTURE
+			if(flagsn&TYPE_Y) { // heat source cell: add heat_rate to the temperature, spread over the DDFs like the equilibrium at rest (weights 1/4 and 1/8, D3Q7)
+				const float rate = (flagsn&TYPE_X) ? 4.0f*heat_rate : heat_rate; // TYPE_X|TYPE_Y: the heated patch, four times the floor's flux in the surface layer itself
+				ghn[0] = fma(0.25f, rate, ghn[0]);
+				for(uint i=1u; i<7u; i++) ghn[i] = fma(0.125f, rate, ghn[i]);
+			}
+)+"#ifdef LEVEL_FORCING"+R(
+			{ // the sponge's temperature relaxation: a source r (T_ref - T) per step on the levels with a rate, this fork
+				const uint lz = coordinates(n).z;
+				const float rT = level[8u*lz+2u];
+				if(rT>0.0f) {
+					const float dT = rT*(level[8u*lz+3u]-TnT);
+					ghn[0] = fma(0.25f, dT, ghn[0]);
+					for(uint i=1u; i<7u; i++) ghn[i] = fma(0.125f, dT, ghn[i]);
+				}
+			}
+)+"#endif"+R( // LEVEL_FORCING
+)+"#endif"+R( // SCALAR_FV
+		}
+)+"#ifdef DEBUG_PROBE"+R(
+		for(uint c=0u; c<def_dbg_channels; c++) dbg[(ulong)c*def_N+(ulong)n] = dbgc[c]; // structure of arrays: channel c of cell n at c*N+n
+		if(traced) {
+			for(uint c=0u; c<def_dbg_channels; c++) trace[trace_base+c] = dbgc[c];
+			for(uint i=0u; i<7u; i++) trace[trace_base+def_trace_g_post+i] = ghn[i];
+)+"#ifdef MOISTURE"+R(
+			for(uint i=0u; i<7u; i++) trace[trace_base+def_trace_h_post+i] = hhn[i];
+)+"#endif"+R( // MOISTURE
+			trace[trace_base+def_trace_step] = (float)t;
+		}
+)+"#endif"+R( // DEBUG_PROBE
+)+"#ifndef SCALAR_FV"+R(
+		store_g(n, ghn, gi, j7, t); // perform streaming (part 1)
+)+"#ifdef MOISTURE"+R(
+		store_g(n, hhn, hi, j7, t);
+)+"#endif"+R( // MOISTURE
+)+"#endif"+R( // SCALAR_FV
+	}
+)+"#endif"+R( // TEMPERATURE
 
 )+"#if defined(SRT)"+R(
 )+"#ifdef VOLUME_FORCE"+R(
@@ -1836,6 +2037,12 @@ string opencl_c_container() { return R( // ########################## begin of O
 )+"#ifdef TEMPERATURE"+R(
 	, const global fpxx* gi, global float* T // argument order is important
 )+"#endif"+R( // TEMPERATURE
+)+"#ifdef LEVEL_FORCING"+R(
+	, const global float* level // per level: fx, fy, the damping rate of w, the reference temperature (this fork)
+)+"#endif"+R( // LEVEL_FORCING
+)+"#ifdef MOISTURE"+R(
+	, const global fpxx* hi, global float* Q, const float theta_0 // the moisture lattice, its field and the mixed layer's theta (this fork)
+)+"#endif"+R( // MOISTURE
 )+") {"+R( // update_fields()
 	const uxx n = get_global_id(0); // n = x+(y+z*Ny)*Nx
 	if(n>=(uxx)def_N||is_halo(n)) return; // don't execute update_fields() on halo
@@ -1855,6 +2062,14 @@ string opencl_c_container() { return R( // ########################## begin of O
 	float rhon, uxn, uyn, uzn; // calculate local density and velocity for collision
 	calculate_rho_u(fhn, &rhon, &uxn, &uyn, &uzn); // calculate density and velocity fields from fi
 	float fxn=fx, fyn=fy, fzn=fz; // force starts as constant volume force, can be modified before call of calculate_forcing_terms(...)
+)+"#ifdef LEVEL_FORCING"+R(
+	{ // the per-level force and the damping of w (a force -r rho w per step), this fork
+		const uint lz = coordinates(n).z;
+		fxn += level[8u*lz];
+		fyn += level[8u*lz+1u];
+		fzn -= level[8u*lz+2u]*rhon*uzn;
+	}
+)+"#endif"+R( // LEVEL_FORCING
 
 )+"#ifdef FORCE_FIELD"+R(
 	{ // separate block to avoid variable name conflicts
@@ -1866,6 +2081,12 @@ string opencl_c_container() { return R( // ########################## begin of O
 
 )+"#ifdef TEMPERATURE"+R(
 	{ // separate block to avoid variable name conflicts
+)+"#ifdef SCALAR_FV"+R(
+		const float Tn = T[n]; // the fields are current: fv_scalars() carries them (this fork)
+)+"#ifdef MOISTURE"+R(
+		const float Qn = Q[n];
+)+"#endif"+R( // MOISTURE
+)+"#else"+R( // SCALAR_FV
 		uxx j7[7]; // neighbors of D3Q7 subset
 		neighbors_temperature(n, j7);
 		float ghn[7]; // read from gA and stream to gh (D3Q7 subset, periodic boundary conditions)
@@ -1879,9 +2100,37 @@ string opencl_c_container() { return R( // ########################## begin of O
 			Tn += 1.0f; // add 1.0f last to avoid digit extinction effects when summing up gi (perturbation method / DDF-shifting)
 			T[n] = Tn; // update temperature field
 		}
-		fxn -= fx*def_beta*(Tn-def_T_avg);
-		fyn -= fy*def_beta*(Tn-def_T_avg);
-		fzn -= fz*def_beta*(Tn-def_T_avg);
+)+"#ifdef MOISTURE"+R(
+		float Qn = Q[n];
+		if(!(flagsn&TYPE_T)) {
+			float hhn[7];
+			load_g(n, hhn, hi, j7, t);
+			Qn = 0.0f;
+			for(uint i=0u; i<7u; i++) Qn += hhn[i];
+			Qn += 1.0f;
+			Q[n] = Qn;
+		}
+)+"#endif"+R( // MOISTURE
+)+"#endif"+R( // SCALAR_FV
+		float T_ref = def_T_avg; // the buoyancy's reference temperature
+		float T_buoy = Tn; // the buoyant temperature: T, or the virtual potential temperature in lattice units with MOISTURE
+)+"#ifdef LEVEL_FORCING"+R(
+		{
+			const uint lzb = coordinates(n).z;
+			T_ref = level[8u*lzb+3u]; // the level's reference (the start profile the host set, 1 by default): a parcel's buoyancy against its own level, no hydrostatic ramp in the lattice (this fork)
+)+"#ifdef MOISTURE"+R(
+			const float p = level[8u*lzb+4u]; // the level's pressure (Pa); 0 = dry buoyancy as without MOISTURE
+			if(p>0.0f) { // theta_v of the cell against the level's reference theta_v, both in lattice units of def_T_scale
+				const float thl = theta_0+(Tn-1.0f)*def_T_scale, qt = (Qn-1.0f)*def_q_scale;
+				T_buoy = 1.0f+(moist_virtual_theta(thl, qt, p)-level[8u*lzb+5u])/def_T_scale;
+				T_ref = 1.0f;
+			}
+)+"#endif"+R( // MOISTURE
+		}
+)+"#endif"+R( // LEVEL_FORCING
+		fxn -= fx*def_beta*(T_buoy-T_ref);
+		fyn -= fy*def_beta*(T_buoy-T_ref);
+		fzn -= fz*def_beta*(T_buoy-T_ref);
 	}
 )+"#endif"+R( // TEMPERATURE
 
@@ -1906,6 +2155,180 @@ string opencl_c_container() { return R( // ########################## begin of O
 		store3(u, n, (float3)(uxn, uyn, uzn)); // update velocity field
 	}
 } // update_fields()
+
+)+"#ifdef SCALAR_FV"+R(
+// SCALAR_FV (this fork): T and Q carried by finite volumes in conservative form, moved by the LBM's own link mass
+// fluxes (Zhao et al. 2020, Phys. Fluids 32, eqs 18 and C4; Dubois and Lallemand 2008). On the link from cell n to
+// n + c_i the net mass of one step is psi_i(n) = f*_i(n) - f*_ibar(n + c_i), read from the DDFs that stream_collide
+// stored (Esoteric-Pull: the next step loads f*_i(n - c_i)). The scheme carries its own density rho_FV (Guo et al.
+// 2021, eq 17) and rho phi: rho_FV changes by -sum psi_i like the LBM density, rho phi by -sum psi_i phi_face with the
+// upwind MUSCL value along the link (kappa 1/3, van Albada limiter), plus the centred 7-point diffusion with face
+// diffusivities (D_i + D_i+1)/2. psi_ibar(n + c_i) = -psi_i(n) exactly, so the sum of rho phi changes only by the
+// sources, and a uniform phi stays uniform. No flux on a link with a TYPE_S cell: next to walls rho_FV differs from
+// the LBM density by the mass in transit in the bounce-back (tests/physics/scalar_fv_wall_exchange.cpp). The midpoint
+// time step uses the step's fluxes in both stages (explicit Euler adds -u^2 dt/2 to an advected field,
+// tests/physics/scalar_fv_lab.cpp). The fields are shifted (theta = T - 1, q = Q - 1, rho_FV - 1) so that the changes
+// of one step survive the float storage. The host twin is LinkFluxFiniteVolumeScalars (tests/physics/
+// scalar_fv_reference.hpp); tests/physics/scalar_fv_kernel_check.cpp compares the two. One domain only (the stencil
+// reaches 2 cells along each link, the halos are 1 cell wide).
+)+R(uxx fv_along(const uint3 xyz, const uint i, const int s) { // the cell s steps (-1 to 2) along direction i, periodic
+	const int x = ((int)xyz.x+s*(int)c(i)+2*(int)def_Nx)%(int)def_Nx;
+	const int y = ((int)xyz.y+s*(int)c(def_velocity_set+i)+2*(int)def_Ny)%(int)def_Ny;
+	const int z = ((int)xyz.z+s*(int)c(2u*def_velocity_set+i)+2*(int)def_Nz)%(int)def_Nz;
+	return index((uint3)((uint)x, (uint)y, (uint)z));
+}
+)+R(bool fv_solid(const global uchar* flags, const uxx n) { return (flags[n]&TYPE_BO)==TYPE_S; }
+)+R(float fv_link_flux(const global fpxx* fi, const uxx n, const uxx* j, const uint i, const ulong t_next) { // psi_i(n) from the DDFs a step stored
+	// the next step's load_f gives in_i(m) = f*_i(m - c_i), and psi_i(n) = in_i(n + c_i) - in_ibar(n): for odd i both
+	// populations sit in the slots of n + c_i, for even i both in the slots of n (any constant DDF shift cancels)
+	if(i%2u==1u) return load(fi, index_f(j[i], t_next%2ul ? i : i+1u))-load(fi, index_f(j[i], t_next%2ul ? i+1u : i));
+	return load(fi, index_f(n, t_next%2ul ? i : i-1u))-load(fi, index_f(n, t_next%2ul ? i-1u : i));
+}
+)+R(float fv_limiter(const float r) { return r<=0.0f ? 0.0f : 2.0f*r/(1.0f+r*r); } // van Albada
+)+R(float fv_face(const float a, const float b, const float c, const float e, const float u) { // the upwind MUSCL value at the face between b and c of the run a, b, c, e (eqs 43-45)
+	const float kappa = 1.0f/3.0f;
+	if(u>0.0f) { // theta^L from b
+		const float dm = b-a, dp = c-b;
+		const float r = dp!=0.0f ? dm/dp : 0.0f;
+		return b+0.25f*fv_limiter(r)*((1.0f-kappa)*dm+(1.0f+kappa)*dp);
+	}
+	const float dp2 = e-c, dp = c-b; // theta^R from c
+	const float r = dp2!=0.0f ? dp/dp2 : 0.0f;
+	return c-0.25f*fv_limiter(r)*((1.0f-kappa)*dp2+(1.0f+kappa)*dp);
+}
+)+R(float fv_change)+"("+R(const global float* f // ) {
+)+"#ifdef MOISTURE"+R(
+	, const global float* g, float* change_g // the second field (Q) and its change: one pass loads each link flux once for both
+)+"#endif"+R( // MOISTURE
+	, const uxx n, const uint3 xyz, const uxx* j, const global uchar* flags, const global float* fvD, const global fpxx* fi, const ulong t_next, float* mass
+)+") {"+R( // fv_change(): the change of rho phi of one step at cell n, with the face values from f; the change of rho_FV in mass
+	float change = 0.0f, dm = 0.0f;
+	const float c0 = f[n];
+)+"#ifdef MOISTURE"+R(
+	float change2 = 0.0f;
+	const float d0 = g[n];
+)+"#endif"+R( // MOISTURE
+	for(uint i=1u; i<def_velocity_set; i++) { // advection by the link mass fluxes
+		const uxx p1 = j[i];
+		if(fv_solid(flags, p1)) continue; // no flux on a wall link
+		const float flux = fv_link_flux(fi, n, j, i, t_next);
+		dm -= flux;
+		if(flux==0.0f) continue;
+		const uxx m1 = fv_along(xyz, i, -1), p2 = fv_along(xyz, i, 2);
+		const bool solid_m1 = fv_solid(flags, m1), solid_p2 = fv_solid(flags, p2); // behind a wall the ghost continues
+		const float cm1 = solid_m1 ? c0 : f[m1], cp1 = f[p1];
+		const float cp2 = solid_p2 ? cp1 : f[p2];
+		change -= flux*fv_face(cm1, c0, cp1, cp2, flux); // the face between n and n + c_i, upwind by the net mass's sign
+)+"#ifdef MOISTURE"+R(
+		const float dm1 = solid_m1 ? d0 : g[m1], dp1 = g[p1];
+		const float dp2 = solid_p2 ? dp1 : g[p2];
+		change2 -= flux*fv_face(dm1, d0, dp1, dp2, flux);
+)+"#endif"+R( // MOISTURE
+	}
+	const float Dn = fvD[n];
+	for(uint i=1u; i<7u; i++) { // the 7-point diffusion with the face diffusivity (D_n + D_m)/2, no flux through a wall
+		const uxx m = j[i];
+		if(fv_solid(flags, m)) continue;
+		const float Df = 0.5f*(Dn+fvD[m]);
+		change += Df*(f[m]-c0);
+)+"#ifdef MOISTURE"+R(
+		change2 += Df*(g[m]-d0);
+)+"#endif"+R( // MOISTURE
+	}
+)+"#ifdef MOISTURE"+R(
+	*change_g = change2;
+)+"#endif"+R( // MOISTURE
+	*mass = dm;
+	return change;
+}
+)+R(kernel void fv_scalars)+"("+R(const global fpxx* fi, const global uchar* flags, const global float* fvD, const ulong t_next, const float heat_rate, const uint full, global float* fvR, global float* fvT, global float* fvT_half, global float* fvRT, global float* T // ) {
+)+"#ifdef MOISTURE"+R(
+	, global float* fvQ, global float* fvQ_half, global float* fvRQ, global float* Q, const float moisture_rate
+)+"#endif"+R( // MOISTURE
+)+"#ifdef LEVEL_FORCING"+R(
+	, const global float* level
+)+"#endif"+R( // LEVEL_FORCING
+)+") {"+R( // fv_scalars(): one stage of the midpoint step with the step's link fluxes. The half stage (full 0) takes the face
+	// values from phi^n and writes phi at the half step, (rho phi + F/2) / (rho_FV + M/2); the full stage (full 1) takes
+	// them from the half-step phi and writes rho phi + F + the sources, rho_FV + M (M = -sum psi, the mass change), phi =
+	// (rho phi) / rho_FV and T = 1 + theta (Q = 1 + q). The full stage writes in place: a cell reads rho_FV, rho phi and
+	// phi only at its own index, its neighbours only in the half-step fields.
+	const uxx n = get_global_id(0);
+	if(n>=(uxx)def_N||is_halo(n)) return;
+	const uchar flagsn = flags[n];
+	if((flagsn&TYPE_BO)==TYPE_S||(flagsn&TYPE_T)) { // walls and fixed-temperature cells keep their values
+		if(!full) fvT_half[n] = fvT[n];
+)+"#ifdef MOISTURE"+R(
+		if(!full) fvQ_half[n] = fvQ[n];
+)+"#endif"+R( // MOISTURE
+		return;
+	}
+	uxx j[def_velocity_set];
+	neighbors(n, j);
+	const uint3 xyz = coordinates(n);
+	const float rho = 1.0f+fvR[n];
+	float mass = 0.0f;
+)+"#ifdef MOISTURE"+R(
+	float change_q = 0.0f; // the change of rho q, from the same pass over the links as T's
+)+"#endif"+R( // MOISTURE
+	if(!full) {
+)+"#ifdef MOISTURE"+R(
+		const float change = fv_change(fvT, fvQ, &change_q, n, xyz, j, flags, fvD, fi, t_next, &mass);
+)+"#else"+R( // MOISTURE
+		const float change = fv_change(fvT, n, xyz, j, flags, fvD, fi, t_next, &mass);
+)+"#endif"+R( // MOISTURE
+		const float rho_half = fma(0.5f, mass, rho);
+		fvT_half[n] = fma(0.5f, change, fvRT[n])/rho_half;
+)+"#ifdef MOISTURE"+R(
+		fvQ_half[n] = fma(0.5f, change_q, fvRQ[n])/rho_half;
+)+"#endif"+R( // MOISTURE
+		return;
+	}
+)+"#ifdef MOISTURE"+R(
+	float rt = fvRT[n]+fv_change(fvT_half, fvQ_half, &change_q, n, xyz, j, flags, fvD, fi, t_next, &mass);
+)+"#else"+R( // MOISTURE
+	float rt = fvRT[n]+fv_change(fvT_half, n, xyz, j, flags, fvD, fi, t_next, &mass);
+)+"#endif"+R( // MOISTURE
+	if(flagsn&TYPE_Y) rt += (flagsn&TYPE_X) ? 4.0f*heat_rate : heat_rate; // the floor's heat source (TYPE_X|TYPE_Y: the patch)
+)+"#ifdef LEVEL_FORCING"+R(
+	const float rT = level[8u*xyz.z+2u]; // the sponge's temperature relaxation rho_FV r (theta_ref - theta), theta_ref = T_ref - 1
+	if(rT>0.0f) rt += rho*rT*((level[8u*xyz.z+3u]-1.0f)-fvT[n]);
+)+"#endif"+R( // LEVEL_FORCING
+	const float dr = fvR[n]+mass; // the new rho_FV - 1
+	fvR[n] = dr;
+	const float rho_new = 1.0f+dr;
+	fvRT[n] = rt;
+	const float theta = rt/rho_new;
+	fvT[n] = theta;
+	T[n] = 1.0f+theta; // for the buoyancy and the host
+)+"#ifdef MOISTURE"+R(
+	float rq = fvRQ[n]+change_q;
+	if(flagsn&TYPE_Y) rq += (flagsn&TYPE_X) ? 4.0f*moisture_rate : moisture_rate; // the floor's moisture source
+	fvRQ[n] = rq;
+	const float q = rq/rho_new;
+	fvQ[n] = q;
+	Q[n] = 1.0f+q;
+)+"#endif"+R( // MOISTURE
+} // fv_scalars()
+)+R(kernel void fv_init)+"("+R(const global float* rho, const global float* T, global float* fvR, global float* fvT, global float* fvRT // ) {
+)+"#ifdef MOISTURE"+R(
+	, const global float* Q, global float* fvQ, global float* fvRQ
+)+"#endif"+R( // MOISTURE
+)+") {"+R( // fv_init(): rho_FV from the start density, the shifted fields from the start fields the host wrote
+	const uxx n = get_global_id(0);
+	if(n>=(uxx)def_N) return;
+	const float r = rho[n];
+	fvR[n] = r-1.0f;
+	const float theta = T[n]-1.0f;
+	fvT[n] = theta;
+	fvRT[n] = r*theta;
+)+"#ifdef MOISTURE"+R(
+	const float q = Q[n]-1.0f;
+	fvQ[n] = q;
+	fvRQ[n] = r*q;
+)+"#endif"+R( // MOISTURE
+} // fv_init()
+)+"#endif"+R( // SCALAR_FV
 
 )+"#ifdef FORCE_FIELD"+R(
 )+R(kernel void update_force_field(const global fpxx* fi, const global uchar* flags, const ulong t, global float* F) { // calculate force from the fluid on solid boundaries from fi directly
@@ -2035,15 +2458,15 @@ string opencl_c_container() { return R( // ########################## begin of O
 	return boundary_distance-0.5f<particle_radius ? normalize(boundary_force) : (float3)(0.0f, 0.0f, 0.0f);
 } // particle_boundary_force()
 )+R(bool position_is_in_domain_including_halo(const float3 p) {
-	const float hNx = 0.5f*(float)(def_Nx-(def_Dx>1u)); // subtract half of halo still
-	const float hNy = 0.5f*(float)(def_Ny-(def_Dy>1u));
-	const float hNz = 0.5f*(float)(def_Nz-(def_Dz>1u));
+	const float hNx = 0.5f*(float)(def_Nx-def_H*(def_Dx>1u)); // subtract half of halo still
+	const float hNy = 0.5f*(float)(def_Ny-def_H*(def_Dy>1u));
+	const float hNz = 0.5f*(float)(def_Nz-def_H*(def_Dz>1u));
 	return p.x>=-hNx&&p.x<hNx&&p.y>=-hNy&&p.y<hNy&&p.z>=-hNz&&p.z<hNz;
 }
 )+R(bool position_is_in_domain_excluding_halo(const float3 p) {
-	const float hNx = 0.5f*(float)(def_Nx-2u*(def_Dx>1u)); // subtract full halo
-	const float hNy = 0.5f*(float)(def_Ny-2u*(def_Dy>1u));
-	const float hNz = 0.5f*(float)(def_Nz-2u*(def_Dz>1u));
+	const float hNx = 0.5f*(float)(def_Nx-2u*def_H*(def_Dx>1u)); // subtract full halo
+	const float hNy = 0.5f*(float)(def_Ny-2u*def_H*(def_Dy>1u));
+	const float hNz = 0.5f*(float)(def_Nz-2u*def_H*(def_Dz>1u));
 	return p.x>=-hNx&&p.x<hNx&&p.y>=-hNy&&p.y<hNy&&p.z>=-hNz&&p.z<hNz;
 }
 )+R(kernel void integrate_particles)+"("+R(global float* particles, const global float* u, const global uchar* flags, const float time_step_multiplicator // ) {
@@ -2088,21 +2511,25 @@ string opencl_c_container() { return R( // ########################## begin of O
 	const uint A[3] = { def_Ax, def_Ay, def_Az };
 	return A[direction];
 }
-)+R(uxx index_extract_p(const uint a, const uint direction) {
-	const uint3 coordinates[3] = { (uint3)(def_Nx-2u, a%def_Ny, a/def_Ny), (uint3)(a/def_Nz, def_Ny-2u, a%def_Nz), (uint3)(a%def_Nx, a/def_Nx, def_Nz-2u) };
+)+R(uint size_along(const uint direction) { // the domain's cells along a direction (x=0, y=1, z=2), halos included
+	const uint N[3] = { def_Nx, def_Ny, def_Nz };
+	return N[direction];
+}
+)+R(uxx index_on_layer(const uint a, const uint direction, const uint c) { // the cell a of the boundary area on layer c along the direction
+	const uint3 coordinates[3] = { (uint3)(c, a%def_Ny, a/def_Ny), (uint3)(a/def_Nz, c, a%def_Nz), (uint3)(a%def_Nx, a/def_Nx, c) };
 	return index(coordinates[direction]);
 }
-)+R(uxx index_extract_m(const uint a, const uint direction) {
-	const uint3 coordinates[3] = { (uint3)(       1u, a%def_Ny, a/def_Ny), (uint3)(a/def_Nz,        1u, a%def_Nz), (uint3)(a%def_Nx, a/def_Nx,        1u) };
-	return index(coordinates[direction]);
+)+R(uxx index_extract_p(const uint a, const uint direction) { // the last interior layer (def_H 1: N-2)
+	return index_on_layer(a, direction, size_along(direction)-1u-def_H);
 }
-)+R(uxx index_insert_p(const uint a, const uint direction) {
-	const uint3 coordinates[3] = { (uint3)(def_Nx-1u, a%def_Ny, a/def_Ny), (uint3)(a/def_Nz, def_Ny-1u, a%def_Nz), (uint3)(a%def_Nx, a/def_Nx, def_Nz-1u) };
-	return index(coordinates[direction]);
+)+R(uxx index_extract_m(const uint a, const uint direction) { // the first interior layer (def_H 1: 1)
+	return index_on_layer(a, direction, def_H);
 }
-)+R(uxx index_insert_m(const uint a, const uint direction) {
-	const uint3 coordinates[3] = { (uint3)(       0u, a%def_Ny, a/def_Ny), (uint3)(a/def_Nz,        0u, a%def_Nz), (uint3)(a%def_Nx, a/def_Nx,        0u) };
-	return index(coordinates[direction]);
+)+R(uxx index_insert_p(const uint a, const uint direction) { // the halo layer next to the cut on the plus side (def_H 1: N-1)
+	return index_on_layer(a, direction, size_along(direction)-def_H);
+}
+)+R(uxx index_insert_m(const uint a, const uint direction) { // the halo layer next to the cut on the minus side (def_H 1: 0)
+	return index_on_layer(a, direction, def_H-1u);
 }
 
 )+R(void extract_fi(const uint a, const uint A, const uxx n, const uint side, const ulong t, global fpxx_copy* transfer_buffer, const global fpxx_copy* fi) {
@@ -2253,6 +2680,34 @@ string opencl_c_container() { return R( // ########################## begin of O
 	insert_gi(a, index_insert_p(a, direction), 2u*direction+0u, t, transfer_buffer_p, gi);
 	insert_gi(a, index_insert_m(a, direction), 2u*direction+1u, t, transfer_buffer_m, gi);
 }
+)+"#ifdef MOISTURE"+R(
+)+R(void extract_hi(const uint a, const uxx n, const uint side, const ulong t, global fpxx_copy* transfer_buffer, const global fpxx_copy* hi) {
+	uxx j7[7u]; // neighbor indices
+	neighbors_temperature(n, j7); // calculate neighbor indices
+	const uint i = side+1u;
+	const ulong index = index_f(i%2u ? j7[i] : n, t%2ul ? (i%2u ? i+1u : i-1u) : i); // Esoteric-Pull: standard store, or streaming part 1/2
+	transfer_buffer[a] = hi[index]; // fpxx_copy allows direct copying without decompression+compression
+}
+)+R(void insert_hi(const uint a, const uxx n, const uint side, const ulong t, const global fpxx_copy* transfer_buffer, global fpxx_copy* hi) {
+	uxx j7[7u]; // neighbor indices
+	neighbors_temperature(n, j7); // calculate neighbor indices
+	const uint i = side+1u;
+	const ulong index = index_f(i%2u ? n : j7[i-1u], t%2ul ? i : (i%2u ? i+1u : i-1u)); // Esoteric-Pull: standard load, or streaming part 2/2
+	hi[index] = transfer_buffer[a]; // fpxx_copy allows direct copying without decompression+compression
+}
+)+R(kernel void transfer_extract_hi(const uint direction, const ulong t, global fpxx_copy* transfer_buffer_p, global fpxx_copy* transfer_buffer_m, const global fpxx_copy* hi) {
+	const uint a=get_global_id(0), A=get_area(direction); // a = domain area index for each side, A = area of the domain boundary
+	if(a>=A) return; // area might not be a multiple of cl_workgroup_size, so return here to avoid writing in unallocated memory space
+	extract_hi(a, index_extract_p(a, direction), 2u*direction+0u, t, transfer_buffer_p, hi);
+	extract_hi(a, index_extract_m(a, direction), 2u*direction+1u, t, transfer_buffer_m, hi);
+}
+)+R(kernel void transfer__insert_hi(const uint direction, const ulong t, const global fpxx_copy* transfer_buffer_p, const global fpxx_copy* transfer_buffer_m, global fpxx_copy* hi) {
+	const uint a=get_global_id(0), A=get_area(direction); // a = domain area index for each side, A = area of the domain boundary
+	if(a>=A) return; // area might not be a multiple of cl_workgroup_size, so return here to avoid writing in unallocated memory space
+	insert_hi(a, index_insert_p(a, direction), 2u*direction+0u, t, transfer_buffer_p, hi);
+	insert_hi(a, index_insert_m(a, direction), 2u*direction+1u, t, transfer_buffer_m, hi);
+}
+)+"#endif"+R( // MOISTURE
 
 )+R(kernel void transfer_extract_T(const uint direction, const ulong t, global float* transfer_buffer_p, global float* transfer_buffer_m, const global float* T) {
 	const uint a=get_global_id(0), A=get_area(direction); // a = domain area index for each side, A = area of the domain boundary
@@ -2267,6 +2722,79 @@ string opencl_c_container() { return R( // ########################## begin of O
 	T[index_insert_m(a, direction)] = transfer_buffer_m[a];
 }
 )+"#endif"+R( // TEMPERATURE
+
+)+"#ifdef SCALAR_FV"+R( // this fork: the finite volumes' fields across domain cuts. A cell's face values reach 2 cells along every
+// link, so theta and q (and their half-step values) go over all def_H halo layers: layer l of the plus side's last def_H
+// interior layers (N - 2 def_H + l) lands on the plus neighbour's halo layer l, layer l of the minus side's first
+// interior layers (def_H + l) on the minus neighbour's halo layer N - def_H + l. In the buffer layer l of the first
+// field sits at l A + a, the second field's (q) at (def_H + l) A + a.
+)+R(kernel void transfer_extract_fv)+"("+R(const uint direction, const ulong t, global float* transfer_buffer_p, global float* transfer_buffer_m, const global float* f // ) {
+)+"#ifdef MOISTURE"+R(
+	, const global float* g
+)+"#endif"+R( // MOISTURE
+)+") {"+R(
+	const uint a=get_global_id(0), A=get_area(direction); // a = domain area index for each side, A = area of the domain boundary
+	if(a>=A) return; // area might not be a multiple of cl_workgroup_size, so return here to avoid writing in unallocated memory space
+	const uint N = size_along(direction);
+	for(uint l=0u; l<def_H; l++) {
+		const uxx np = index_on_layer(a, direction, N-2u*def_H+l), nm = index_on_layer(a, direction, def_H+l);
+		transfer_buffer_p[l*A+a] = f[np];
+		transfer_buffer_m[l*A+a] = f[nm];
+)+"#ifdef MOISTURE"+R(
+		transfer_buffer_p[(def_H+l)*A+a] = g[np];
+		transfer_buffer_m[(def_H+l)*A+a] = g[nm];
+)+"#endif"+R( // MOISTURE
+	}
+}
+)+R(kernel void transfer__insert_fv)+"("+R(const uint direction, const ulong t, const global float* transfer_buffer_p, const global float* transfer_buffer_m, global float* f // ) {
+)+"#ifdef MOISTURE"+R(
+	, global float* g
+)+"#endif"+R( // MOISTURE
+)+") {"+R(
+	const uint a=get_global_id(0), A=get_area(direction); // a = domain area index for each side, A = area of the domain boundary
+	if(a>=A) return; // area might not be a multiple of cl_workgroup_size, so return here to avoid writing in unallocated memory space
+	const uint N = size_along(direction);
+	for(uint l=0u; l<def_H; l++) {
+		const uxx np = index_on_layer(a, direction, N-def_H+l), nm = index_on_layer(a, direction, l);
+		f[np] = transfer_buffer_p[l*A+a];
+		f[nm] = transfer_buffer_m[l*A+a];
+)+"#ifdef MOISTURE"+R(
+		g[np] = transfer_buffer_p[(def_H+l)*A+a];
+		g[nm] = transfer_buffer_m[(def_H+l)*A+a];
+)+"#endif"+R( // MOISTURE
+	}
+}
+)+R(kernel void transfer_extract_fvD(const uint direction, const ulong t, global float* transfer_buffer_p, global float* transfer_buffer_m, const global float* fvD) { // the diffusivity: the 7-point diffusion reaches 1 cell
+	const uint a=get_global_id(0), A=get_area(direction); // a = domain area index for each side, A = area of the domain boundary
+	if(a>=A) return; // area might not be a multiple of cl_workgroup_size, so return here to avoid writing in unallocated memory space
+	transfer_buffer_p[a] = fvD[index_extract_p(a, direction)];
+	transfer_buffer_m[a] = fvD[index_extract_m(a, direction)];
+}
+)+R(kernel void transfer__insert_fvD(const uint direction, const ulong t, const global float* transfer_buffer_p, const global float* transfer_buffer_m, global float* fvD) {
+	const uint a=get_global_id(0), A=get_area(direction); // a = domain area index for each side, A = area of the domain boundary
+	if(a>=A) return; // area might not be a multiple of cl_workgroup_size, so return here to avoid writing in unallocated memory space
+	fvD[index_insert_p(a, direction)] = transfer_buffer_p[a];
+	fvD[index_insert_m(a, direction)] = transfer_buffer_m[a];
+}
+)+R(kernel void transfer_extract_flags_fv(const uint direction, const ulong t, global uchar* transfer_buffer_p, global uchar* transfer_buffer_m, const global uchar* flags) { // the flags over all def_H halo layers (fv_solid() reads 2 cells along a link)
+	const uint a=get_global_id(0), A=get_area(direction); // a = domain area index for each side, A = area of the domain boundary
+	if(a>=A) return; // area might not be a multiple of cl_workgroup_size, so return here to avoid writing in unallocated memory space
+	const uint N = size_along(direction);
+	for(uint l=0u; l<def_H; l++) {
+		transfer_buffer_p[l*A+a] = flags[index_on_layer(a, direction, N-2u*def_H+l)];
+		transfer_buffer_m[l*A+a] = flags[index_on_layer(a, direction, def_H+l)];
+	}
+}
+)+R(kernel void transfer__insert_flags_fv(const uint direction, const ulong t, const global uchar* transfer_buffer_p, const global uchar* transfer_buffer_m, global uchar* flags) {
+	const uint a=get_global_id(0), A=get_area(direction); // a = domain area index for each side, A = area of the domain boundary
+	if(a>=A) return; // area might not be a multiple of cl_workgroup_size, so return here to avoid writing in unallocated memory space
+	const uint N = size_along(direction);
+	for(uint l=0u; l<def_H; l++) {
+		flags[index_on_layer(a, direction, N-def_H+l)] = transfer_buffer_p[l*A+a];
+		flags[index_on_layer(a, direction, l)] = transfer_buffer_m[l*A+a];
+	}
+}
+)+"#endif"+R( // SCALAR_FV
 
 
 
@@ -2473,7 +3001,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	return (uint3)(t%(def_Nx-1u), t/(def_Nx-1u), (uint)(n/(uxx)((def_Nx-1u)*(def_Ny-1u)))); // n = x+(y+z*Ny)*Nx
 }
 )+R(bool is_halo_mc(const uint3 xyz) {
-	return ((def_Dx>1u)&(xyz.x==0u||xyz.x>=def_Nx-2u))||((def_Dy>1u)&(xyz.y==0u||xyz.y>=def_Ny-2u))||((def_Dz>1u)&(xyz.z==0u||xyz.z>=def_Nz-2u)); // halo data is kept up-to-date, so allow using halo data for rendering
+	return ((def_Dx>1u)&(xyz.x<def_H||xyz.x>=def_Nx-1u-def_H))||((def_Dy>1u)&(xyz.y<def_H||xyz.y>=def_Ny-1u-def_H))||((def_Dz>1u)&(xyz.z<def_H||xyz.z>=def_Nz-1u-def_H)); // halo data is kept up-to-date, so allow using halo data for rendering
 }
 )+R(void calculate_j8(const uint3 xyz, uxx* j) {
 	const uxx x0 = (uxx)  xyz.x; // cube stencil
@@ -2936,7 +3464,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	if((slice_mode==3||slice_mode==5||slice_mode==4||slice_mode==6)&!rz) p.z = ps.z;
 	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
 	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
-	const float hLx=0.5f*(float)(def_Nx-2u*(def_Dx>1u)), hLy=0.5f*(float)(def_Ny-2u*(def_Dy>1u)), hLz=0.5f*(float)(def_Nz-2u*(def_Dz>1u));
+	const float hLx=0.5f*(float)(def_Nx-2u*def_H*(def_Dx>1u)), hLy=0.5f*(float)(def_Ny-2u*def_H*(def_Dy>1u)), hLz=0.5f*(float)(def_Nz-2u*def_H*(def_Dz>1u));
 	//draw_circle(p, 0.5f*def_streamline_sparse, 0xFFFFFF, camera_cache, bitmap, zbuffer);
 	for(float dt=-1.0f; dt<=1.0f; dt+=2.0f) { // integrate forward and backward in time
 		float3 p0, p1=p;

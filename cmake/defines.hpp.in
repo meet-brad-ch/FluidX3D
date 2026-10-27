@@ -22,6 +22,11 @@
 //#define MOVING_BOUNDARIES // enables moving solids: set solid cells to TYPE_S and set their velocity u unequal to zero
 //#define SURFACE // enables free surface LBM: mark fluid cells with TYPE_F; at initialization the TYPE_I interface and TYPE_G gas domains will automatically be completed; allocates an extra 12 Bytes/cell
 //#define TEMPERATURE // enables temperature extension; set fixed-temperature cells with TYPE_T (similar to EQUILIBRIUM_BOUNDARIES); allocates an extra 32 (FP32) or 18 (FP16) Bytes/cell
+//#define THERMAL_DIFFUSIVITY_FIX // with TEMPERATURE: the thermal relaxation rate from alpha as the diffusivity, wT = 1/(4 alpha + 1/2); without it the D3Q7 lattice diffuses with alpha/2 (upstream's wT = 1/(2 alpha + 1/2); tests/physics/thermal_diffusivity.cpp)
+//#define LEVEL_FORCING // per horizontal level: a force (fx, fy: wind nudging), a damping rate of w and a relaxation of T toward a reference (the sponge under the lid); LBM::set_level_forcing() (this fork, tests/physics/level_forcing.cpp)
+//#define MOISTURE // with TEMPERATURE: total water as a second D3Q7 lattice hi (Q = 1 + qt / def_q_scale), the same diffusivity, LBM::set_moisture_rate() in TYPE_Y cells; with LEVEL_FORCING the saturation adjustment and the virtual-temperature buoyancy (this fork, R10)
+//#define DEBUG_PROBE // with TEMPERATURE: stream_collide writes what it computes in every cell (density, the velocity of the scalar equilibria, the relaxation rates, T, Q, the fluxes, the buoyancy) to LBM::debug_cells() every step, and every population of one cell (LBM::set_trace_cell()) to LBM::debug_trace(); allocates 96 Bytes/cell more; for debugging only (this fork, src/debug_probe.hpp)
+//#define SCALAR_FV // with TEMPERATURE and THERMAL_DIFFUSIVITY_FIX: T (and Q with MOISTURE) carried by finite volumes in advective form (MUSCL, van Albada limiter; the scheme of ProLB) instead of the D3Q7 lattices; one domain only (this fork, decision D-FV, research/convection/RESEARCH_LOG.md)
 //#define SUBGRID // enables Smagorinsky-Lilly subgrid turbulence LES model to keep simulations with very large Reynolds number stable
 //#define PARTICLES // enables particles with immersed-boundary method (for 2-way coupling also activate VOLUME_FORCE and FORCE_FIELD; only supported in single-GPU)
 
