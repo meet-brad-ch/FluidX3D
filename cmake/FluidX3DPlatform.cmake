@@ -19,4 +19,6 @@ elseif(UNIX)
         target_link_directories(fluidx3d_platform INTERFACE ${PROJECT_SOURCE_DIR}/third_party/X11/lib) # bundled X11
     endif()
     target_link_libraries(fluidx3d_platform INTERFACE Threads::Threads X11 Xrandr)
+    # src/graphics.cpp includes the bundled headers as "X11/include/X11/Xlib.h" (third_party/X11/include/X11/)
+    target_include_directories(fluidx3d_platform SYSTEM INTERFACE ${PROJECT_SOURCE_DIR}/third_party)
 endif()

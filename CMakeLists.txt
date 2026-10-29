@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.27) # 3.27: the Au dependency needs it
 
 project(FluidX3D VERSION 3.5 LANGUAGES CXX)
 

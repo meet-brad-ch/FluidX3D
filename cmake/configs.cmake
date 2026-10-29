@@ -27,6 +27,12 @@ endif()
 # ==============================================================================
 set(_fluidx3d_gcc_like "$<CXX_COMPILER_ID:GNU,Clang,AppleClang>")
 set(_fluidx3d_msvc "$<CXX_COMPILER_ID:MSVC>")
+# A target with the property FLUIDX3D_PRECISE_FLOAT ON gets no fast math: its float expressions round exactly as
+# written, the same on every compiler (GCC also without FMA contraction). The Setup API and the convective boundary
+# layer example use it: with fast math and link-time code generation, one expression can round differently at each
+# place the compiler inlines it, so their set-up values would not be reproducible bit for bit.
+set(_fluidx3d_fast "$<NOT:$<BOOL:$<TARGET_PROPERTY:FLUIDX3D_PRECISE_FLOAT>>>")
+set(_fluidx3d_precise "$<BOOL:$<TARGET_PROPERTY:FLUIDX3D_PRECISE_FLOAT>>")
 
 add_library(fluidx3d_build_options INTERFACE)
 add_library(fluidx3d::build_options ALIAS fluidx3d_build_options)
@@ -34,12 +40,15 @@ target_compile_features(fluidx3d_build_options INTERFACE cxx_std_20)
 target_compile_options(fluidx3d_build_options INTERFACE
     $<${_fluidx3d_gcc_like}:-pthread -Wno-comment>
     $<$<AND:${_fluidx3d_gcc_like},$<CONFIG:Debug>>:-g -O0>
-    $<$<AND:${_fluidx3d_gcc_like},$<CONFIG:Release>>:-O3 -march=native -ffast-math>
+    $<$<AND:${_fluidx3d_gcc_like},$<CONFIG:Release>>:-O3 -march=native>
+    $<$<AND:${_fluidx3d_gcc_like},$<CONFIG:Release>,${_fluidx3d_fast}>:-ffast-math>
+    $<$<AND:${_fluidx3d_gcc_like},${_fluidx3d_precise}>:-ffp-contract=off>
     $<$<AND:${_fluidx3d_gcc_like},$<CONFIG:RelWithDebInfo>>:-g -O2>
     $<${_fluidx3d_msvc}:/MP /wd26451 /wd6386 /wd6001>   # multi-processor compilation; disable specific warnings
     $<$<AND:${_fluidx3d_msvc},$<CONFIG:Debug>>:/Od /RTC1>
-    $<$<AND:${_fluidx3d_msvc},$<CONFIG:Release>>:/O2 /Oi /Ot /GL /fp:fast>
-    $<$<AND:${_fluidx3d_msvc},$<CONFIG:RelWithDebInfo>>:/O2 /Ot /fp:fast>
+    $<$<AND:${_fluidx3d_msvc},$<CONFIG:Release>>:/O2 /Oi /Ot /GL>
+    $<$<AND:${_fluidx3d_msvc},$<CONFIG:RelWithDebInfo>>:/O2 /Ot>
+    $<$<AND:${_fluidx3d_msvc},$<CONFIG:Release,RelWithDebInfo>,${_fluidx3d_fast}>:/fp:fast>
 )
 target_link_options(fluidx3d_build_options INTERFACE
     $<$<AND:${_fluidx3d_msvc},$<CONFIG:Release>>:/LTCG>   # link-time code generation (pairs with /GL)

@@ -23,10 +23,18 @@ FetchContent_Declare(opencl_clhpp
 )
 
 # SDFGen (SDF generation), pinned to a release; the tag is also part of the SDF cache key (see CMakeLists.txt)
-set(SDFGEN_TAG v1.0.0)
+set(SDFGEN_TAG v2.3.0)
 FetchContent_Declare(sdfgen
     GIT_REPOSITORY https://github.com/meet-brad-ch/SDFGenFast.git
     GIT_TAG        ${SDFGEN_TAG}
+    SYSTEM
+)
+
+# Au (physical units for the convection API), release 0.6.1 (commit 250ca14 from 2026-10-01); its CMake needs 3.27
+FetchContent_Declare(au
+    GIT_REPOSITORY https://github.com/aurora-opensource/au.git
+    GIT_TAG        250ca14d5db1cd0a6756cd5e2911c9a48e80daac
+    GIT_SHALLOW    FALSE  # a plain commit hash needs the full history
     SYSTEM
 )
 
@@ -35,7 +43,8 @@ block()
     set(BUILD_DOCS OFF)
     set(BUILD_EXAMPLES OFF)
     set(BUILD_TESTING OFF)
-    FetchContent_MakeAvailable(opencl_headers opencl_clhpp sdfgen)
+    set(AU_EXCLUDE_GTEST_DEPENDENCY ON) # else Au's CMake fetches its own googletest
+    FetchContent_MakeAvailable(opencl_headers opencl_clhpp sdfgen au)
 endblock()
 FetchContent_MakeAvailable(lodepng)
 
