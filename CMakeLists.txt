@@ -14,6 +14,7 @@ add_subdirectory(lib/setup)    # fluidx3d::setup: the Setup API layers that do n
 
 include(FluidX3DCore)          # fluidx3d::core and the core source lists
 include(FluidX3DExample)       # add_fluidx3d_example()
+include(FluidX3DModule)        # add_fluidx3d_module(), with FLUIDX3D_PYTHON_MODULES=ON
 
 if(FLUIDX3D_BUILD_TESTS)
     enable_testing()

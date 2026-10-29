@@ -9,6 +9,12 @@
 # ==============================================================================
 option(FLUIDX3D_BUILD_TESTS "Build the tests: unit tests, physics tests and the header check" ON)
 option(FLUIDX3D_WERROR "Treat warnings in first-party code (examples, Setup API, tests) as errors" OFF)
+option(FLUIDX3D_PYTHON_MODULES "Enable add_fluidx3d_module(): Python extension modules (nanobind) built with the core" OFF)
+if(FLUIDX3D_PYTHON_MODULES)
+    # A module is a shared library, so every static library it links (the Setup API, LodePNG, the SDF cache) must be
+    # position-independent code; this is set before any target exists
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
 set(SDFGEN_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures for SDFGen (default: this machine's GPU)")
 
 # Build type (single-configuration generators): the configurations defined below
