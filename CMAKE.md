@@ -12,7 +12,8 @@ FluidX3D/
 │   ├── FluidX3DDependencies.cmake  # Pinned third-party code (FetchContent)
 │   ├── FluidX3DPlatform.cmake  # fluidx3d::platform: OpenCL, system libraries, X11
 │   ├── FluidX3DCore.cmake      # fluidx3d::core and the core source lists
-│   └── FluidX3DExample.cmake   # add_fluidx3d_example()
+│   ├── FluidX3DExample.cmake   # add_fluidx3d_example()
+│   └── FluidX3DModule.cmake    # add_fluidx3d_module(): Python modules (FLUIDX3D_PYTHON_MODULES)
 ├── resources/                  # Resource files (STL models, textures)
 │   ├── skybox8k.png           # Skybox texture for raytracing
 │   ├── *.stl                  # 3D models
@@ -76,6 +77,7 @@ All build settings are attached to targets (`target_*` commands); there are no g
 |--------|------|---------|
 | `fluidx3d::build_options` | INTERFACE | C++20, optimization and per-compiler flags per build type |
 | `fluidx3d::warnings` | INTERFACE | `/W4` or `-Wall -Wextra -Wpedantic`; errors with `-DFLUIDX3D_WERROR=ON` |
+| (option) `FLUIDX3D_PYTHON_MODULES` | | off by default; enables `add_fluidx3d_module()` (see [Python Modules](#python-modules)) |
 | `fluidx3d::platform` | INTERFACE | OpenCL, system libraries, X11/Xrandr, threads |
 | `fluidx3d::core` | INTERFACE | Core headers (as SYSTEM headers), resource path, LodePNG, SDF cache |
 | `fluidx3d::setup` | STATIC | Setup API layers without the LBM |
@@ -121,6 +123,58 @@ For an example `<name>`, `add_fluidx3d_example()` creates:
 | **Code duplication** | Repeated 37× | Centralized function |
 | **Example selection** | Edit source code | `cmake --build build --target <name>` |
 | **IDE support** | Limited | Full (VS, CLion, VS Code) |
+
+---
+
+## Examples Outside the Repository
+
+A project can keep its own applications outside this repository and build them with this tree's core, Setup API and
+configurations. Each folder in `FLUIDX3D_EXTERNAL_EXAMPLES` holds a `CMakeLists.txt` with `add_fluidx3d_example()`
+(or `add_fluidx3d_module()`) calls:
+
+```bash
+cmake -B build -DFLUIDX3D_EXTERNAL_EXAMPLES="C:/path/app_a;C:/path/app_b"
+```
+
+The configuration stops with a message when a folder has no `CMakeLists.txt`. The programs are written to `bin/`, as
+the examples are.
+
+---
+
+## Python Modules
+
+`add_fluidx3d_module()` (`cmake/FluidX3DModule.cmake`) builds an application as a Python extension module with
+nanobind. The module and a command-line program can share the same application code.
+
+```cmake
+add_fluidx3d_module(NAME my_app
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/app.cpp        # the application code
+    BINDINGS ${CMAKE_CURRENT_SOURCE_DIR}/module.cpp    # the nanobind code (NB_MODULE)
+    EXTENSIONS VOLUME_FORCE TEMPERATURE
+    STABLE_ABI                                          # optional: one build for Python 3.12 and later
+)
+```
+
+For a module `<name>`, the function creates:
+
+1. **`<name>_setup`** (OBJECT library): the SOURCES with the generated `defines.hpp` and `fluidx3d::warnings`, as an
+   example's `<name>_setup`.
+2. **`<name>`** (Python module in `bin/`): the BINDINGS and the core sources without `src/main.cpp`. The module has no
+   `main()` and no `main_setup()`: its functions run the simulation in the calling thread. The BINDINGS do not get
+   `fluidx3d::warnings`, because nanobind's headers do not pass them. The module is built for speed (`NOMINSIZE`), as
+   the core.
+
+To build modules:
+
+1. Install nanobind for the Python that the module is for (`pip install nanobind`).
+2. Configure with `-DFLUIDX3D_PYTHON_MODULES=ON` (off by default) and, when more than one Python is installed,
+   `-DPython_EXECUTABLE=<that python>`. The option makes the static libraries position-independent code, because a
+   module is a shared library. Without nanobind, the configuration stops with a message.
+
+In the BINDINGS, include `<nanobind/nanobind.h>` before any FluidX3D header: Python's headers must come first, and the
+core's `utilities.hpp` defines macros (such as `min_char`) that change Python's declarations. A fault in the core
+(`print_error()`, for example an OpenCL compile error) ends the whole process, the Python interpreter too. Faults of
+the Setup API are `SetupError` exceptions, which a module can give to Python (`nb::exception<SetupError>`).
 
 ---
 
