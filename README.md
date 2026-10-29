@@ -1,15 +1,19 @@
-# FluidX3D
+# FluidX3D-API
 
-The fastest and most memory efficient lattice Boltzmann CFD software, running on all GPUs and CPUs via [OpenCL](https://github.com/ProjectPhysX/OpenCL-Wrapper "OpenCL-Wrapper"). Free for non-commercial use.
+FluidX3D-API is a modified version of [FluidX3D](https://github.com/ProjectPhysX/FluidX3D) by Dr. Moritz Lehmann. It is not the original software. FluidX3D is lattice Boltzmann CFD software that runs on all GPUs and CPUs through [OpenCL](https://github.com/ProjectPhysX/OpenCL-Wrapper "OpenCL-Wrapper").
 
----
-> **📌 Original Repository:** [ProjectPhysX/FluidX3D](https://github.com/ProjectPhysX/FluidX3D) - See the original repo for benchmarks, performance data, screenshots, and detailed physics documentation.
+FluidX3D-API adds a C++ API for simulations in SI units, a CMake build, SDF voxelization and a model for atmospheric convection. The lattice Boltzmann core is the core of FluidX3D.
 
-## 🔨 About This Fork
+> **Original software:** [ProjectPhysX/FluidX3D](https://github.com/ProjectPhysX/FluidX3D). Go there for benchmarks, performance data, screenshots and the physics documentation.
+>
+> **License:** the [FluidX3D license](LICENSE.md) applies without change. Use for public research, education or personal use only; no commercial or military use. If a scientific publication comes from this software, cite the [FluidX3D references](https://github.com/ProjectPhysX/FluidX3D#references).
 
-This fork provides a **modern CMake build system** to make FluidX3D easier to build and use with IDEs like Visual Studio, VS Code, and CLion. The original build system required manual editing of source files to select examples - this fork enables building each example as a separate target with minimal configuration.
+## What FluidX3D-API adds
+
+The CMake build makes FluidX3D easier to build and use with IDEs like Visual Studio, VS Code and CLion. The original build system requires you to edit source files to select an example. Here, each example is a separate build target.
 
 **Key improvements:**
+
 - ✅ **Modern CMake**: Target-based build system with automatic dependency fetching
 - ✅ **IDE Integration**: Full support for Visual Studio, VS Code, CLion, Qt Creator
 - ✅ **Separate Examples**: Each of the 41 examples builds independently; its CMakeLists.txt names its extensions
@@ -23,12 +27,12 @@ This fork provides a **modern CMake build system** to make FluidX3D easier to bu
 - ✅ **Atmospheric Convection**: A validated thermal model for the convective boundary layer (the `alpha / 2` diffusivity fix, surface heat flux, eddy heat diffusivity, wind nudging, a sponge layer, moisture with condensation) and a conservative finite-volume transport of heat and water by the LBM's own link mass fluxes, see [research/convection/README.md](research/convection/README.md)
 
 **New Documentation:**
+
 - **[CMAKE.md](CMAKE.md)** - Architecture, unity build design, how to add examples, applications outside the repository and Python modules
 - **[BUILD.md](BUILD.md)** - Build instructions for Windows, Linux, and macOS
 - **[EXAMPLES.md](EXAMPLES.md)** - Complete list of all 41 examples with STL download info
 - **[research/convection/README.md](research/convection/README.md)** - Atmospheric convection in FluidX3D: the features and how to use them, their limits, the validation, the references; **[FORK_CHANGES.md](FORK_CHANGES.md)** - every change of this fork with its measurement
 - **[SETUP_API.md](SETUP_API.md)** - How to write a simulation with the Setup API; **[lib/setup/README.md](lib/setup/README.md)** - its layout, conventions and tests (`ctest -L "unit|physics"`)
-
 
 ## How to get started?
 
@@ -87,4 +91,5 @@ void main_setup() { // extensions (the example's CMakeLists.txt): FP16S, EQUILIB
     sim.run_for(10.0 * s); // 10 s of simulated time; writes the video when built with GRAPHICS but not INTERACTIVE_GRAPHICS
 }
 ```
+
 CMake: `add_fluidx3d_example(NAME cow EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS)`.
