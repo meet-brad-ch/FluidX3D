@@ -176,6 +176,11 @@ core's `utilities.hpp` defines macros (such as `min_char`) that change Python's 
 (`print_error()`, for example an OpenCL compile error) ends the whole process, the Python interpreter too. Faults of
 the Setup API are `SetupError` exceptions, which a module can give to Python (`nb::exception<SetupError>`).
 
+Two modules that bind the same C++ classes (for example, one application built with FP32 DDFs and with FP16S DDFs)
+cannot be imported in one Python process. nanobind registers each class one time per process: Python warns that the
+type "was already registered", and the second module does not have the classes. Import one of these modules per
+process, for example one child process per run.
+
 ---
 
 ## Configuration Per Example
