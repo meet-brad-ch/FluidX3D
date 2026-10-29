@@ -59,24 +59,25 @@ cells (`FP16S`, two domains) runs at 1660 MLUPs: 45 minutes of model time in 58 
 
 ## The example
 
-[`examples/convective_boundary_layer`](../../examples/convective_boundary_layer) simulates a CBL in physical units. It
-writes the horizontal-mean statistics (`profiles.csv`), the frames of the flow in a box (`frames.bin`, `w_f16.bin`)
-and a `header.json`. Its targets are `convective_boundary_layer_fv` (FP32 DDFs) and
-`convective_boundary_layer_fv_fp16s` (`FP16S` DDFs, with FP32 scalars). Run it without arguments to see its
-cases:
+[`examples/convective_boundary_layer`](../../examples/convective_boundary_layer) simulates a CBL in physical units
+through the Setup API's atmosphere classes ([SETUP_API.md](../../SETUP_API.md#7-atmospheric-convection)). It writes
+the horizontal-mean statistics (`profiles.csv`) and the SETUP, FINGERPRINT, PROGRESS, CLOUD, WIND and RESULT lines.
+Its targets are `convective_boundary_layer_fv` (FP32 DDFs) and `convective_boundary_layer_fv_fp16s` (`FP16S` DDFs,
+with FP32 scalars). Run it with an output folder only to see its cases:
 
-- `quick`: a 128 x 128 x 100 column for 100 s, to check the outputs,
-- `sp2011`: the dry CBL of Sullivan and Patton 2011,
-- `sounding`: a CBL on a tabulated start sounding, with a sponge under the lid, an optional heated patch and an
-  optional wind held by nudging.
+- `quick`: a 128 x 128 x 100 column for 100 s, to check the outputs.
+- `sp2011`: the dry CBL of Sullivan and Patton 2011.
+- `sounding`: a CBL on a tabulated start sounding, with a sponge under the lid, a heated patch and an optional wind
+  held by nudging.
 
 The options:
 
-- `--alpha` sets the molecular diffusivity of T and Q in lattice units. The default is 1e-4.
+- `--diffusivity` sets the molecular diffusivity of T and Q in lattice units. The default is 1e-4 with `SCALAR_FV`.
 - `--moist` with `--zi` takes the total water from the sounding's `qt_kgkg` column and adds the floor's moisture
-  flux (Bowen ratio 0.5). It writes the clouds: the cloud fraction per level, a `CLOUD` line per interval and the
-  liquid-water bits of the frames. At the end it checks the mean cloud base against the mixed layer's condensation
-  level (limit 10 %).
+  flux (Bowen ratio 0.5). It writes the clouds: the cloud fraction per level and a `CLOUD` line per interval. At the
+  end it checks the mean cloud base against the mixed layer's condensation level (limit 10 %).
+- `--spinup` and `--record` set the two times in seconds.
+- `--estimate` prints the cells, the device memory per domain and the steps, and ends without a run.
 
 ## Limits
 

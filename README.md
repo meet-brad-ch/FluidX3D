@@ -38,35 +38,37 @@ Read the [FluidX3D Documentation](DOCUMENTATION.md)!
 
 ## Setup API
 
-This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for configuring simulations in SI units (meters, m/s, kg/m³) with fluent method chaining. Every example except `benchmark` (a speed test of the core) uses it; `poiseuille_flow` and `stokes_drag` compare the flow with analytic solutions in SI units. [SETUP_API.md](SETUP_API.md) shows how to write a simulation with it, [lib/setup/README.md](lib/setup/README.md) describes its layout and conventions.
+This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for configuring simulations in SI units with fluent method chaining. Its values are quantities of the Au units library (`2.4 * m`, `10.0 * m / s`), checked by the compiler. Every example except `benchmark` (a speed test of the core) uses it; `poiseuille_flow` and `stokes_drag` compare the flow with analytic solutions in SI units. [SETUP_API.md](SETUP_API.md) shows how to write a simulation with it, [lib/setup/README.md](lib/setup/README.md) describes its layout and conventions.
 
 | Component | Purpose |
 |-----------|---------|
-| `Domain`, `Model` | The domain in physical units: `Domain::box(1.0_m, 5.0_m, 0.75_m)` or `Domain::around(Model("hill.stl")).clearances(...)`, with `.vram(2000_mb)` or `.cell_size(8_m)`; a model is an STL or an SDF file |
+| `Domain`, `Model` | The domain in physical units: `Domain::box(1.0 * m, 5.0 * m, 0.75 * m)` or `Domain::around(Model("hill.stl")).clearances(...)`, with `.vram(2000.0 * MiB)` or `.cell_size(8.0 * m)`; a model is an STL or an SDF file |
 | `Simulation` | The simulation: the domain, the fluid and the reference speed set the units; gravity, surface tension, temperatures and particles are set before its first use; it owns the core's LBM (created on first use, the model voxelized, an STL converted to a cached SDF), hands out the builders and components below, and runs for a simulated time with tasks every interval |
 | `Shape` | Regions in metres for objects, water and gas: sphere, cylinder, box, triangle, torus, combined with `!`, `&` and `\|` |
 | `BoundaryBuilder` | Solid, open and periodic faces, solid and moving shapes, initial velocity and pressure (uniform or a field in metres), force field, wind profile, lid-driven cavity |
 | `SurfaceBuilder`, `WaveBoundary` | Free surface in metres and m/s: water level and shapes (columns, drops) with a velocity, gas bubbles, solid objects, inflows, outflows and drains; oscillating wave maker (SURFACE) |
-| `ThermalBuilder`, `TemperatureScale` | Hot and cold walls in Kelvin, hydrostatic and perturbed start; the lattice temperatures and buoyancy of a temperature range (TEMPERATURE) |
+| `ThermalBuilder` | Hot and cold walls in kelvin, hydrostatic and perturbed start; the lattice temperatures and the buoyancy come from the simulation's temperature range (TEMPERATURE) |
 | `MovingPartsManager`, `MovingPart` | Rotating and tumbling parts, re-voxelized while the simulation runs (`sim.parts()`) |
 | `ParticleManager` | Particle seeding in m (PARTICLES, `sim.particles()`) |
 | `ForceAnalyzer` | Force in N and drag coefficient on the measured solids (FORCE_FIELD, `sim.forces()`) |
+| `si::LatticeConverter` | The one conversion between the quantities and the core's lattice numbers (`sim.converter()`) |
 | `GraphicsConfig`, `VideoRecorder`, `CameraView` | Visualization modes (`sim.graphics()`); a video from several cameras, placed in metres and degrees, fixed or moving (`sim.video()`, written by `run_for()` when built for video) |
 
 ```cpp
 #include "setup/setup.hpp"
 
 void main_setup() { // extensions (the example's CMakeLists.txt): FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
-    const Speed flow_velocity = 1.0_mps;
-    const Length cow_length = 2.4_m;
-    const Length domain_length = cow_length / 0.65f; // the cow is 65 % of the domain length
+    using namespace si::symbols;
+    const si::Speed flow_velocity = 1.0 * m / s;
+    const si::Length cow_length = 2.4 * m;
+    const si::Length domain_length = cow_length / 0.65; // the cow is 65 % of the domain length
 
-    Simulation sim(Domain::around(Model("Cow_t.stl").rotation(180_deg, 0_deg, 180_deg).length(cow_length))
-        .size(0.5f * domain_length, domain_length, 0.5f * domain_length)
-        .gap_to_inlet(0.1f * cow_length) // the cow's nose
-        .on_floor()                      // its hooves one cell above z = 0, on the solid floor
-        .vram(1000_mb),                  // resolution from the VRAM budget
-        Fluid::AIR, flow_velocity, LatticeMach(0.13f)); // the units; optional: how compressible the flow is simulated
+    Simulation sim(Domain::around(Model("Cow_t.stl").rotation(180.0 * deg, 0.0 * deg, 180.0 * deg).length(cow_length))
+        .size(0.5 * domain_length, domain_length, 0.5 * domain_length)
+        .gap_to_inlet(0.1 * cow_length) // the cow's nose
+        .on_floor()                     // its hooves one cell above z = 0, on the solid floor
+        .vram(1000.0 * MiB),            // resolution from the VRAM budget
+        Fluid::AIR, flow_velocity, si::LatticeMach(0.13)); // the units; optional: how compressible the flow is simulated
 
     sim.boundaries()
         .set_solid_floor()
@@ -80,9 +82,9 @@ void main_setup() { // extensions (the example's CMakeLists.txt): FP16S, EQUILIB
         .apply();
 
     sim.video()
-        .add(CameraView::orbit(-40_deg, 20_deg).field_of_view(78_deg).view_height(domain_length / 1.25f))
-        .set_length(10.0_s);
-    sim.run_for(10.0_s); // 10 s of simulated time; writes the video when built with GRAPHICS but not INTERACTIVE_GRAPHICS
+        .add(CameraView::orbit(-40.0 * deg, 20.0 * deg).field_of_view(78.0 * deg).view_height(domain_length / 1.25))
+        .set_length(10.0 * s);
+    sim.run_for(10.0 * s); // 10 s of simulated time; writes the video when built with GRAPHICS but not INTERACTIVE_GRAPHICS
 }
 ```
 CMake: `add_fluidx3d_example(NAME cow EXTENSIONS FP16S EQUILIBRIUM_BOUNDARIES SUBGRID INTERACTIVE_GRAPHICS)`.

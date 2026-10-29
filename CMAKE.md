@@ -193,14 +193,15 @@ add_fluidx3d_example(NAME benchmark
    #include "setup/setup.hpp"
 
    void main_setup() {
-       const Speed flow = 10.0_mps;
-       Simulation sim(Domain::around(Model("my_model.stl").length(2.0_m))
-           .size(2.0_m, 6.0_m, 2.0_m).on_floor().vram(2000_mb),
+       using namespace si::symbols;
+       const si::Speed flow = 10.0 * m / s;
+       Simulation sim(Domain::around(Model("my_model.stl").length(2.0 * m))
+           .size(2.0 * m, 6.0 * m, 2.0 * m).on_floor().vram(2000.0 * MiB),
            Fluid::AIR, flow);
        sim.boundaries().set_solid_floor().set_open_boundaries().initialize_velocity_y(flow).apply();
        sim.graphics().show_surface().show_vortices().apply();
-       sim.video().add(CameraView::orbit(-40_deg, 20_deg)).set_length(10.0_s); // written when built for video
-       sim.run_for(10.0_s);
+       sim.video().add(CameraView::orbit(-40.0 * deg, 20.0 * deg)).set_length(10.0 * s); // written when built for video
+       sim.run_for(10.0 * s);
    }
    ```
 
@@ -227,7 +228,7 @@ Place STL files in `resources/` directory and name them in the `Model`; the simu
 
 **main.cpp:**
 ```cpp
-Simulation sim(Domain::around(Model("my_model.stl").length(2.0_m)).size(...), Fluid::AIR, 10.0_mps);
+Simulation sim(Domain::around(Model("my_model.stl").length(2.0 * m)).size(...), Fluid::AIR, 10.0 * m / s);
 ```
 
 A missing file stops the program with a message; `Model::instructions({...})` adds how to get it. Underneath, the core's `get_resource_path()` function searches:
