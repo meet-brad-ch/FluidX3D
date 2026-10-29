@@ -1,5 +1,5 @@
 # add_fluidx3d_module(NAME <name> SOURCES <files...> BINDINGS <files...> [EXTENSIONS <macros...>]
-#                     [SETTINGS "<macro> <value>"...] [STABLE_ABI])
+#                     [SETTINGS "<macro> <value>"...] [STABLE_ABI] [DOMAIN <name>])
 #   Builds the Python extension module <name> (nanobind) into bin/, with the core configured as add_fluidx3d_example()
 #   configures an example (a defines.hpp from the EXTENSIONS and SETTINGS). SOURCES hold the application code; they
 #   form the OBJECT library <name>_setup with the first-party warnings, as an example's main.cpp does. BINDINGS hold
@@ -8,6 +8,10 @@
 #   functions run the simulation in the calling thread.
 #   STABLE_ABI builds the module for Python's stable ABI (Python 3.12 or later): one build works with every later
 #   Python version. Without it, the module works only with the Python version it was built for.
+#   DOMAIN gives the module its own nanobind domain (NB_DOMAIN), with its own registry of bound types and exception
+#   translators. Python can then import modules of different domains into one process, also when the modules bind the
+#   same C++ classes or register the same exception type. Without DOMAIN, all modules use the default domain. A type
+#   or an exception that two modules bind is then registered only one time.
 #   Needs -DFLUIDX3D_PYTHON_MODULES=ON, a Python 3.8 or later interpreter and nanobind (pip install nanobind).
 
 if(FLUIDX3D_PYTHON_MODULES)
@@ -28,7 +32,7 @@ if(FLUIDX3D_PYTHON_MODULES)
 endif()
 
 function(add_fluidx3d_module)
-    cmake_parse_arguments(PARSE_ARGV 0 MODULE "STABLE_ABI" "NAME" "SOURCES;BINDINGS;EXTENSIONS;SETTINGS")
+    cmake_parse_arguments(PARSE_ARGV 0 MODULE "STABLE_ABI" "NAME;DOMAIN" "SOURCES;BINDINGS;EXTENSIONS;SETTINGS")
     if(NOT FLUIDX3D_PYTHON_MODULES)
         message(FATAL_ERROR "add_fluidx3d_module(${MODULE_NAME}): configure with -DFLUIDX3D_PYTHON_MODULES=ON")
     endif()
@@ -49,7 +53,11 @@ function(add_fluidx3d_module)
     if(MODULE_STABLE_ABI)
         set(abi_option STABLE_ABI)
     endif()
-    nanobind_add_module(${MODULE_NAME} NOMINSIZE ${abi_option} ${MODULE_BINDINGS} ${core_sources}) # NOMINSIZE: the core is built for speed, not size
+    set(domain_option "")
+    if(MODULE_DOMAIN)
+        set(domain_option NB_DOMAIN ${MODULE_DOMAIN})
+    endif()
+    nanobind_add_module(${MODULE_NAME} NOMINSIZE ${abi_option} ${domain_option} ${MODULE_BINDINGS} ${core_sources}) # NOMINSIZE: the core is built for speed, not size
     target_link_libraries(${MODULE_NAME} PRIVATE ${MODULE_NAME}_setup)
     set_target_properties(${MODULE_NAME} PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin"

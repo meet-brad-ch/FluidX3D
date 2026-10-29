@@ -152,6 +152,7 @@ add_fluidx3d_module(NAME my_app
     BINDINGS ${CMAKE_CURRENT_SOURCE_DIR}/module.cpp    # the nanobind code (NB_MODULE)
     EXTENSIONS VOLUME_FORCE TEMPERATURE
     STABLE_ABI                                          # optional: one build for Python 3.12 and later
+    DOMAIN my_app                                       # optional: the module's own nanobind domain (see below)
 )
 ```
 
@@ -176,10 +177,16 @@ core's `utilities.hpp` defines macros (such as `min_char`) that change Python's 
 (`print_error()`, for example an OpenCL compile error) ends the whole process, the Python interpreter too. Faults of
 the Setup API are `SetupError` exceptions, which a module can give to Python (`nb::exception<SetupError>`).
 
-Two modules that bind the same C++ classes (for example, one application built with FP32 DDFs and with FP16S DDFs)
-cannot be imported in one Python process. nanobind registers each class one time per process: Python warns that the
-type "was already registered", and the second module does not have the classes. Import one of these modules per
-process, for example one child process per run.
+Give each module its own `DOMAIN` when one Python process imports more than one module. Without `DOMAIN`, all modules
+use nanobind's default domain. That domain has one registry of classes and one set of exception translators for the
+process. This causes two problems:
+- When two modules bind the same C++ classes (for example, one application built with FP32 DDFs and with FP16S DDFs),
+  Python warns that the type "was already registered". The second module does not get the classes.
+- When two modules register `nb::exception<SetupError>`, they use one translator. The module that Python imports last
+  catches the faults of all modules. A fault of the first module then arrives as the second module's `SetupError`.
+
+With one `DOMAIN` for each module (the `NB_DOMAIN` option of `nanobind_add_module()`), each module has its own classes
+and its own `SetupError`.
 
 ---
 
