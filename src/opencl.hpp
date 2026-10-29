@@ -64,8 +64,8 @@ export TBBV="oneapi-tbb-2023.2.0"
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y g++ git make ocl-icd-libopencl1 ocl-icd-opencl-dev
 sudo mkdir -p ~/cpurt /opt/intel/${OCLV} /etc/OpenCL/vendors /etc/ld.so.conf.d
-sudo wget -P ~/cpurt https://github.com/intel/llvm/releases/download/2026-WW42/${OCLV}.tar.gz
-sudo wget -P ~/cpurt https://github.com/uxlfoundation/oneTBB/releases/download/v2023.2.0/${TBBV}-lin.tgz
+# put ${OCLV}.tar.gz from the intel/llvm GitHub release 2026-WW42 into ~/cpurt
+# put ${TBBV}-lin.tgz from the uxlfoundation/oneTBB GitHub release v2023.2.0 into ~/cpurt
 sudo tar -zxvf ~/cpurt/${OCLV}.tar.gz -C /opt/intel/${OCLV}
 sudo tar -zxvf ~/cpurt/${TBBV}-lin.tgz -C /opt/intel
 echo /opt/intel/${OCLV}/x64/libintelocl.so | sudo tee /etc/OpenCL/vendors/intel_expcpu.icd
