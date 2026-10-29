@@ -1,6 +1,6 @@
-# What this fork changes
+# What FluidX3D-API changes
 
-This file lists the fork's convection work on top of ProjectPhysX/FluidX3D (v3.8 + 7). Each entry names the change and
+This file lists the convection work of FluidX3D-API on top of ProjectPhysX/FluidX3D (v3.8 + 10). Each entry names the change and
 the measurement that supports it. How to use the features, their limits and the validation are on
 [research/convection/README.md](research/convection/README.md). The findings for upstream are in `upstream_issues.md`.
 

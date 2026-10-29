@@ -4,7 +4,7 @@
 # (a class, a function, a parameter, a return value, a member, an enum value) is an error, so the run
 # fails until the code is completely documented.
 
-PROJECT_NAME           = "FluidX3D Setup API"
+PROJECT_NAME           = "FluidX3D-API"
 OUTPUT_DIRECTORY       = build/doxygen
 INPUT                  = lib/setup src/sdf_cache examples
 FILE_PATTERNS          = *.hpp *.cpp

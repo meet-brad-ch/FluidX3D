@@ -1,6 +1,6 @@
 # Atmospheric convection in FluidX3D
 
-This fork adds thermal convection and moist air to FluidX3D. The target is the convective boundary layer (CBL) of
+FluidX3D-API adds thermal convection and moist air to FluidX3D. The target is the convective boundary layer (CBL) of
 the atmosphere: a heated ground, a capping inversion, a mean wind and cumulus clouds. This page tells you how to use
 the features and what their limits are. It also compares the results with the large-eddy simulation (LES) code MicroHH
 (van Heerwaarden et al. 2017). All numbers come from one RTX 4090.

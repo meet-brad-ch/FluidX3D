@@ -259,7 +259,7 @@ const si::Pressure p = fields.pressure_at({ 1.25 * cm, 1.25 * cm, 2.5 * cm }); /
 
 ### 7. Atmospheric Convection
 
-`setup/atmosphere/` describes a convective boundary layer in physical units: a column of air over a heated floor, under a lid, periodic across. It needs the fork's convection extensions `VOLUME_FORCE TEMPERATURE SUBGRID THERMAL_DIFFUSIVITY_FIX LEVEL_FORCING`, and `MOISTURE` for water. Use `SCALAR_FV` for heat and water (see [research/convection/README.md](research/convection/README.md)). The API has three layers. Use the highest one that does the job.
+`setup/atmosphere/` describes a convective boundary layer in physical units: a column of air over a heated floor, under a lid, periodic across. It needs the convection extensions `VOLUME_FORCE TEMPERATURE SUBGRID THERMAL_DIFFUSIVITY_FIX LEVEL_FORCING`, and `MOISTURE` for water. Use `SCALAR_FV` for heat and water (see [research/convection/README.md](research/convection/README.md)). The API has three layers. Use the highest one that does the job.
 
 **High: a description and a run.** `CblDescription` is a value with documented defaults: Sullivan and Patton 2011's dry CBL at 10 m cells (0.24 K m/s, 300 K to 974 m, +8 K over 100 m, 3 K/km above, the lid at 2048 m, 1280 m square). Change it by copies:
 ```cpp

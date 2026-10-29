@@ -1,6 +1,6 @@
 # Examples
 
-Complete list of all 41 FluidX3D examples included in the CMake build system. Every example except `benchmark` uses
+Complete list of all 42 FluidX3D-API examples included in the CMake build system. Every example except `benchmark` uses
 the Setup API ([README.md](README.md#setup-api)); its extensions are named in its `CMakeLists.txt`.
 
 ## All Examples
@@ -48,6 +48,7 @@ the Setup API ([README.md](README.md#setup-api)); its extensions are named in it
 | **colliding_droplets** | FP16S, VOLUME_FORCE, FORCE_FIELD, SURFACE, INTERACTIVE_GRAPHICS | - |
 | **rayleigh_benard** | FP16S, VOLUME_FORCE, TEMPERATURE, INTERACTIVE_GRAPHICS | - |
 | **thermal_convection** | FP16S, VOLUME_FORCE, TEMPERATURE, INTERACTIVE_GRAPHICS | - |
+| **convective_boundary_layer** | VOLUME_FORCE, TEMPERATURE, SUBGRID, THERMAL_DIFFUSIVITY_FIX, LEVEL_FORCING, MOISTURE, SCALAR_FV (one target with FP16S) | - |
 
 `INTERACTIVE_GRAPHICS` opens a window; built with `GRAPHICS` instead, the same example writes its video (`sim.video()`)
 without one.
@@ -200,6 +201,7 @@ cmake --build build --target taylor_green_3d
 ### Thermal
 - **rayleigh_benard** - Rayleigh-Bénard convection
 - **thermal_convection** - Natural convection
+- **convective_boundary_layer** - Atmospheric convective boundary layer with moist air (see [research/convection/README.md](research/convection/README.md))
 
 ### Other
 - **cylinder_duct** - Flow around cylinder in duct

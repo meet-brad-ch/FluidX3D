@@ -119,14 +119,14 @@
 
 ## 2. Compiling the Source Code
 - There is no "installation" of FluidX3D. Instead, you have to compile the source code yourself.
-- This fork uses a **modern CMake build system**. See **[BUILD.md](BUILD.md)** for complete build instructions for Windows, Linux, and macOS.
+- FluidX3D-API uses a **modern CMake build system**. See **[BUILD.md](BUILD.md)** for complete build instructions for Windows, Linux, and macOS.
 - By default, the fastest installed GPU will be selected automatically.
 - To select specific GPU(s), run with device ID: `./bin/benchmark 0` or `./bin/benchmark 0 1 3 6` for multi-GPU.
 
 <br>
 
 ## 3. Build and Run Examples
-- This fork includes **37 pre-configured examples**, each as a separate build target.
+- FluidX3D-API includes **42 pre-configured examples**. Each example folder has its own build targets.
 - See **[EXAMPLES.md](EXAMPLES.md)** for the complete list of all examples.
 - See **[CMAKE.md](CMAKE.md#adding-new-examples)** for how to create your own custom examples.
 - Once the interactive graphics window opens, press <kbd>P</kbd> to start/pause the simulation, and <kbd>H</kbd> to show the help menu for keyboard controls and visualization settings.

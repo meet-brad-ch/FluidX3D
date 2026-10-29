@@ -16,7 +16,7 @@ The CMake build makes FluidX3D easier to build and use with IDEs like Visual Stu
 
 - ✅ **Modern CMake**: Target-based build system with automatic dependency fetching
 - ✅ **IDE Integration**: Full support for Visual Studio, VS Code, CLion, Qt Creator
-- ✅ **Separate Examples**: Each of the 41 examples builds independently; its CMakeLists.txt names its extensions
+- ✅ **Separate Examples**: Each of the 42 examples builds independently; its CMakeLists.txt names its extensions
 - ✅ **Unity Build Architecture**: Examples can have different feature configurations simultaneously
 - ✅ **Resource Management**: Centralized `resources/` directory with `get_resource_path()` function
 - ✅ **Easy Build Selection**: `cmake --build build --target <example>` instead of editing source code
@@ -30,8 +30,8 @@ The CMake build makes FluidX3D easier to build and use with IDEs like Visual Stu
 
 - **[CMAKE.md](CMAKE.md)** - Architecture, unity build design, how to add examples, applications outside the repository and Python modules
 - **[BUILD.md](BUILD.md)** - Build instructions for Windows, Linux, and macOS
-- **[EXAMPLES.md](EXAMPLES.md)** - Complete list of all 41 examples with STL download info
-- **[research/convection/README.md](research/convection/README.md)** - Atmospheric convection in FluidX3D: the features and how to use them, their limits, the validation, the references; **[FORK_CHANGES.md](FORK_CHANGES.md)** - every change of this fork with its measurement
+- **[EXAMPLES.md](EXAMPLES.md)** - Complete list of all 42 examples with STL download info
+- **[research/convection/README.md](research/convection/README.md)** - Atmospheric convection in FluidX3D: the features and how to use them, their limits, the validation, the references; **[FORK_CHANGES.md](FORK_CHANGES.md)** - every change of FluidX3D-API with its measurement
 - **[SETUP_API.md](SETUP_API.md)** - How to write a simulation with the Setup API; **[lib/setup/README.md](lib/setup/README.md)** - its layout, conventions and tests (`ctest -L "unit|physics"`)
 
 ## How to get started?
@@ -42,7 +42,7 @@ Read the [FluidX3D Documentation](DOCUMENTATION.md)!
 
 ## Setup API
 
-This fork provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for configuring simulations in SI units with fluent method chaining. Its values are quantities of the Au units library (`2.4 * m`, `10.0 * m / s`), checked by the compiler. Every example except `benchmark` (a speed test of the core) uses it; `poiseuille_flow` and `stokes_drag` compare the flow with analytic solutions in SI units. [SETUP_API.md](SETUP_API.md) shows how to write a simulation with it, [lib/setup/README.md](lib/setup/README.md) describes its layout and conventions.
+FluidX3D-API provides a high-level **Setup API** (`#include "setup/setup.hpp"`) for configuring simulations in SI units with fluent method chaining. Its values are quantities of the Au units library (`2.4 * m`, `10.0 * m / s`), checked by the compiler. Every example except `benchmark` (a speed test of the core) uses it; `poiseuille_flow` and `stokes_drag` compare the flow with analytic solutions in SI units. [SETUP_API.md](SETUP_API.md) shows how to write a simulation with it, [lib/setup/README.md](lib/setup/README.md) describes its layout and conventions.
 
 | Component | Purpose |
 |-----------|---------|
