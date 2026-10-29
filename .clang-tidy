@@ -1,0 +1,50 @@
+# clang-tidy checks for the Setup API (lib/setup), the examples and the physics tests: simple code that a reader can
+# follow and a debugger can step through, in the spirit of MISRA C++ without its bans that cost speed (templates,
+# recursion, dynamic memory). The core (src/) and third-party code are not checked: HeaderFilterRegex selects
+# lib/setup, examples and tests/physics only.
+#
+# Run (Windows, LLVM 22), after a build of build-Release (it writes compile_commands.json). Set PYTHONUTF8=1 first:
+# without it the wrapper stops at a non-ASCII character in a message and checks only a part of the files.
+#     python <llvm>/bin/run-clang-tidy -clang-tidy-binary <llvm>/bin/clang-tidy.exe -p build-Release -quiet "lib.setup|examples|tests.headers|tests.physics"
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  cppcoreguidelines-avoid-goto,
+  cppcoreguidelines-init-variables,
+  cppcoreguidelines-narrowing-conversions,
+  cppcoreguidelines-owning-memory,
+  cppcoreguidelines-pro-type-cstyle-cast,
+  cppcoreguidelines-pro-type-member-init,
+  cppcoreguidelines-slicing,
+  hicpp-multiway-paths-covered,
+  misc-const-correctness,
+  misc-no-recursion,
+  misc-redundant-expression,
+  misc-unused-parameters,
+  modernize-use-nullptr,
+  modernize-use-override,
+  performance-*,
+  -performance-enum-size,
+  readability-avoid-nested-conditional-operator,
+  readability-braces-around-statements,
+  readability-else-after-return,
+  readability-function-cognitive-complexity,
+  readability-function-size,
+  readability-implicit-bool-conversion,
+  readability-isolate-declaration,
+  readability-magic-numbers,
+  readability-misleading-indentation,
+  readability-redundant-declaration,
+  readability-simplify-boolean-expr
+CheckOptions:
+  readability-function-cognitive-complexity.Threshold: 10
+  readability-function-size.LineThreshold: 60
+  readability-function-size.StatementThreshold: 60
+  readability-function-size.BranchThreshold: 10
+  readability-function-size.NestingThreshold: 3
+  readability-function-size.ParameterThreshold: 6
+  readability-magic-numbers.IgnoredFloatingPointValues: '0.0;0.5;1.0;2.0;-1.0'
+  readability-magic-numbers.IgnoredIntegerValues: '0;1;2;3;4;8'
+HeaderFilterRegex: '.*[/\\](lib[/\\]setup|examples|tests[/\\]physics)[/\\].*'
+WarningsAsErrors: ''

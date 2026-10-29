@@ -6,7 +6,7 @@
 
 PROJECT_NAME           = "FluidX3D Setup API"
 OUTPUT_DIRECTORY       = build/doxygen
-INPUT                  = lib/setup src/sdf_cache
+INPUT                  = lib/setup src/sdf_cache examples
 FILE_PATTERNS          = *.hpp *.cpp
 RECURSIVE              = YES
 STRIP_FROM_PATH        = .
