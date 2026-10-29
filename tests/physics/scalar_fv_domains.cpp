@@ -22,73 +22,133 @@
 
 namespace {
 
-/// The fields of one run, read back through the host's stitched view of the domains.
+/// @brief The fields of one run, read back through the host's stitched view of the domains.
 struct DomainFields {
-	std::vector<float> T;  ///< 1 + theta
-	std::vector<float> Q;  ///< 1 + q / 0.01
-	std::vector<float> u;  ///< the velocity, x then y then z components
+	std::vector<float> T{}; ///< 1 + theta
+	std::vector<float> Q{}; ///< 1 + q / 0.01
+	std::vector<float> u{}; ///< the velocity, x then y then z components
 };
 
-/// @brief Runs the case split into Dx x Dy domains and reads the fields back.
-/// @param Dx domains along x
-/// @param Dy domains along y
-/// @param steps the steps to run
-/// @return the fields after the steps
-DomainFields run_split(const uint Dx, const uint Dy, const ulong steps) {
-	const uint N = 32u, Nz = 24u;
-	LBM lbm(N, N, Nz, Dx, Dy, 1u, 1.0E-3f, 0.0f, 0.0f, -1.0E-6f, 0.0f, 0.014f, 50.0f);
-	for(ulong n=0ull; n<lbm.get_N(); n++) {
-		uint x=0u, y=0u, z=0u;
-		lbm.coordinates(n, x, y, z);
-		const float r2 = sq((float)x-16.0f)+sq((float)y-16.0f)+sq((float)z-8.0f);
-		const float blob = r2<25.0f ? 1.0f-r2/25.0f : 0.0f; // a smooth blob of radius 5 across the x and the y cut
-		lbm.T[n] = 1.0f+0.5f*blob;
-		lbm.Q[n] = 1.0f+0.8f+0.5f*blob;
-		if(z==0u||z==Nz-1u) { lbm.flags[n] = TYPE_S; continue; }
-		lbm.u.x[n] = 0.04f; lbm.u.y[n] = 0.03f;
-		if(z==1u&&x>=12u&&x<20u&&y>=12u&&y<20u) lbm.flags[n] = TYPE_Y; // the floor's source under the blob, across both cuts
+/// @brief The case, run in one domain and split into domains, and the comparison of its fields.
+class SplitRun {
+public:
+	/// @brief Runs the case split into Dx x Dy domains and reads the fields back.
+	/// @param Dx domains along x
+	/// @param Dy domains along y
+	/// @return the fields after the steps
+	static DomainFields run(uint Dx, uint Dy) {
+		LBM lbm(box_cells, box_cells, box_levels, Dx, Dy, 1u, viscosity, 0.0f, 0.0f, fz, 0.0f, alpha, beta);
+		const ulong cells = lbm.get_N();
+		for(ulong n{ 0ull }; n < cells; n++) {
+			start_cell(lbm, n);
+		}
+		lbm.set_heat_rate(source_rate);
+		lbm.set_moisture_rate(source_rate);
+		lbm.set_inv_prandtl_t(inverse_prandtl);
+		lbm.run(steps);
+		lbm.update_fields();
+		lbm.T.read_from_device();
+		lbm.Q.read_from_device();
+		lbm.u.read_from_device();
+		DomainFields f{};
+		f.T.resize(cells);
+		f.Q.resize(cells);
+		f.u.resize(3ull * cells);
+		for(ulong n{ 0ull }; n < cells; n++) {
+			f.T[n] = lbm.T[n];
+			f.Q[n] = lbm.Q[n];
+			f.u[n] = lbm.u.x[n];
+			f.u[cells + n] = lbm.u.y[n];
+			f.u[2ull * cells + n] = lbm.u.z[n];
+		}
+		return f;
 	}
-	lbm.set_heat_rate(1.0E-3f);
-	lbm.set_moisture_rate(1.0E-3f);
-	lbm.set_inv_prandtl_t(3.0f);
-	lbm.run(steps);
-	lbm.update_fields();
-	lbm.T.read_from_device();
-	lbm.Q.read_from_device();
-	lbm.u.read_from_device();
-	DomainFields f;
-	f.T.resize(lbm.get_N()); f.Q.resize(lbm.get_N()); f.u.resize(3ull*lbm.get_N());
-	for(ulong n=0ull; n<lbm.get_N(); n++) {
-		f.T[n] = lbm.T[n]; f.Q[n] = lbm.Q[n];
-		f.u[n] = lbm.u.x[n]; f.u[lbm.get_N()+n] = lbm.u.y[n]; f.u[2ull*lbm.get_N()+n] = lbm.u.z[n];
-	}
-	return f;
-}
 
-/// @brief The largest absolute difference between two fields.
-/// @param a the first field
-/// @param b the second field, of the same length
-/// @return max |a - b|
-float largest_difference(const std::vector<float>& a, const std::vector<float>& b) {
-	float largest = 0.0f;
-	for(size_t n=0; n<a.size(); n++) largest = std::fmax(largest, std::fabs(a[n]-b[n]));
-	return largest;
-}
+	/// @brief Gives the largest absolute difference between two fields.
+	/// @param a the first field
+	/// @param b the second field, of the same length
+	/// @return max |a - b|
+	static float largest_difference(const std::vector<float>& a, const std::vector<float>& b) {
+		float largest{ 0.0f };
+		const std::size_t values{ a.size() };
+		for(std::size_t n{ 0u }; n < values; n++) {
+			largest = std::fmax(largest, std::fabs(a[n] - b[n]));
+		}
+		return largest;
+	}
+
+	static constexpr ulong steps = 400ull; ///< the steps of each run
+
+private:
+	/// @brief Writes the start of one cell: the blob in T and Q, the walls, the start flow and the floor's source.
+	/// @param lbm the lattice
+	/// @param n the cell's index
+	static void start_cell(LBM& lbm, ulong n) {
+		uint x{ 0u };
+		uint y{ 0u };
+		uint z{ 0u };
+		lbm.coordinates(n, x, y, z);
+		const float dx{ static_cast<float>(x) - blob_xy };
+		const float dy{ static_cast<float>(y) - blob_xy };
+		const float dz{ static_cast<float>(z) - blob_z };
+		const float r2{ sq(dx) + sq(dy) + sq(dz) };
+		const float blob{ r2 < blob_radius_squared ? 1.0f - r2 / blob_radius_squared : 0.0f }; // a smooth blob of radius 5 across the x and the y cut
+		lbm.T[n] = 1.0f + blob_theta * blob;
+		lbm.Q[n] = 1.0f + background_q + blob_q * blob;
+		if(z == 0u || z == box_levels - 1u) {
+			lbm.flags[n] = TYPE_S;
+			return;
+		}
+		lbm.u.x[n] = flow_x;
+		lbm.u.y[n] = flow_y;
+		const bool in_patch_x{ x >= patch_from && x < patch_to };
+		const bool in_patch_y{ y >= patch_from && y < patch_to };
+		if(z == 1u && in_patch_x && in_patch_y) { // the floor's source under the blob, across both cuts
+			lbm.flags[n] = TYPE_Y;
+		}
+	}
+
+	static constexpr uint box_cells = 32u;            ///< the box's cells along x and y
+	static constexpr uint box_levels = 24u;           ///< the box's cells along z, the floor and the lid solid
+	static constexpr float viscosity = 1.0E-3f;       ///< the kinematic viscosity in lattice units
+	static constexpr float fz = -1.0E-6f;             ///< the volume force along z in lattice units
+	static constexpr float alpha = 0.014f;            ///< the thermal diffusion coefficient in lattice units
+	static constexpr float beta = 50.0f;              ///< the thermal expansion in lattice units
+	static constexpr float blob_xy = 16.0f;           ///< the blob's centre along x and y in cells, on both cuts
+	static constexpr float blob_z = 8.0f;             ///< the blob's centre along z in cells
+	static constexpr float blob_radius_squared = 25.0f; ///< the blob's squared radius in cells^2 (radius 5)
+	static constexpr float blob_theta = 0.5f;         ///< the blob's peak theta in lattice temperature
+	static constexpr float background_q = 0.8f;       ///< the water everywhere, Q - 1
+	static constexpr float blob_q = 0.5f;             ///< the blob's extra peak Q
+	static constexpr float flow_x = 0.04f;            ///< the start flow along x in lattice units
+	static constexpr float flow_y = 0.03f;            ///< the start flow along y in lattice units
+	static constexpr uint patch_from = 12u;           ///< the source patch's first cell along x and y
+	static constexpr uint patch_to = 20u;             ///< one past the source patch's last cell along x and y
+	static constexpr float source_rate = 1.0E-3f;     ///< the heat and the moisture added per step to each source cell
+	static constexpr float inverse_prandtl = 3.0f;    ///< 1 / Pr_t
+};
 
 } // namespace
 
 void main_setup() { // extensions: VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX SUBGRID MOISTURE SCALAR_FV
-	const ulong steps = 400ull;
-	const DomainFields one = run_split(1u, 1u, steps);
-	float t_peak = 0.0f;
-	for(const float t : one.T) t_peak = std::fmax(t_peak, t-1.0f);
-	std::printf("\none domain after %llu steps: the largest theta %.4f (the source keeps heating; the blob moved across the cuts)\n", (unsigned long long)steps, t_peak);
+	const DomainFields one = SplitRun::run(1u, 1u);
+	float t_peak{ 0.0f };
+	for(const float t : one.T) {
+		t_peak = std::fmax(t_peak, t - 1.0f);
+	}
+	const unsigned long long printed_steps{ static_cast<unsigned long long>(SplitRun::steps) };
+	std::printf("\none domain after %llu steps: the largest theta %.4f (the source keeps heating; the blob moved across the cuts)\n", printed_steps, t_peak);
 	const uint splits[3][2] = { { 2u, 1u }, { 1u, 2u }, { 2u, 2u } };
 	for(const auto& s : splits) {
-		const DomainFields d = run_split(s[0], s[1], steps);
-		const float dT = largest_difference(one.T, d.T), dQ = largest_difference(one.Q, d.Q), du = largest_difference(one.u, d.u);
+		const DomainFields d = SplitRun::run(s[0], s[1]);
+		const float dT{ SplitRun::largest_difference(one.T, d.T) };
+		const float dQ{ SplitRun::largest_difference(one.Q, d.Q) };
+		const float du{ SplitRun::largest_difference(one.u, d.u) };
 		std::printf("%u x %u domains: the largest difference to one domain T %.3e, Q %.3e, u %.3e\n", s[0], s[1], dT, dQ, du);
-		const string name = "finite volumes: "+to_string(s[0])+" x "+to_string(s[1])+" domains against one (bit-identical: T, Q, u; any difference fails)";
-		PhysicsCheck::report(name.c_str(), dT>0.0f||dQ>0.0f||du>0.0f ? 1.0 : 0.0, 0.5);
+		const string name = "finite volumes: " + to_string(s[0]) + " x " + to_string(s[1]) + " domains against one (bit-identical: T, Q, u; any difference fails)";
+		const bool any_difference{ dT > 0.0f || dQ > 0.0f || du > 0.0f };
+		const double error{ any_difference ? 1.0 : 0.0 };
+		const double limit{ 0.5 }; // a 0/1 verdict: 1 fails, 0 passes
+		PhysicsCheck::report(name.c_str(), error, limit);
 	}
 }

@@ -1,692 +1,736 @@
-// Convective boundary layer: a boundary layer heated from the floor, with an optional heated patch that roots a
-// thermal. The example records the flow in a box as frames (format 2: 8-bit w, u, v and a cloud bit per cell) and
-// writes the horizontal-mean statistics. The default case: a dry, windless mixed layer to zi = 750 m under a 1 K
-// inversion and 5 K/km above, floor flux 0.262 K m/s, a periodic domain of 1280 m (1.7 zi), a patch 160 m across
-// heated 4x, the box 640 m (0.85 zi). The other cases (for example sp2011, the dry CBL of Sullivan and Patton
-// 2011): run the example without arguments to see them.
-//
-// Lattice: Boussinesq through TEMPERATURE with T = 1 + theta' / 1 K (theta' the potential temperature above the mixed
-// layer's start). The buoyancy is fz * beta * (T - 1) with a tiny fz, so the constant part of the volume force
-// (fz itself) leaves the density almost uniform: beta = g dt^2/dx / (theta_0 fz). The floor (z = 0) and the lid are
-// TYPE_S (adiabatic); the floor flux is a heat source in the first fluid layer (TYPE_Y, LBM::set_heat_rate()), the
-// patch's 4x four such layers. SUBGRID with the eddy heat diffusivity (Pr_t = 1/3). T and Q move by the conservative
-// link-flux finite volumes (SCALAR_FV). The target convective_boundary_layer_fv stores the DDFs as FP32, the target
-// convective_boundary_layer_fv_fp16s as FP16S (the scalars stay FP32 in both).
-//
-//     convective_boundary_layer_fv <output folder> [quick | <case> ...]
-//
-// Writes into the output folder: header.json and frames.bin (format 2: per frame w, u, v as uint8 over the box, k up,
-// j north, i east, u and v less each level's mean over the domain, then the ql bits, all 0 in a dry run), w_f16.bin (w of the
-// same box as IEEE half floats, without the 8-bit steps), profiles.csv (horizontal means every frame interval, also
-// in the spin-up) and progress lines on stdout. "quick" runs a 128 x 128 x 100 column for 100 s, to check the outputs.
-//
-// Moist air (MOISTURE builds, the sounding case with --moist): the sounding's third column qt_kgkg gives the start
-// total water, the floor's moisture flux follows the heat flux cell by cell (flux * cp / (Lv * Bowen), Bowen 0.5, as in
-// the MicroHH reference runs), the buoyancy uses theta_v after the saturation adjustment at each level's hydrostatic pressure
-// (from 101325 Pa), and every interval the host's saturation adjustment gives each cell's liquid water: the profile
-// columns qt, ql and the cloud fraction, a CLOUD line (the cloud base and top, the mixed layer's condensation level),
-// the frames' ql bits (1 = liquid water) and at the end the cloud base against the condensation level.
+/// @file main.cpp
+/// @brief The convective boundary layer example: a layer of air heated from the floor, optionally with a heated patch
+/// that anchors a thermal, built with the Setup API's atmosphere classes (lib/setup/atmosphere, SETUP_API.md
+/// "Atmospheric convection").
+///
+/// Each case is a CblDescription in physical units. ConvectiveBoundaryLayer converts it to lattice units, builds the
+/// LBM and runs it. This file only reads the command line and puts the cases together.
+///
+/// Command line (the order of the positional arguments is fixed; an option can be anywhere):
+/// @verbatim
+///     convective_boundary_layer_fv <output folder> quick [surface]
+///     convective_boundary_layer_fv <output folder> sp2011 <cell m> <cells wide> [seed [domains [patch m [surface]]]]
+///     convective_boundary_layer_fv <output folder> sounding <cell m> <cells wide> <profile.csv>
+///                                  [seed [domains [lid in zi [sponge from zi [wind m/s at 100 m [from deg]]]]]]
+///     options: --diffusivity <lattice units> --zi <m> --moist --spinup <s> --record <s> --estimate --capture
+/// @endverbatim
+///
+/// The cases:
+/// - quick: a 320 m square box with 2.5 m cells for 100 s of simulated time. Use it to check that the outputs are
+///   written.
+/// - sp2011: the dry convective boundary layer of Sullivan and Patton 2011 (J. Atmos. Sci. 68): a floor heat flux of
+///   0.24 K m/s, 300 K up to 974 m, +8 K over the next 100 m, 3 K/km above, the lid at 2048 m.
+/// - sounding: a tabulated sounding from a CSV file (columns z_m,thl_K, and qt_kgkg for a moist run). theta_0 is the
+///   median of the profile between 0.2 zi and 0.8 zi. The floor heat flux is 0.262 K m/s, with a 400 m patch at the
+///   core's 4x rate in the surface layer. The lid is at 2 zi, and the sponge starts at 1.6 zi (time scale 450 s at
+///   the lid). With wind, the box is twice as long north, the run uses 2 domains along x, and the patch is 2000 m
+///   north of the middle (upwind of a wind from the north).
+///
+/// The options:
+/// - --diffusivity: the lattice diffusivity of heat and water, in place of the build's floor value.
+/// - --zi: the inversion height of the sounding case (default 1864 m).
+/// - --moist: a moist run (needs MOISTURE in the build and a qt_kgkg column). It adds the sounding's total water, a
+///   floor moisture flux from the Bowen ratio 0.5, the moist buoyancy and the clouds. The profiles then have the
+///   columns qt, ql and the cloud fraction, and stdout has the CLOUD lines and the RESULT CLOUD check.
+/// - --spinup, --record: the spin-up time and the recorded time, in place of the case's times.
+/// - --estimate: prints the cells, the device memory per domain and the time steps, then stops without a run.
+/// - --capture: writes the stage capture (StageCapture) into the subfolder "capture" of the output folder. The golden data comes from it.
+///
+/// Outputs: profiles.csv in the output folder (the horizontal means of every interval, also of the spin-up), and the
+/// SETUP, FINGERPRINT, PROGRESS, CLOUD, WIND and RESULT lines on stdout. T and Q move by the conservative link-flux
+/// finite volumes (SCALAR_FV). The target convective_boundary_layer_fv stores the DDFs as FP32,
+/// convective_boundary_layer_fv_fp16s stores them as FP16S. The scalars T and Q are FP32 in both targets.
 
 #include "setup/setup.hpp"
-#include "moist_air.hpp"
+#include "setup/atmosphere/convective_boundary_layer.hpp"
+#include "setup/atmosphere/profile_csv.hpp"
+#include "setup/atmosphere/stage_capture.hpp"
 
-#include <algorithm>
-#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <filesystem>
-#include <fstream>
-#include <random>
+#include <limits>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace {
 
-/// The run's physical and lattice settings.
-struct CblSettings {
-	uint Nx = 512u, Ny = 512u, Nz = 400u; // cells; z = 0 floor and z = Nz-1 lid are solid
-	uint Dx = 2u;                         // domains along x: the FP32 DDFs of 105 M cells are over one device buffer
-	uint box = 256u;                      // the recorded box's cells east (and north unless box_north is set), centred on the patch
-	uint box_north = 0u;                  // the recorded box's cells north (0: box); a longer box downwind when there is wind
-	float box_first_north = 0.0f;         // m, the centre of the box's first (southernmost) cell north of the patch's centre (0: the box is centred)
-	float patch_north = 0.0f;             // m, the patch's centre north of the domain's middle (with wind the patch sits upwind)
-	float dx = 2.5f;                      // m
-	float dt = 0.04f;                     // s; 8 m/s = 0.128 in lattice units
-	float theta_0 = 300.0f;               // K, the mixed layer's potential temperature
-	float zi = 750.0f;                    // m, the inversion's height at the start
-	float jump = 1.0f;                    // K, the inversion
-	float jump_depth = 0.0f;              // m, the inversion spread over this depth (0: a step)
-	float lapse = 0.005f;                 // K/m above it
-	float flux = 0.262f;                  // K m/s, the floor's kinematic heat flux
-	float patch = 160.0f;                 // m, the heated disc's diameter
-	uint patch_layers = 4u;               // the patch's flux in floor-flux units, as heated layers; 0: no patch (a homogeneous layer)
-	bool patch_surface = false;           // the patch's 4x flux in the surface layer itself (TYPE_X|TYPE_Y, the kernel's rate) instead of 4 heated layers
-	std::vector<float> profile_z, profile_theta; // a tabulated start profile (m, K) instead of zi/jump/lapse: theta - theta_0 interpolated in height
-	bool frames = true;                   // write frames.bin and w_f16.bin (the recording); off for a statistics run
-	bool w_plane = false;                 // write the w plane at 0.5 zi (float32, Nx x Ny) every interval while recording: w_plane.bin
-	unsigned seed = 2u;                   // the start noise's seed
-	float noise = 0.1f;                   // K, random start perturbation below noise_top
-	float noise_top = 100.0f;             // m
-	float spinup = 1200.0f;               // s without frames
-	float record = 1800.0f;               // s of frames
-	float interval = 20.0f;               // s between frames (and profile rows)
-	float nu = 1.0E-5f;                   // lattice; the Smagorinsky model carries the turbulence
-	float alpha = 2.0E-5f;                // lattice; tauT 0.50004 without THERMAL_DIFFUSIVITY_FIX: the unstable regime, see sullivan_patton()
-	bool moist = false;                   // MOISTURE: total water from the sounding, the floor's moisture flux, the moist buoyancy and the clouds (--moist)
-	std::vector<float> profile_qt;        // kg/kg, the tabulated sounding's total water (its third column qt_kgkg, when present)
-	float bowen = 0.5f;                   // the Bowen ratio: the moisture flux is flux * cp / (Lv * bowen) (as in the MicroHH reference runs)
-	float cloud_fraction_min = 1.0E-3f;   // a level is cloudy when at least this share of its cells holds liquid water (the cloud base and top)
-	float inv_prandtl_t = 3.0f;           // Pr_t = 1/3
-	float sponge_from = 0.0f;             // m; above it w is damped and T relaxed to the start profile, the rate rising as the square of the height into the sponge to 1/sponge_tau at the lid (0: no sponge)
-	float sponge_tau = 450.0f;            // s, the sponge's time scale at the lid (the design appendix: Rayleigh damping, tau 450 s)
-	float wind_speed = 0.0f;              // m/s at wind_height (0: no wind); the profile u(h) = wind_speed (h / wind_height)^wind_exponent, held by nudging
-	float wind_height = 100.0f;           // m
-	float wind_exponent = 0.25f;          // the power law's exponent
-	float wind_from_deg = 0.0f;           // the direction the wind comes from, degrees clockwise from north (0: from the north, the wind blows toward -y)
-	float nudge_tau = 600.0f;             // s, the nudging time scale (MicroHH's --nudge 600)
-	float fz = -1.0E-6f;                  // lattice; the buoyancy's carrier, see the file's comment
-	float w_lo = -10.105561f, w_hi = 15.158342f, uv_lo = -10.105561f, uv_hi = 10.105561f; // the quantization: w -4 to 6 w*, u and v +-4 w*, for w* = 2.53 m/s
+using namespace si::symbols;
 
-	float speed() const { return dx/dt; }                               // m/s per lattice speed
-	float beta() const { return 9.81f*dt*dt/dx/(theta_0*-fz); }         // per K
-	float heat_rate() const { return flux*dt/dx; }                      // K per step and source layer
-	float moisture_flux() const { return flux*(float)moist_air::Cp/((float)moist_air::Lv*bowen); } // kg/kg m/s
-	float moisture_rate() const { return moisture_flux()*dt/dx/0.01f; } // Q per step and source layer (Q = 1 + qt / 0.01)
-	ulong steps(float seconds) const { return (ulong)std::llround(seconds/dt); }
-
-	/// The homogeneous convective boundary layer of Sullivan and Patton 2011 (J. Atmos. Sci. 68): floor flux 0.24 K m/s,
-	/// theta 300 K to 974 m, +8 K over the next 100 m, 3 K/km above; here the lid at 2048 m (about 2 zi) and the domain
-	/// cells_wide cells square at the given cell size; no patch, no frames, the statistics and the w plane.
-	/// The molecular diffusivity of T and Q in lattice units. The D3Q7 lattice needs 0.014 (tauT 0.556): below it the
-	/// lattice creates heat and negative temperatures next to TYPE_S walls in a buoyant flow (tests/physics/
-	/// heat_conservation.cpp). 0.014 is 8.75 m^2/s at 10 m cells and 0.16 s, and it smears the capping inversion: the
-	/// inversion's theta'^2 peak 3.6 against MicroHH's 107, zi 802 against 1001 m. SCALAR_FV has no such floor: at 1e-4
-	/// (0.06 m^2/s) zi is 979 m, the peak 47, and the profiles over 0.1-0.8 zi agree with MicroHH within 7 %.
-	static float default_alpha() {
-#ifdef SCALAR_FV
-		return 1.0E-4f;
-#else // SCALAR_FV
-		return 0.014f;
-#endif // SCALAR_FV
-	}
-
-	static CblSettings sullivan_patton(float cell, uint cells_wide) {
-		CblSettings s;
-		s.dx = cell; s.dt = 0.04f*cell/2.5f; // the lattice speed of a 2.5 m run with dt 0.04 s
-		s.Nx = cells_wide; s.Ny = cells_wide; s.Nz = (uint)std::lround(2048.0f/cell)+2u; s.Dx = 1u; s.box = cells_wide;
-		s.theta_0 = 300.0f; s.zi = 974.0f; s.jump = 8.0f; s.jump_depth = 100.0f; s.lapse = 0.003f; s.flux = 0.24f;
-		s.patch_layers = 0u; s.frames = false; s.w_plane = true;
-		s.noise_top = 300.0f; s.spinup = 1200.0f; s.record = 1800.0f; s.interval = 20.0f;
-		s.alpha = default_alpha();
-		return s;
-	}
-
-	/// A CBL on a tabulated sounding: the start profile from a CSV (z_m, thl_K and optionally qt_kgkg), the surface flux
-	/// 0.262 K m/s, zi (1864 m, the dry reference case's; --zi gives another one), the patch 400 m at 4x in the surface layer,
-	/// the recorded box 1600 m, 900 s spin-up and 1800 s of frames; cells_wide cells square.
-	static CblSettings tabulated_sounding(float cell, uint cells_wide, const std::filesystem::path& profile, float zi) {
-		CblSettings s;
-		s.dx = cell; s.dt = 0.04f*cell/2.5f;
-		s.zi = zi; s.flux = 0.2618979f;
-		s.Nx = cells_wide; s.Ny = cells_wide; s.Nz = (uint)std::lround(2.0f*s.zi/cell)+2u; s.Dx = 1u; s.box = (uint)std::lround(1600.0f/cell);
-		s.patch = 400.0f; s.patch_layers = 4u; s.patch_surface = true; s.frames = true; s.w_plane = true;
-		s.noise_top = 300.0f; s.spinup = 900.0f; s.record = 1800.0f; s.interval = 20.0f;
-		s.alpha = default_alpha();
-		s.sponge_from = 1.6f*s.zi; // the lid rule: the lid at 2 zi, the sponge from 1.6 zi
-		std::ifstream in(profile);
-		if(!in) print_error("profile not found: "+profile.string());
-		std::string line; std::getline(in, line); // the header z_m,thl_K[,qt_kgkg]
-		const bool with_qt = line.find("qt_kgkg")!=std::string::npos;
-		while(std::getline(in, line)) {
-			const size_t c = line.find(',');
-			if(c==std::string::npos) continue;
-			s.profile_z.push_back(std::stof(line.substr(0u, c)));
-			s.profile_theta.push_back(std::stof(line.substr(c+1u)));
-			if(with_qt) {
-				const size_t c2 = line.find(',', c+1u);
-				if(c2==std::string::npos) print_error("profile row without its qt_kgkg value: "+line);
-				s.profile_qt.push_back(std::stof(line.substr(c2+1u)));
-			}
-		}
-		if(s.profile_z.size()<2u) print_error("profile holds fewer than 2 levels: "+profile.string());
-		{ // theta_0 = the mixed layer's value: the median of the profile between 0.2 and 0.8 zi
-			std::vector<float> mixed;
-			for(size_t i=0u; i<s.profile_z.size(); i++) if(s.profile_z[i]>0.2f*s.zi&&s.profile_z[i]<0.8f*s.zi) mixed.push_back(s.profile_theta[i]);
-			if(mixed.empty()) print_error("profile has no level between 0.2 and 0.8 zi");
-			std::sort(mixed.begin(), mixed.end()); s.theta_0 = mixed[mixed.size()/2u];
-		}
-		return s;
-	}
-
-	/// theta - theta_0 at height h from the tabulated profile (linear, held constant outside its range).
-	float profile_at(float h) const {
-		if(h<=profile_z.front()) return profile_theta.front()-theta_0;
-		for(size_t i=1u; i<profile_z.size(); i++) if(h<=profile_z[i]) { const float f = (h-profile_z[i-1u])/(profile_z[i]-profile_z[i-1u]); return profile_theta[i-1u]+f*(profile_theta[i]-profile_theta[i-1u])-theta_0; }
-		return profile_theta.back()-theta_0;
-	}
-	/// The tabulated sounding's qt (kg/kg) at height h (linear, held constant outside its range).
-	float qt_at(float h) const {
-		if(h<=profile_z.front()) return profile_qt.front();
-		for(size_t i=1u; i<profile_z.size(); i++) if(h<=profile_z[i]) { const float f = (h-profile_z[i-1u])/(profile_z[i]-profile_z[i-1u]); return profile_qt[i-1u]+f*(profile_qt[i]-profile_qt[i-1u]); }
-		return profile_qt.back();
-	}
-
-	static CblSettings quick() {
-		CblSettings s;
-		s.Nx = 128u; s.Ny = 128u; s.Nz = 100u; s.Dx = 1u; s.box = 64u;
-		s.zi = 180.0f; s.patch = 40.0f; s.noise_top = 30.0f; s.spinup = 60.0f; s.record = 40.0f; s.interval = 10.0f;
-		s.alpha = default_alpha();
-		return s;
-	}
-};
-
-/// The horizontal means of one layer, in SI units.
-struct LayerMeans {
-	double theta = 0.0;  ///< K above theta_0
-	double w_var = 0.0;  ///< m^2/s^2
-	double w_skew = 0.0; ///< <w'^3> / <w'^2>^(3/2)
-	double theta_var = 0.0; ///< K^2
-	double w_theta = 0.0;///< K m/s, resolved flux
-	double u = 0.0, v = 0.0; ///< m/s
-	double w_max = 0.0, w_min = 0.0; ///< m/s
-};
-
-/// The moist air of every layer (index z, moist runs): the horizontal means of qt and ql and the share of wet cells.
-struct CloudLevels {
-	std::vector<double> qt;       ///< kg/kg
-	std::vector<double> ql;       ///< kg/kg
-	std::vector<double> fraction; ///< the share of the layer's cells holding liquid water
-};
-
-/// The convective boundary layer run: grid set-up, spin-up, recording.
-class CblRun {
+/// @brief The parsed command line: the output folder, the case name, the case's positional arguments and the options.
+///
+/// The constructor removes every option (and its value) from the list. What stays is positional:
+/// [0] the output folder, [1] the case name, [2...] the case's arguments. The accessors has(), number() and text()
+/// take the position of a case argument counted from 0 after the case name, so position 0 is the first argument
+/// after "quick", "sp2011" or "sounding". An optional argument is read where it is used: its default first, then
+/// number() when has() says that the command line gives it.
+///
+/// The command line gives numbers without units. The unit of a positional argument comes from its position (see
+/// usage()). The unit of an option comes from the option (--zi is in metres).
+class CommandLine {
 public:
-	CblRun(const CblSettings& s, const std::filesystem::path& folder)
-		: s_(s), folder_(folder),
-		  lbm_(s.Nx, s.Ny, s.Nz, s.Dx, 1u, 1u, s.nu, 0.0f, 0.0f, s.fz, 0.0f, s.alpha, s.beta()) {}
+    /// @brief Reads the options, removes them from the list, and checks that a case name is there.
+    ///
+    /// Ends the program with print_error() when an option's value is missing or not more than 0, when an unknown
+    /// option ("--..." that is not listed in usage()) is there, or when the output folder or the case name is missing.
+    /// @param arguments the program's arguments without the program name (the core's main_arguments)
+    /// @throws std::invalid_argument from std::stod when an option's value does not start with a number
+    explicit CommandLine(std::vector<std::string> arguments) : a_(std::move(arguments)) {
+        const std::optional<double> diffusivity_value = take_value("--diffusivity");
+        if(diffusivity_value) {
+            diffusivity = si::LatticeDiffusivity(*diffusivity_value);
+        }
+        const std::optional<double> zi_value = take_value("--zi");
+        if(zi_value) {
+            zi = *zi_value * m;
+        }
+        const std::optional<double> spinup_value = take_value("--spinup");
+        if(spinup_value) {
+            spinup = *spinup_value * s;
+        }
+        const std::optional<double> record_value = take_value("--record");
+        if(record_value) {
+            record = *record_value * s;
+        }
+        moist = take_flag("--moist");
+        estimate = take_flag("--estimate");
+        capture = take_flag("--capture");
+        reject_unknown_options();
+        if(a_.size() <= name_at) {
+            print_error(usage());
+        }
+    }
 
-	void run() {
-		std::filesystem::create_directories(folder_);
-		set_up();
-		profiles_.open(folder_/"profiles.csv");
-		profiles_ << "time_s,z_m,theta_K,w_var_m2ps2,w_theta_Kmps,u_mps,v_mps,w_max_mps,w_min_mps,theta_var_K2,w_skew" << (s_.moist ? ",qt_kgkg,ql_kgkg,cloud_fraction" : "") << "\n";
-		if(s_.frames) { frames_.open(folder_/"frames.bin", std::ios::binary); w16_.open(folder_/"w_f16.bin", std::ios::binary); }
-		if(s_.w_plane) w_plane_.open(folder_/"w_plane.bin", std::ios::binary);
-		lbm_.run(0u);
-		const ulong every = s_.steps(s_.interval), spin = s_.steps(s_.spinup), total = spin+s_.steps(s_.record);
-		const Clock clock;
-		while(lbm_.get_t()<total) {
-			lbm_.run(every);
-			const float time = (float)lbm_.get_t()*s_.dt;
-			const bool recording = lbm_.get_t()>spin;
-			read_fields();
-			const std::vector<LayerMeans> means = layer_means();
-			const float zi = inversion_height(means);
-#ifdef MOISTURE
-			if(s_.moist) clouds_ = cloud_levels(); // before the profiles and the frame, which write it
-#endif // MOISTURE
-			write_profiles(time, means);
-			if(s_.wind_speed>0.0f) nudge_wind(means, zi);
-			if(recording) { if(s_.frames) write_frame(means); else frames_written_++; if(s_.w_plane) write_w_plane(zi); zi_sum_ += mixed_layer_top(means); }
-			double w_max = 0.0, w_min = 0.0;
-			for(const LayerMeans& m : means) { w_max = std::max(w_max, m.w_max); w_min = std::min(w_min, m.w_min); }
-			const double wall = clock.stop();
-			std::printf("PROGRESS t %.0f s (%llu/%llu steps, %.1f %%) zi %.0f m w %.2f..%.2f m/s frames %u wall %.0f s, %.0f MLUPs",
-			            time, (unsigned long long)lbm_.get_t(), (unsigned long long)total, 100.0*(double)lbm_.get_t()/(double)total, zi, w_min, w_max, frames_written_, wall,
-			            (double)lbm_.get_N()*(double)lbm_.get_t()/wall*1.0E-6);
-			if(s_.wind_speed>0.0f) std::printf(", wind off the power law %.1f %% of %.2f m/s", 100.0*wind_error_, s_.wind_speed);
-			std::puts("");
-#ifdef MOISTURE
-			if(s_.moist) report_cloud(time, means, clouds_, recording);
-#endif // MOISTURE
-			std::fflush(stdout);
-			if(!std::isfinite(w_max)||!std::isfinite(w_min)||w_max>40.0||w_min<-40.0) {
-				std::printf("FAILED: the flow blew up at t %.0f s (w %.2f..%.2f m/s)\n", time, w_min, w_max);
-				std::fflush(stdout);
-				std::exit(1);
-			}
-			if(recording&&s_.frames) write_header(zi_sum_/(double)frames_written_);
-		}
-		if(s_.wind_speed>0.0f) std::printf("WIND the largest layer-mean deviation below zi from the power-law target at the end: %.2f %% of %.2f m/s (information, not a check: with tau %.0f s the nudged wind does not reach the power law; compare it with an LES reference profile)\n", 100.0*wind_error_, s_.wind_speed, s_.nudge_tau);
-#ifdef MOISTURE
-		if(s_.moist) report_cloud_check();
-#endif // MOISTURE
-		std::printf("RESULT recorded %u frames into %s\n", frames_written_, folder_.string().c_str());
-		std::fflush(stdout);
-	}
+    /// @brief The usage text that print_error() shows for a wrong command line.
+    /// @return the usage line: the three cases with their positional arguments, then the options
+    static std::string usage() {
+        return "convective_boundary_layer <output folder> [quick [surface] | sp2011 <cell m> <cells wide> [seed [domains [patch m [surface]]]] | "
+               "sounding <cell m> <cells wide> <profile.csv> [seed [domains [lid zi [sponge from zi [wind m/s at 100 m [from deg]]]]]]] "
+               "[--diffusivity <lattice units>] [--zi <m>] [--moist] [--spinup <s>] [--record <s>] [--estimate] [--capture]";
+    }
+    /// @brief The folder that receives profiles.csv and the capture (created by main_setup() when it is missing).
+    /// @return the first positional argument
+    const std::string& folder() const { return a_[folder_at]; }
+    /// @brief The case to run: "quick", "sp2011" or "sounding" (Cases::from() checks the name).
+    /// @return the second positional argument
+    const std::string& name() const { return a_[name_at]; }
+    /// @brief Tells whether the command line gives the case argument at position i.
+    ///
+    /// The case arguments are optional from the end: a later argument needs every earlier one. So has(i) is true
+    /// when the command line has at least i + 1 arguments after the case name.
+    /// @param i the position of a case argument, counted from 0 after the case name
+    /// @return true when the argument is there
+    bool has(std::size_t i) const { return a_.size() > i + first_argument_at; }
+    /// @brief Reads the case argument at position i as a number. The caller attaches the unit.
+    /// @param i the position of a case argument, counted from 0 after the case name
+    /// @return the leading number of the argument (std::stod: "3.5" and "3.5x" both give 3.5)
+    /// @throws std::out_of_range when the argument is not there (check with has() first), or the number does not fit
+    /// a double
+    /// @throws std::invalid_argument when the argument does not start with a number
+    double number(std::size_t i) const { return std::stod(a_.at(i + first_argument_at)); }
+    /// @brief Reads the case argument at position i as text (a file path, "surface", a seed).
+    /// @param i the position of a case argument, counted from 0 after the case name
+    /// @return the argument as given
+    /// @throws std::out_of_range when the argument is not there (check with has() first)
+    const std::string& text(std::size_t i) const { return a_.at(i + first_argument_at); }
+
+    std::optional<si::LatticeDiffusivity> diffusivity{}; ///< --diffusivity: the lattice diffusivity of heat and water (cells² per time step), or none for the build's floor
+    std::optional<si::Length> zi{};                      ///< --zi: the sounding case's inversion height at the start, or none for SoundingCase's 1864 m
+    std::optional<si::Duration> spinup{};                ///< --spinup: the time before the first record, or none for the case's time
+    std::optional<si::Duration> record{};                ///< --record: the recorded time after the spin-up, or none for the case's time
+    bool moist = false;                                  ///< --moist: true for a moist run (water, moist buoyancy, clouds)
+    bool estimate = false;                               ///< --estimate: true to print the run's cost and stop before the build
+    bool capture = false;                                ///< --capture: true to write the stage capture
 
 private:
-	CblSettings s_;
-	std::filesystem::path folder_;
-	LBM lbm_;
-	std::ofstream profiles_, frames_, w16_, w_plane_;
-	uint frames_written_ = 0u;
-	std::vector<double> mean_u_sum_, mean_v_sum_; // per box level the sum over the written frames of the domain's mean u and v (m/s), for the header's mean_wind
-	double zi_sum_ = 0.0; // over the written frames the mixed layer's top (mixed_layer_top()), for the header's zi
-	ulong clipped_ = 0ull;
-	std::vector<float> rate_, T_ref_; // the sponge's per-level rate and reference temperature, set once in set_up()
-	double wind_error_ = 0.0;        // the largest |<u> - u_target| below zi over the target's speed at wind_height, at the last interval (information: the nudging does not reach the power-law target)
-	std::vector<double> pressure_;   // Pa per level, hydrostatic from 101325 Pa through the start sounding (moist runs)
-	CloudLevels clouds_;             // the last interval's moist air per level (moist runs)
-	double cloud_base_sum_ = 0.0, lcl_sum_ = 0.0; // over the recorded intervals with a cloud: the cloud base and the condensation level (m)
-	uint cloudy_intervals_ = 0u, recorded_intervals_ = 0u;
+    static constexpr std::size_t folder_at = 0u;          ///< the position of the output folder in the positional list
+    static constexpr std::size_t name_at = 1u;            ///< the position of the case name in the positional list
+    static constexpr std::size_t first_argument_at = 2u;  ///< the position of the first case argument in the positional list
+    static constexpr std::size_t value_option_words = 2u; ///< the list entries of an option with a value: the name and the value
 
-	ulong index(uint x, uint y, uint z) const { return (ulong)x+((ulong)y+(ulong)z*(ulong)s_.Ny)*(ulong)s_.Nx; }
-	float height(uint z) const { return ((float)z-0.5f)*s_.dx; } // the centre of cell z above the floor's top (z = 1 is the first fluid layer)
-	/// The wind's target profile (m/s): a power law of the height, blowing away from wind_from_deg (0: from the north toward -y, 90: from the east toward -x).
-	float wind_target(float h) const { return h<=0.0f ? 0.0f : s_.wind_speed*std::pow(h/s_.wind_height, s_.wind_exponent); }
-	float wind_target_x(float h) const { return -wind_target(h)*std::sin(s_.wind_from_deg*3.14159265f/180.0f); }
-	float wind_target_y(float h) const { return -wind_target(h)*std::cos(s_.wind_from_deg*3.14159265f/180.0f); }
-	/// The nudging: every interval the per-level force is (u_target - <u>) / tau per step, from the layer means just measured; the sponge stays.
-	void nudge_wind(const std::vector<LayerMeans>& means, float zi) {
-		std::vector<float> fx(s_.Nz, 0.0f), fy(s_.Nz, 0.0f);
-		const float per_step = s_.dt/s_.nudge_tau;
-		wind_error_ = 0.0;
-		for(uint z=1u; z+1u<s_.Nz; z++) {
-			const float h = height(z);
-			fx[z] = (wind_target_x(h)-(float)means[z].u)/s_.speed()*per_step;
-			fy[z] = (wind_target_y(h)-(float)means[z].v)/s_.speed()*per_step;
-			if(h<zi) wind_error_ = std::max(wind_error_, std::hypot(wind_target_x(h)-means[z].u, wind_target_y(h)-means[z].v)/(double)s_.wind_speed);
-		}
-		lbm_.set_level_forcing(fx, fy, rate_, T_ref_);
-	}
-	/// theta - theta_0 of the start profile at height h: the tabulated sounding, or the mixed layer, the inversion spread over jump_depth and the lapse above.
-	float start_theta(float h) const {
-		if(!s_.profile_z.empty()) return s_.profile_at(h);
-		if(h<s_.zi) return 0.0f;
-		if(h<s_.zi+s_.jump_depth) return s_.jump*(h-s_.zi)/s_.jump_depth;
-		return s_.jump+s_.lapse*(h-s_.zi-s_.jump_depth);
-	}
+    /// @brief Finds the option name with its value, removes both from the list, and returns the value.
+    ///
+    /// Ends the program with print_error() when the value is missing or not more than 0.
+    /// @param name the option, for example "--zi"
+    /// @return the value, more than 0; none when the option is not there. Only the first occurrence is read.
+    /// @throws std::invalid_argument from std::stod when the value does not start with a number
+    std::optional<double> take_value(const std::string& name) {
+        for(std::size_t k = 0u; k < a_.size(); k++) {
+            if(a_[k] != name) {
+                continue;
+            }
+            const std::size_t value_at = k + 1u;
+            if(value_at >= a_.size()) {
+                print_error(name + " needs a value");
+            }
+            const double value = std::stod(a_[value_at]);
+            if(!(value > 0.0)) {
+                print_error(name + " must be more than 0");
+            }
+            const std::ptrdiff_t first_at = static_cast<std::ptrdiff_t>(k);
+            const std::ptrdiff_t last_at = static_cast<std::ptrdiff_t>(k + value_option_words);
+            const std::vector<std::string>::iterator first = a_.begin() + first_at;
+            const std::vector<std::string>::iterator last = a_.begin() + last_at;
+            a_.erase(first, last);
+            return value;
+        }
+        return std::nullopt;
+    }
+    /// @brief Finds the option name (an option without a value) and removes it from the list.
+    /// @param name the option, for example "--moist"
+    /// @return true when the option was there. Only the first occurrence is removed, so a second one is reported
+    /// as unknown by reject_unknown_options().
+    bool take_flag(const std::string& name) {
+        for(std::size_t k = 0u; k < a_.size(); k++) {
+            if(a_[k] == name) {
+                const std::ptrdiff_t flag_at = static_cast<std::ptrdiff_t>(k);
+                const std::vector<std::string>::iterator at = a_.begin() + flag_at;
+                a_.erase(at);
+                return true;
+            }
+        }
+        return false;
+    }
+    /// @brief Ends the program with print_error() and the usage line when an entry that starts with "--" is left in
+    /// the list after the known options were removed. A negative number ("-5") is not an option.
+    void reject_unknown_options() const {
+        for(const std::string& a : a_) {
+            if(a.rfind("--", 0u) == 0u) { // not a positional argument
+                const std::string message = "unknown option " + a + " (" + usage() + ")";
+                print_error(message);
+            }
+        }
+    }
 
-	/// Flags, the start temperature (mixed layer, inversion, stable air, floor noise) and the heat sources.
-	void set_up() {
-		std::mt19937 random(s_.seed);
-		std::uniform_real_distribution<float> noise(-s_.noise, s_.noise);
-		const float cx = 0.5f*(float)s_.Nx, cy = 0.5f*(float)s_.Ny+s_.patch_north/s_.dx, r = 0.5f*s_.patch/s_.dx;
-		ulong patch_cells = 0ull;
-		for(uint z=0u; z<s_.Nz; z++) for(uint y=0u; y<s_.Ny; y++) for(uint x=0u; x<s_.Nx; x++) {
-			const ulong n = index(x, y, z);
-			if(z==0u||z==s_.Nz-1u) {
-				lbm_.flags[n] = TYPE_S;
-#ifdef MOISTURE
-				// the walls hold the air's water: the first Esoteric-Pull step streams their start populations into the fluid
-				if(s_.moist) lbm_.Q[n] = 1.0f+s_.qt_at(std::clamp(height(z), 0.0f, height(s_.Nz-2u)))/0.01f;
-#endif // MOISTURE
-				continue;
-			}
-			const float h = height(z);
-			float theta = start_theta(h);
-			if(h<s_.noise_top) theta += noise(random);
-			lbm_.T[n] = 1.0f+theta;
-#ifdef MOISTURE
-			lbm_.Q[n] = s_.moist ? 1.0f+s_.qt_at(h)/0.01f : 1.0f; // moist: the sounding's total water; dry: no water
-#endif // MOISTURE
-			if(s_.wind_speed>0.0f) { lbm_.u.x[n] = wind_target_x(h)/s_.speed(); lbm_.u.y[n] = wind_target_y(h)/s_.speed(); } // the start wind is the target profile
-			const bool in_patch = s_.patch_layers>0u&&std::hypot((float)x+0.5f-cx, (float)y+0.5f-cy)<=r;
-			if(z==1u||(in_patch&&!s_.patch_surface&&z<=s_.patch_layers)) lbm_.flags[n] = TYPE_Y;
-			if(in_patch&&s_.patch_surface&&z==1u) lbm_.flags[n] = TYPE_X|TYPE_Y;
-			if(in_patch&&z==1u) patch_cells++;
-		}
-		lbm_.set_heat_rate(s_.heat_rate());
-		lbm_.set_inv_prandtl_t(s_.inv_prandtl_t);
-		{ // the per-level terms: no wind nudging yet (fx, fy 0), the sponge's damping rate and reference temperature (the start profile without noise)
-			std::vector<float> fx(s_.Nz, 0.0f), fy(s_.Nz, 0.0f);
-			rate_.assign(s_.Nz, 0.0f); T_ref_.assign(s_.Nz, 1.0f);
-			std::vector<float>& rate = rate_; std::vector<float>& T_ref = T_ref_;
-			const float lid = height(s_.Nz-1u);
-			for(uint z=0u; z<s_.Nz; z++) {
-				const float h = height(z);
-				T_ref[z] = 1.0f+start_theta(h);
-				if(s_.sponge_from>0.0f&&h>=s_.sponge_from) { const float f = (h-s_.sponge_from)/(lid-s_.sponge_from); rate[z] = s_.dt/s_.sponge_tau*f*f; }
-			}
-			lbm_.set_level_forcing(fx, fy, rate, T_ref);
-		}
-#ifdef MOISTURE
-		if(s_.moist) set_up_moist();
-#endif // MOISTURE
-		std::printf("SETUP %u x %u x %u cells of %.2f m, dt %.3f s, beta %.4f, heat rate %.4e per step, patch %llu cells, %u domains, alpha %.4g (%.3g m^2/s)\n",
-		            s_.Nx, s_.Ny, s_.Nz, s_.dx, s_.dt, s_.beta(), s_.heat_rate(), (unsigned long long)patch_cells, s_.Dx, s_.alpha, (double)s_.alpha*(double)s_.dx*(double)s_.dx/(double)s_.dt);
-		std::fflush(stdout);
-	}
+    std::vector<std::string> a_{}; ///< the positional arguments: the program's arguments with the options removed
+};
 
-	void read_fields() {
-		lbm_.update_fields();
-		lbm_.u.read_from_device();
-		lbm_.T.read_from_device();
-#ifdef MOISTURE
-		if(s_.moist) lbm_.Q.read_from_device();
-#endif // MOISTURE
-	}
+/// @brief The parts that more than one case uses: the start noise, the heated patch, the seed and the domains, with
+/// their shared constants.
+class CaseParts {
+public:
+    static constexpr si::TemperatureDifference noise_amplitude = au::kelvins(0.1); ///< the largest theta perturbation of the start noise
+    static constexpr si::Length noise_top = au::meters(300.0);                     ///< the start noise's top for sp2011 and sounding: cells below it get a perturbation
+    static constexpr si::Length centred = au::meters(0.0);                         ///< the patch offset north of the box's middle for a centred patch
+    static constexpr double bowen_ratio = 0.5;                                      ///< the Bowen ratio (sensible over latent heat flux, a ratio) that gives a moist run's floor moisture flux
+    static constexpr std::uint32_t one_domain = 1u;                                 ///< the number of domains along y and z (the cases split only along x)
 
-#ifdef MOISTURE
-	/// @brief The moist air's per-level terms: the hydrostatic pressure from 101325 Pa through the start sounding (as
-	/// the MicroHH reference runs integrate it: T = thl (p / 1e5)^(Rd/cp) (1 + 0.61 qt) per step), the reference theta_v
-	/// of the start sounding at each level (the buoyancy's level reference), theta_0 (the thl that T = 1 stands for)
-	/// and the floor's moisture source.
-	void set_up_moist() {
-		pressure_.assign(s_.Nz, 0.0);
-		std::vector<float> pressure(s_.Nz, 0.0f), theta_v(s_.Nz, 0.0f);
-		double p = moist_air::GroundPressure, h_prev = 0.0;
-		for(uint z=0u; z<s_.Nz; z++) {
-			const double h = std::max((double)height(z), 0.0);
-			const double thl = (double)s_.theta_0+(double)start_theta((float)h), qt = (double)s_.qt_at((float)h);
-			if(h>h_prev) {
-				const double t_k = thl*std::pow(p/1.0E5, moist_air::Rd/moist_air::Cp)*(1.0+0.61*qt);
-				p *= std::exp(-moist_air::G*(h-h_prev)/(moist_air::Rd*t_k));
-				h_prev = h;
-			}
-			pressure_[z] = p;
-			pressure[z] = (float)p;
-			theta_v[z] = (float)moist_air::virtual_theta(thl, qt, p);
-		}
-		lbm_.set_level_moist(pressure, theta_v);
-		lbm_.set_theta_0(s_.theta_0);
-		lbm_.set_moisture_rate(s_.moisture_rate());
-		std::printf("MOIST qt %.2f g/kg at the floor, the moisture flux %.3e kg/kg m/s (Bowen %.2f), rate %.4e Q per step; %.0f Pa at the floor, %.0f Pa at the lid\n",
-		            1000.0f*s_.qt_at(height(1u)), s_.moisture_flux(), s_.bowen, s_.moisture_rate(), pressure_[1], pressure_[s_.Nz-1u]);
-	}
+    /// @brief Tells whether the case argument at position at is the word "surface" (the patch heats the surface
+    /// layer at the core's 4x rate).
+    /// @param c the command line
+    /// @param at the position of the case argument, counted from 0 after the case name
+    /// @return true when the argument is there and is "surface"; false when it is missing or another word
+    static bool is_surface(const CommandLine& c, std::size_t at) {
+        if(!c.has(at)) {
+            return false;
+        }
+        const bool surface = c.text(at) == "surface";
+        return surface;
+    }
 
-	/// The liquid water of the cell at n (kg/kg) by the host's saturation adjustment at its level's pressure.
-	double liquid(ulong n, uint z) {
-		const double thl = (double)s_.theta_0+(double)lbm_.T[n]-1.0, qt = ((double)lbm_.Q[n]-1.0)*0.01;
-		return moist_air::saturation_adjust(thl, qt, pressure_[z]).liquid;
-	}
+    /// @brief Makes the round heated patch of a case.
+    /// @param diameter the patch's diameter, more than 0
+    /// @param north the distance of the patch's centre north of the box's middle (negative: south)
+    /// @param surface true: PatchMode::SURFACE_LAYER (the floor's fluid cells under the patch heat at the core's 4x
+    /// rate); false: PatchMode::HEATED_LAYERS (HeatedPatch::default_layers layers, each at the floor's rate)
+    /// @return the patch
+    /// @throws SetupError from HeatedPatch::disc() when the diameter is not more than 0
+    static HeatedPatch patch(si::Length diameter, si::Length north, bool surface) {
+        const PatchMode mode = surface ? PatchMode::SURFACE_LAYER : PatchMode::HEATED_LAYERS;
+        const HeatedPatch result = HeatedPatch::disc(diameter, north, mode);
+        return result;
+    }
 
-	/// Per level: the mean qt and ql (kg/kg) and the share of cells holding liquid water.
-	CloudLevels cloud_levels() {
-		CloudLevels c;
-		c.qt.assign(s_.Nz, 0.0); c.ql.assign(s_.Nz, 0.0); c.fraction.assign(s_.Nz, 0.0);
-		const double cells = (double)s_.Nx*(double)s_.Ny;
-		parallel_for(s_.Nz-2u, [&](uint k) {
-			const uint z = k+1u;
-			double qt = 0.0, ql = 0.0, wet = 0.0;
-			for(uint y=0u; y<s_.Ny; y++) for(uint x=0u; x<s_.Nx; x++) {
-				const ulong n = index(x, y, z);
-				const double l = liquid(n, z);
-				qt += ((double)lbm_.Q[n]-1.0)*0.01; ql += l; if(l>0.0) wet += 1.0;
-			}
-			c.qt[z] = qt/cells; c.ql[z] = ql/cells; c.fraction[z] = wet/cells;
-		});
-		return c;
-	}
+    /// @brief Applies the optional seed and domain arguments of a case: a seed replaces the start noise with a
+    /// per-cell noise of that seed (amplitude noise_amplitude, below noise_top); a domain count splits the box along x.
+    /// @param d the case, before the two arguments
+    /// @param c the command line
+    /// @param seed_at the position of the seed argument, counted from 0 after the case name
+    /// @param domains_at the position of the argument that gives the number of domains along x
+    /// @return a copy of d with the seed's start noise and the domains, each only when the command line gives it
+    /// @throws std::invalid_argument from std::stoull when the seed or the domain count is not a number
+    /// @throws std::out_of_range from std::stoull when the number does not fit 64 bits
+    /// @throws SetupError when the seed or the domain count does not fit 32 bits
+    static CblDescription with_seed_and_domains(CblDescription d, const CommandLine& c, std::size_t seed_at, std::size_t domains_at) {
+        if(c.has(seed_at)) {
+            const std::uint32_t seed = whole_32(c.text(seed_at), "the seed");
+            const StartNoise noise = StartNoise::per_cell(noise_amplitude, noise_top, seed);
+            d = d.with_noise(noise);
+        }
+        if(c.has(domains_at)) {
+            const std::uint32_t domains_x = whole_32(c.text(domains_at), "the domain count");
+            const uint3 domains = uint3(domains_x, one_domain, one_domain);
+            d = d.with_domains(domains);
+        }
+        return d;
+    }
 
-	/// The mixed layer's condensation level (m): its mean thl and qt over 0.25 to 0.75 zi lifted at constant thl and qt
-	/// to the lowest level where the saturation adjustment gives liquid water; -1 when none below the lid. zi is the
-	/// case's (--zi), not the heat-flux readout: under deep clouds the readout moved into the cloud layer
-	/// (2600-3300 m against 1704 m in a humid case), the window took in cloudy air and the level came out 128 m high.
-	double condensation_level(const std::vector<LayerMeans>& means, const CloudLevels& c) const {
-		const float zi = s_.zi;
-		double thl = 0.0, qt = 0.0, n = 0.0;
-		for(uint z=1u; z+1u<s_.Nz; z++) if(height(z)>=0.25f*zi&&height(z)<=0.75f*zi) { thl += (double)s_.theta_0+means[z].theta; qt += c.qt[z]; n += 1.0; }
-		if(n==0.0) return -1.0;
-		thl /= n; qt /= n;
-		for(uint z=1u; z+1u<s_.Nz; z++) if(moist_air::saturation_adjust(thl, qt, pressure_[z]).liquid>0.0) return (double)height(z);
-		return -1.0;
-	}
+private:
+    /// @brief Reads a whole number of the command line that must fit 32 bits.
+    /// @param text the argument, for example "7" (std::stoull reads its leading number: "7x" gives 7)
+    /// @param what the argument's name for the error message, for example "the seed"
+    /// @return the number
+    /// @throws std::invalid_argument from std::stoull when the text does not start with a number
+    /// @throws std::out_of_range from std::stoull when the number does not fit 64 bits
+    /// @throws SetupError that names the argument and its text when the number does not fit 32 bits
+    static std::uint32_t whole_32(const std::string& text, const std::string& what) {
+        const unsigned long long value = std::stoull(text);
+        const unsigned long long largest = std::numeric_limits<std::uint32_t>::max();
+        if(value > largest) {
+            throw SetupError(what + " " + text + " does not fit 32 bits");
+        }
+        const std::uint32_t value_32 = static_cast<std::uint32_t>(value);
+        return value_32;
+    }
+};
 
-	/// The CLOUD line of an interval: the cloud base and top (the lowest and highest levels with at least
-	/// cloud_fraction_min of their cells wet), the largest cloud fraction, the largest mean ql, the condensation level.
-	/// While recording, sums the base and the condensation level for the end's check.
-	void report_cloud(float time, const std::vector<LayerMeans>& means, const CloudLevels& c, bool recording) {
-		int base = -1, top = -1;
-		double cover = 0.0, ql_max = 0.0;
-		for(uint z=1u; z+1u<s_.Nz; z++) {
-			if(c.fraction[z]>=(double)s_.cloud_fraction_min) { if(base<0) base = (int)z; top = (int)z; }
-			cover = std::max(cover, c.fraction[z]); ql_max = std::max(ql_max, c.ql[z]);
-		}
-		const double lcl = condensation_level(means, c);
-		const double base_m = base>0 ? (double)height((uint)base) : -1.0, top_m = top>0 ? (double)height((uint)top) : -1.0;
-		std::printf("CLOUD t %.0f s: base %.0f m, top %.0f m, largest cloud fraction %.4f, largest mean ql %.3e kg/kg; the mixed layer's condensation level %.0f m\n",
-		            time, base_m, top_m, cover, ql_max, lcl);
-		if(recording) {
-			recorded_intervals_++;
-			if(base_m>0.0&&lcl>0.0) { cloud_base_sum_ += base_m; lcl_sum_ += lcl; cloudy_intervals_++; }
-		}
-	}
+/// @brief The quick case: a small, short run to check that the outputs are written.
+///
+/// A 320 m square box with 2.5 m cells and the lid at 245 m. The start: 300 K up to 180 m, +1 K at 180 m, 5 K/km
+/// above. A floor heat flux of 0.262 K m/s with a 40 m patch in the middle. 60 s of spin-up and 40 s of records, one
+/// record every 10 s, with a fixed time step of 0.04 s.
+class QuickCase {
+public:
+    static constexpr std::size_t surface_at = 0u; ///< the position of the optional word "surface", counted from 0 after the case name
 
-	/// The end's check: the time-mean cloud base over the recorded intervals within 10 % of the time-mean condensation
-	/// level; FAILED when no recorded interval had a cloud.
-	void report_cloud_check() const {
-		if(cloudy_intervals_==0u) { std::printf("RESULT CLOUD FAILED: no cloud in the %u recorded intervals\n", recorded_intervals_); return; }
-		const double base = cloud_base_sum_/(double)cloudy_intervals_, lcl = lcl_sum_/(double)cloudy_intervals_, error = std::fabs(base/lcl-1.0);
-		std::printf("RESULT CLOUD the mean cloud base %.0f m against the mean condensation level %.0f m: %.1f %% (limit 10 %%) %s; a cloud in %u of %u recorded intervals\n",
-		            base, lcl, 100.0*error, error<=0.10 ? "PASSED" : "FAILED", cloudy_intervals_, recorded_intervals_);
-	}
-#endif // MOISTURE
+    /// @brief Makes the quick case.
+    /// @param surface true: the patch heats the surface layer at the core's 4x rate; false: it heats 4 layers
+    /// (HeatedPatch::default_layers), each at the floor's rate
+    /// @return the case
+    static CblDescription of(bool surface) {
+        CblNumerics numerics{};
+        numerics.time_step = TimeStepRule::fixed(time_step);
+        CblDescription d = CblDescription();
+        d = d.with_numerics(numerics);
+        const IdealizedProfile profile = IdealizedProfile{ .inversion_base = inversion, .jump = jump, .jump_depth = jump_depth, .lapse = lapse };
+        const Sounding sounding = Sounding::idealized(mixed_theta, profile);
+        d = d.with_sounding(sounding, inversion);
+        d = d.with_cell(cell);
+        const LidRule lid_rule = LidRule::at(lid);
+        const ColumnExtent extent = ColumnExtent{ .east = box, .north = box, .lid = lid_rule };
+        d = d.with_extent(extent);
+        const HeatedPatch patch = CaseParts::patch(patch_diameter, CaseParts::centred, surface);
+        const SurfaceForcing forcing = SurfaceForcing{ .flux = flux, .patch = patch, .bowen = CaseParts::bowen_ratio };
+        d = d.with_surface(forcing);
+        const StartNoise noise = StartNoise::per_cell(CaseParts::noise_amplitude, noise_top, seed);
+        d = d.with_noise(noise);
+        const RunSchedule schedule = RunSchedule{ .spinup = spinup, .record = record, .interval = interval };
+        d = d.with_schedule(schedule);
+        return d;
+    }
 
-	/// The horizontal means of every fluid layer (index z).
-	std::vector<LayerMeans> layer_means() {
-		std::vector<LayerMeans> means(s_.Nz);
-		const double c = (double)s_.speed(), cells = (double)s_.Nx*(double)s_.Ny;
-		parallel_for(s_.Nz-2u, [&](uint k) {
-			const uint z = k+1u;
-			double t = 0.0, tt = 0.0, w = 0.0, ww = 0.0, www = 0.0, wt = 0.0, u = 0.0, v = 0.0, w_max = -1E9, w_min = 1E9;
-			for(uint y=0u; y<s_.Ny; y++) for(uint x=0u; x<s_.Nx; x++) {
-				const ulong n = index(x, y, z);
-				const double tn = (double)lbm_.T[n]-1.0, wn = (double)lbm_.u.z[n]*c;
-				t += tn; tt += tn*tn; w += wn; ww += wn*wn; www += wn*wn*wn; wt += wn*tn; u += (double)lbm_.u.x[n]*c; v += (double)lbm_.u.y[n]*c;
-				w_max = std::max(w_max, wn); w_min = std::min(w_min, wn);
-			}
-			LayerMeans& m = means[z];
-			m.theta = t/cells; m.u = u/cells; m.v = v/cells;
-			const double wm = w/cells, tm = t/cells;
-			m.w_var = ww/cells-wm*wm;
-			m.theta_var = tt/cells-tm*tm;
-			const double w3 = www/cells-3.0*wm*ww/cells+2.0*wm*wm*wm; // the central third moment
-			m.w_skew = m.w_var>0.0 ? w3/std::pow(m.w_var, 1.5) : 0.0;
-			m.w_theta = wt/cells-wm*tm;
-			m.w_max = w_max; m.w_min = w_min;
-		});
-		return means;
-	}
+private:
+    static constexpr si::Duration time_step = au::seconds(0.04);                          ///< the time step at every cell size (TimeStepRule::fixed)
+    static constexpr si::Temperature mixed_theta = au::kelvins_pt(300.0);                 ///< the potential temperature of the mixed layer (a temperature reading)
+    static constexpr si::Length inversion = au::meters(180.0);                            ///< zi: the inversion height at the start
+    static constexpr si::TemperatureDifference jump = au::kelvins(1.0);                   ///< the potential temperature step at the inversion
+    static constexpr si::Length jump_depth = au::meters(0.0);                             ///< the depth of the jump: 0 m is a sharp step
+    static constexpr si::LapseRate lapse = (au::kelvins / au::meter)(0.005);              ///< the potential temperature gradient above the inversion (5 K/km)
+    static constexpr si::Length cell = au::meters(2.5);                                   ///< the cell size
+    static constexpr si::Length box = au::meters(320.0);                                  ///< the box's extent west to east and south to north
+    static constexpr si::Length lid = au::meters(245.0);                                  ///< the lid's height above the floor
+    static constexpr si::KinematicHeatFlux flux = (au::kelvins * au::meters / au::second)(0.262); ///< the floor's kinematic heat flux
+    static constexpr si::Length patch_diameter = au::meters(40.0);                        ///< the heated patch's diameter
+    static constexpr si::Length noise_top = au::meters(30.0);                             ///< the start noise's top: cells below it get a perturbation
+    static constexpr unsigned seed = 2u;                                                  ///< the start noise's random seed
+    static constexpr si::Duration spinup = au::seconds(60.0);                             ///< the time before the first record
+    static constexpr si::Duration record = au::seconds(40.0);                             ///< the recorded time after the spin-up
+    static constexpr si::Duration interval = au::seconds(10.0);                           ///< the time between two records (and two rows of profiles.csv)
+};
 
-	/// zi: the height of the most negative resolved heat flux w'theta' (the entrainment flux), above a tenth of the
-	/// column. (The largest temperature gradient moved to the lid once entrainment smeared the inversion: 984 m of 997.)
-	/// Before the convection reaches the inversion there is no negative flux: then the start's zi.
-	float inversion_height(const std::vector<LayerMeans>& means) const {
-		double lowest = 0.0;
-		float zi = s_.zi;
-		for(uint z=2u; z+2u<s_.Nz; z++) {
-			if(height(z)<0.1f*height(s_.Nz-1u)) continue;
-			if(s_.sponge_from>0.0f&&height(z)>=s_.sponge_from) break; // the flux minimum is searched below the sponge
-			if(means[z].w_theta<lowest) { lowest = means[z].w_theta; zi = height(z); }
-		}
-		return zi;
-	}
+/// @brief The Sullivan and Patton 2011 case: CblDescription's defaults, with the cell size and the box width from
+/// the command line.
+///
+/// Case arguments, by position after the case name: 0 the cell size in m, 1 the box width in cells, then optional
+/// 2 the noise seed, 3 the domains along x, 4 a centred heated patch's diameter in m, 5 the word "surface" (the
+/// patch heats the surface layer at the core's 4x rate). The box is square and the lid is at 2048 m.
+class Sp2011Case {
+public:
+    /// @brief Tells whether the command line gives the case's two required arguments (the cell size and the width).
+    /// @param c the command line
+    /// @return true when the command line has at least two case arguments
+    static bool given(const CommandLine& c) { return c.has(cells_wide_at); }
 
-	/// The mixed layer's top by the rule of the MicroHH reference runs: the lowest
-	/// height above 100 m where the layer-mean theta exceeds its mean between 100 and 600 m by 0.5 K. The header's zi:
-	/// the heat-flux minimum moves into the cloud layer under deep clouds (humid 2493 m against 1704 m), and the
-	/// tools that read the header take zi as the mixed layer's top (the wind below it, w*). Fails without such a level.
-	float mixed_layer_top(const std::vector<LayerMeans>& means) const {
-		double sum = 0.0, n = 0.0;
-		for(uint z=1u; z+1u<s_.Nz; z++) if(height(z)>=100.0f&&height(z)<=600.0f) { sum += means[z].theta; n += 1.0; }
-		if(n==0.0) print_error("mixed_layer_top(): no level between 100 and 600 m");
-		const double mixed = sum/n;
-		for(uint z=1u; z+1u<s_.Nz; z++) if(height(z)>100.0f&&means[z].theta>mixed+0.5) return height(z);
-		print_error("mixed_layer_top(): theta nowhere 0.5 K above the mixed layer below the lid");
-		return 0.0f;
-	}
+    /// @brief Makes the Sullivan and Patton 2011 case from its command line arguments.
+    /// @param c the command line, with at least the two required case arguments (check with given())
+    /// @return the case
+    /// @throws std::invalid_argument when a numeric argument is not a number
+    /// @throws SetupError when the cell size or the patch diameter is not more than 0, or the seed or the domain count
+    /// does not fit 32 bits
+    static CblDescription of(const CommandLine& c) {
+        const si::Length cell = c.number(cell_at) * m;
+        const double cells_wide = c.number(cells_wide_at);
+        const si::Length wide = cell * cells_wide;
+        CblDescription d = CblDescription();
+        d = d.with_cell(cell);
+        const LidRule lid_rule = LidRule::at(lid);
+        const ColumnExtent extent = ColumnExtent{ .east = wide, .north = wide, .lid = lid_rule };
+        d = d.with_extent(extent);
+        d = CaseParts::with_seed_and_domains(d, c, seed_at, domains_at);
+        if(c.has(patch_at)) {
+            const si::Length diameter = c.number(patch_at) * m;
+            const bool surface = CaseParts::is_surface(c, surface_at);
+            const HeatedPatch patch = CaseParts::patch(diameter, CaseParts::centred, surface);
+            const si::KinematicHeatFlux flux = d.surface().flux;
+            const SurfaceForcing forcing = SurfaceForcing{ .flux = flux, .patch = patch, .bowen = CaseParts::bowen_ratio };
+            d = d.with_surface(forcing);
+        }
+        return d;
+    }
 
-	void write_profiles(float time, const std::vector<LayerMeans>& means) {
-		for(uint z=1u; z+1u<s_.Nz; z++) {
-			const LayerMeans& m = means[z];
-			char line[256];
-			std::snprintf(line, sizeof(line), "%.1f,%.2f,%.5f,%.5f,%.6f,%.5f,%.5f,%.4f,%.4f,%.6f,%.4f", time, height(z), m.theta, m.w_var, m.w_theta, m.u, m.v, m.w_max, m.w_min, m.theta_var, m.w_skew);
-			profiles_ << line;
-			if(s_.moist) { std::snprintf(line, sizeof(line), ",%.7f,%.7f,%.6f", clouds_.qt[z], clouds_.ql[z], clouds_.fraction[z]); profiles_ << line; }
-			profiles_ << "\n";
-		}
-		profiles_.flush();
-	}
+private:
+    static constexpr std::size_t cell_at = 0u;       ///< the position of the cell size in m (required), counted from 0 after the case name
+    static constexpr std::size_t cells_wide_at = 1u; ///< the position of the box width in cells (required)
+    static constexpr std::size_t seed_at = 2u;       ///< the position of the start noise's seed (optional)
+    static constexpr std::size_t domains_at = 3u;    ///< the position of the number of domains along x (optional)
+    static constexpr std::size_t patch_at = 4u;      ///< the position of the centred patch's diameter in m (optional)
+    static constexpr std::size_t surface_at = 5u;    ///< the position of the word "surface" (optional)
+    static constexpr si::Length lid = au::meters(2048.0); ///< the lid's height above the floor (Sullivan and Patton 2011)
+};
 
-	uint8_t quantize(float value, float lo, float hi) {
-		const float q = std::round((value-lo)*255.0f/(hi-lo));
-		if(q<0.0f||q>255.0f) clipped_++;
-		return (uint8_t)std::clamp(q, 0.0f, 255.0f);
-	}
+/// @brief The tabulated sounding case: a measured or modelled profile from a CSV file.
+///
+/// Case arguments, by position after the case name: 0 the cell size in m, 1 the box width in cells, 2 the profile's
+/// CSV file, then optional 3 the noise seed, 4 the domains along x, 5 the lid's height over zi, 6 the sponge's start
+/// over zi, 7 the wind speed at 100 m in m/s, 8 the direction the wind comes from in degrees. The floor heat flux is 0.262 K m/s, with a 400 m patch at the core's 4x rate in the surface
+/// layer. The lid and the sponge's start are multiples of zi (default 2 and 1.6). A wind speed above 0 holds a power
+/// law wind by nudging: the box is then twice as long north, the run uses 2 domains along x, and the patch is
+/// 2000 m north of the middle.
+class SoundingCase {
+public:
+    /// @brief Tells whether the command line gives the case's three required arguments (cell size, width, profile).
+    /// @param c the command line
+    /// @return true when the command line has at least three case arguments
+    static bool given(const CommandLine& c) { return c.has(profile_at); }
 
-	/// One frame of the box: w, u, v as uint8 (u and v less the layer's mean), the ql bits, and w as half floats.
-	void write_frame(const std::vector<LayerMeans>& means) {
-		const uint b = s_.box, bn = box_north(), x0 = (s_.Nx-b)/2u, y0 = box_y0(), levels = s_.Nz-2u;
-		const ulong cells = (ulong)b*(ulong)bn*(ulong)levels;
-		std::vector<uint8_t> w(cells), u(cells), v(cells), ql((cells+7ull)/8ull, 0u);
-		std::vector<ushort> w16(cells);
-		const float c = s_.speed();
-		parallel_for(levels, [&](uint k) {
-			const uint z = k+1u;
-			for(uint j=0u; j<bn; j++) for(uint i=0u; i<b; i++) {
-				const ulong n = index(x0+i, y0+j, z), o = ((ulong)k*(ulong)bn+(ulong)j)*(ulong)b+(ulong)i;
-				const float wn = lbm_.u.z[n]*c;
-				w[o] = quantize(wn, s_.w_lo, s_.w_hi);
-				u[o] = quantize(lbm_.u.x[n]*c-(float)means[z].u, s_.uv_lo, s_.uv_hi);
-				v[o] = quantize(lbm_.u.y[n]*c-(float)means[z].v, s_.uv_lo, s_.uv_hi);
-				w16[o] = float_to_half(wn);
-			}
-		});
-#ifdef MOISTURE
-		if(s_.moist) { // the ql bits: 1 where the cell holds liquid water (ql > 0), big-endian bit order
-			if(((ulong)b*(ulong)bn)%8ull!=0ull) print_error("the ql bits need a box level of a multiple of 8 cells, so that no byte spans two levels");
-			parallel_for(levels, [&](uint k) {
-				const uint z = k+1u;
-				for(uint j=0u; j<bn; j++) for(uint i=0u; i<b; i++) {
-					const ulong o = ((ulong)k*(ulong)bn+(ulong)j)*(ulong)b+(ulong)i;
-					if(liquid(index(x0+i, y0+j, z), z)>0.0) ql[o>>3] |= (uint8_t)(0x80u>>(uint)(o&7ull));
-				}
-			});
-		}
-#endif // MOISTURE
-		frames_.write((const char*)w.data(), (std::streamsize)cells);
-		frames_.write((const char*)u.data(), (std::streamsize)cells);
-		frames_.write((const char*)v.data(), (std::streamsize)cells);
-		frames_.write((const char*)ql.data(), (std::streamsize)ql.size());
-		frames_.flush();
-		w16_.write((const char*)w16.data(), (std::streamsize)(cells*2ull));
-		w16_.flush();
-		if(mean_u_sum_.empty()) { mean_u_sum_.assign(levels, 0.0); mean_v_sum_.assign(levels, 0.0); }
-		for(uint k=0u; k<levels; k++) { mean_u_sum_[k] += means[k+1u].u; mean_v_sum_[k] += means[k+1u].v; } // the means the frame left out of u and v
-		frames_written_++;
-	}
+    /// @brief Makes the sounding case from its command line arguments.
+    /// @param c the command line, with at least the three required case arguments (check with given())
+    /// @return the case
+    /// @throws std::invalid_argument when a numeric argument is not a number
+    /// @throws SetupError when the profile file cannot be read (Sounding::from_csv()), when no profile point is
+    /// between 0.2 zi and 0.8 zi, when the cell size is not more than 0, when the lid is not above zi (lid in zi
+    /// not more than 1), or when the seed or the domain count does not fit 32 bits
+    static CblDescription of(const CommandLine& c) {
+        const Arguments a = Arguments::of(c);
+        const bool windy = a.wind > au::ZERO;
+        const si::Length north = north_extent(a.wide, windy);
+        const si::Length patch_north = windy ? upwind_patch_north : CaseParts::centred;
+        const HeatedPatch patch = HeatedPatch::disc(patch_diameter, patch_north, PatchMode::SURFACE_LAYER);
+        const SpongeProfile sponge = sponge_of(a);
+        CblDescription d = CblDescription();
+        d = d.with_cell(a.cell);
+        const Sounding tabulated = Sounding::from_csv(c.text(profile_at));
+        const Sounding sounding = tabulated.with_reference_from_mixed_layer(a.zi);
+        d = d.with_sounding(sounding, a.zi);
+        const LidRule lid_rule = LidRule::in_inversion_heights(a.lid_in_zi);
+        const ColumnExtent extent = ColumnExtent{ .east = a.wide, .north = north, .lid = lid_rule };
+        d = d.with_extent(extent);
+        const SurfaceForcing forcing = SurfaceForcing{ .flux = flux, .patch = patch, .bowen = CaseParts::bowen_ratio };
+        d = d.with_surface(forcing);
+        d = d.with_sponge(sponge);
+        const RunSchedule schedule = RunSchedule{ .spinup = spinup, .record = record, .interval = interval };
+        d = d.with_schedule(schedule);
+        d = CaseParts::with_seed_and_domains(d, c, seed_at, domains_at);
+        if(windy) {
+            // with wind: 2 domains along x, in place of a domains argument (the box twice as long north holds about
+            // twice the cells)
+            const PowerLawWind wind(a.wind, wind_height, wind_exponent, a.from);
+            const WindForcing forcing_wind = WindForcing{ .wind = wind, .nudge_tau = nudge_tau };
+            d = d.with_wind(forcing_wind);
+            const uint3 domains = uint3(windy_domains_x, CaseParts::one_domain, CaseParts::one_domain);
+            d = d.with_domains(domains);
+        }
+        return d;
+    }
 
-	uint box_north() const { return s_.box_north>0u ? s_.box_north : s_.box; }
-	/// The box's first cell north (index): centred on the patch, or box_first_north m from the patch's centre.
-	uint box_y0() const {
-		const float cy = 0.5f*(float)s_.Ny+s_.patch_north/s_.dx; // the patch's centre in cell units (a cell's centre is at i + 0.5)
-		const float first = s_.box_first_north!=0.0f ? s_.box_first_north : -0.5f*(float)box_north()*s_.dx+0.5f*s_.dx;
-		const long y0 = std::lround(cy+first/s_.dx-0.5f);
-		if(y0<0||(ulong)y0+box_north()>s_.Ny) print_error("the recorded box reaches outside the domain north");
-		return (uint)y0;
-	}
-	/// The w plane (float32, Nx x Ny, m/s) at the level nearest 0.5 zi, for the spectra.
-	void write_w_plane(float zi) {
-		const uint z = std::clamp((uint)std::lround(0.5f*zi/s_.dx)+1u, 1u, s_.Nz-2u);
-		std::vector<float> plane((size_t)s_.Nx*s_.Ny);
-		const float c = s_.speed();
-		for(uint y=0u; y<s_.Ny; y++) for(uint x=0u; x<s_.Nx; x++) plane[(size_t)x+(size_t)y*s_.Nx] = lbm_.u.z[index(x, y, z)]*c;
-		w_plane_.write((const char*)plane.data(), (std::streamsize)(plane.size()*sizeof(float)));
-		w_plane_.flush();
-	}
+private:
+    static constexpr std::size_t cell_at = 0u;       ///< the position of the cell size in m (required), counted from 0 after the case name
+    static constexpr std::size_t cells_wide_at = 1u; ///< the position of the box width in cells (required)
+    static constexpr std::size_t profile_at = 2u;    ///< the position of the profile's CSV file (required)
+    static constexpr std::size_t seed_at = 3u;       ///< the position of the start noise's seed (optional)
+    static constexpr std::size_t domains_at = 4u;    ///< the position of the number of domains along x (optional)
+    static constexpr std::size_t lid_at = 5u;        ///< the position of the lid's height over zi (optional)
+    static constexpr std::size_t sponge_at = 6u;     ///< the position of the sponge's start over zi (optional)
+    static constexpr std::size_t wind_at = 7u;       ///< the position of the wind speed at wind_height in m/s (optional)
+    static constexpr std::size_t from_at = 8u;       ///< the position of the direction the wind comes from in degrees (optional)
+    static constexpr si::Length default_zi = au::meters(1864.0);                      ///< zi when the command line has no --zi
+    static constexpr double default_lid_in_zi = 2.0;                                  ///< the lid's height over zi (a ratio) when the command line does not give it
+    static constexpr double default_sponge_in_zi = 1.6;                               ///< the sponge's start over zi (a ratio; 0 or less: no sponge) when the command line does not give it
+    static constexpr si::Speed default_wind = (au::meters / au::second)(0.0);         ///< the wind speed at wind_height when the command line does not give it: no wind
+    static constexpr si::Angle default_from = au::degrees(0.0);                       ///< the direction the wind comes from when the command line does not give it: north (PowerLawWind's convention)
+    static constexpr double windy_north_factor = 2.0;                                 ///< the box's length north over its width (a ratio), with wind
+    static constexpr std::uint32_t windy_domains_x = 2u;                              ///< the number of domains along x, with wind
+    static constexpr si::KinematicHeatFlux flux = (au::kelvins * au::meters / au::second)(0.2618979); ///< the floor's kinematic heat flux
+    static constexpr si::Length patch_diameter = au::meters(400.0);                   ///< the heated patch's diameter
+    static constexpr si::Length upwind_patch_north = au::meters(2000.0);              ///< the patch centre's distance north of the box's middle, with wind
+    static constexpr si::Duration sponge_tau = au::seconds(450.0);                    ///< the sponge's damping time scale at the lid
+    static constexpr si::Length wind_height = au::meters(100.0);                      ///< the height at which the given wind speed applies
+    static constexpr double wind_exponent = 0.25;                                     ///< the power law's exponent: u(z) = u(wind_height) (z / wind_height)^0.25
+    static constexpr si::Duration nudge_tau = au::seconds(600.0);                     ///< the nudging's time scale: the layer-mean wind relaxes to the target over it
+    static constexpr si::Duration spinup = au::seconds(900.0);                        ///< the time before the first record
+    static constexpr si::Duration record = au::seconds(1800.0);                       ///< the recorded time after the spin-up
+    static constexpr si::Duration interval = au::seconds(20.0);                       ///< the time between two records (and two rows of profiles.csv)
 
-	/// header.json for the frames written so far (the format-2 fields that analysis tools read).
-	void write_header(double zi) const {
-		const uint b = s_.box, bn = box_north(), levels = s_.Nz-2u;
-		const double first_north = s_.box_first_north!=0.0f ? (double)s_.box_first_north : -0.5*(double)bn*(double)s_.dx+0.5*(double)s_.dx;
-		const double w_star = std::cbrt(9.81/(double)s_.theta_0*(double)s_.flux*zi);
-		const double first = -0.5*(double)b*(double)s_.dx+0.5*(double)s_.dx;
-		std::ofstream h(folder_/"header.json");
-		h << "{\n";
-		h << "  \"format\": 2,\n";
-		// the case's fields, in the form the analysis tools read
-		// the class: a placeholder for the tools that file the recording under a weather class; a moist run's humidity is "unset", so an index of the raw recording fails instead of calling it dry
-		h << "  \"case\": {\"source\": \"FluidX3D convective_boundary_layer\", \"quality\": \"" << (s_.moist ? "moist_cbl" : "dry_cbl") << "\", \"humidity\": \"" << (s_.moist ? "unset" : "dry") << "\", \"hours\": 13.0, \"ground\": 0.0"
-		  << ", \"flux\": " << s_.flux << ", \"theta_0\": " << s_.theta_0 << ", \"patch\": " << s_.patch << ", \"heat\": " << s_.patch_layers << ", \"patch_mode\": \"" << (s_.patch_surface ? "surface" : "layers") << "\"" << ", \"background\": 1.0, \"seed\": " << s_.seed
-		  << ", \"spinup\": " << (int)s_.spinup << ", \"record\": " << (int)s_.record << ", \"cells\": " << s_.Nx << ", \"dx\": " << s_.dx << ", \"dz\": " << s_.dx
-		  << ", \"top\": " << (double)(s_.Nz-1u)*(double)s_.dx << ", \"dump\": " << (int)s_.interval << ", \"dt\": " << s_.dt
-		  << ", \"air\": \"mixed layer to " << s_.zi << " m, inversion " << s_.jump << " K, " << s_.lapse*1000.0f << " K/km above\""
-		  << ", \"cells_north\": " << s_.Ny << ", \"patch_north\": " << s_.patch_north/s_.dx << ", \"wind\": ";
-		if(s_.wind_speed>0.0f) { // the header's wind: the nudging target per box level
-			h << "{\"field\": \"power-law\", \"note\": \"power law: " << s_.wind_speed << " m/s at " << s_.wind_height << " m, exponent " << s_.wind_exponent << ", from " << s_.wind_from_deg << " deg\", \"nudge\": " << s_.nudge_tau << ", \"scale\": 1.0, \"u\": [";
-			for(uint k=0u; k<levels; k++) h << (k ? ", " : "") << wind_target_x(height(k+1u));
-			h << "], \"v\": [";
-			for(uint k=0u; k<levels; k++) h << (k ? ", " : "") << wind_target_y(height(k+1u));
-			h << "]}";
-		} else h << "null";
-		h << ", \"zi\": " << zi << ", \"w_star\": " << w_star << "},\n";
-		h << "  \"box\": {\"cells\": " << b << ", \"cells_north\": " << bn << ", \"levels\": " << levels << ", \"dx\": " << s_.dx << ", \"dz\": " << s_.dx
-		  << ", \"first_east\": " << first << ", \"first_north\": " << first_north << ", \"first_up\": " << 0.5*(double)s_.dx << "},\n";
-		// per box level the domain's mean u and v over the written frames (m/s): what the frames' u and v leave out
-		h << "  \"mean_wind\": {\"u\": [";
-		for(uint k=0u; k<levels; k++) h << (k ? ", " : "") << mean_u_sum_[k]/(double)frames_written_;
-		h << "], \"v\": [";
-		for(uint k=0u; k<levels; k++) h << (k ? ", " : "") << mean_v_sum_[k]/(double)frames_written_;
-		h << "]},\n";
-		h << "  \"frames\": {\"count\": " << frames_written_ << ", \"interval\": " << s_.interval << ", \"first_model_time\": " << s_.spinup+s_.interval << "},\n";
-		h << "  \"fields\": [\"w\", \"u\", \"v\", \"ql\"],\n";
-		h << "  \"layout\": \"frames.bin: per frame w, u, v as uint8 (k up, j north, i east), value = lo + byte * (hi - lo) / 255 with quant's lo and hi in m/s, then ql as one bit per cell (" << (s_.moist ? "1 = liquid water" : "all 0, dry") << "), big-endian bit order; w, u, v at the cells' centres, u and v less each level's mean over the domain; w_f16.bin: w of the same cells as IEEE half floats\",\n";
-		h << "  \"quant\": {\"w\": {\"lo\": " << s_.w_lo << ", \"hi\": " << s_.w_hi << "}, \"u\": {\"lo\": " << s_.uv_lo << ", \"hi\": " << s_.uv_hi
-		  << "}, \"v\": {\"lo\": " << s_.uv_lo << ", \"hi\": " << s_.uv_hi << "}},\n";
-		h << "  \"clipped\": " << clipped_ << "\n";
-		h << "}\n";
-	}
+    /// @brief The case's numeric arguments in their units, each one from the command line or from its default.
+    struct Arguments {
+        si::Length cell{ au::ZERO };  ///< the cell size
+        si::Length wide{ au::ZERO };  ///< the box's width west to east: the cell size times the cells wide
+        si::Length zi{ au::ZERO };    ///< the inversion height at the start: --zi or default_zi
+        double lid_in_zi{};           ///< the lid's height over zi (a ratio)
+        double sponge_in_zi{};        ///< the sponge's start over zi (a ratio; 0 or less: no sponge)
+        si::Speed wind{ au::ZERO };   ///< the wind speed at wind_height (0: no wind)
+        si::Angle from{ au::ZERO };   ///< the direction the wind comes from, clockwise from north
+
+        /// @brief Reads the case's numeric arguments and fills in the default of each optional one that is missing.
+        /// @param c the command line, with at least the three required case arguments
+        /// @return the arguments in their units
+        /// @throws std::invalid_argument when a numeric argument is not a number
+        static Arguments of(const CommandLine& c) {
+            const si::Length cell = c.number(cell_at) * m;
+            const double cells_wide = c.number(cells_wide_at);
+            const si::Length wide = cell * cells_wide;
+            si::Length zi{ default_zi };
+            if(c.zi) {
+                zi = *c.zi;
+            }
+            double lid_in_zi{ default_lid_in_zi };
+            if(c.has(lid_at)) {
+                lid_in_zi = c.number(lid_at);
+            }
+            double sponge_in_zi{ default_sponge_in_zi };
+            if(c.has(sponge_at)) {
+                sponge_in_zi = c.number(sponge_at);
+            }
+            si::Speed wind{ default_wind };
+            if(c.has(wind_at)) {
+                const double wind_mps{ c.number(wind_at) };
+                wind = wind_mps * m / s;
+            }
+            si::Angle from{ default_from };
+            if(c.has(from_at)) {
+                const double from_deg{ c.number(from_at) };
+                from = from_deg * deg;
+            }
+            return Arguments{ .cell = cell, .wide = wide, .zi = zi, .lid_in_zi = lid_in_zi, .sponge_in_zi = sponge_in_zi, .wind = wind, .from = from };
+        }
+    };
+
+    /// @brief Gives the box's length south to north: longer with wind, so that a thermal from the upwind patch has
+    /// room to drift downwind.
+    /// @param wide the box's width west to east
+    /// @param windy true when the case has wind
+    /// @return windy_north_factor times wide with wind; wide without wind
+    static si::Length north_extent(si::Length wide, bool windy) {
+        si::Length north{ wide };
+        if(windy) {
+            north = wide * windy_north_factor;
+        }
+        return north;
+    }
+
+    /// @brief Makes the case's damping layer below the lid.
+    /// @param a the case's arguments (zi, sponge_in_zi)
+    /// @return a quadratic sponge from sponge_in_zi times zi up to the lid, with sponge_tau at the lid; no sponge when
+    /// sponge_in_zi is 0 or less
+    /// @throws SetupError from SpongeProfile::quadratic() for a start or a time scale that is not more than 0
+    static SpongeProfile sponge_of(const Arguments& a) {
+        if(!(a.sponge_in_zi > 0.0)) {
+            return SpongeProfile::none();
+        }
+        const si::Length sponge_from = a.zi * a.sponge_in_zi;
+        const SpongeProfile sponge = SpongeProfile::quadratic(sponge_from, sponge_tau);
+        return sponge;
+    }
+};
+
+/// @brief Selects the case that the command line names and applies the options to it.
+class Cases {
+public:
+    /// @brief Makes the description to run: the named case, then --diffusivity, --spinup, --record and --moist.
+    ///
+    /// Ends the program with print_error() and the usage line for an unknown case name or missing required case
+    /// arguments, when --zi is given to a case other than sounding, and when --moist is given without a qt_kgkg
+    /// column in the profile.
+    /// @param c the command line
+    /// @return the case with the options applied (not yet validated: ConvectiveBoundaryLayer validates it)
+    /// @throws std::invalid_argument when a numeric case argument is not a number
+    /// @throws SetupError when a case argument is out of its range (see the case's of())
+    static CblDescription from(const CommandLine& c) {
+        const CblDescription d = named(c);
+        const bool zi_given = c.zi.has_value();
+        if(zi_given && c.name() != "sounding") {
+            print_error("--zi applies to the sounding case only");
+        }
+        const CblDescription result = with_options(d, c);
+        return result;
+    }
+
+private:
+    /// @brief Makes the case that the case name selects.
+    ///
+    /// Ends the program with print_error() and the usage line for an unknown case name or missing required case
+    /// arguments.
+    /// @param c the command line
+    /// @return the quick, sp2011 or sounding case
+    /// @throws std::invalid_argument when a numeric case argument is not a number (from the case's of())
+    /// @throws SetupError when a case argument is out of its range (from the case's of())
+    static CblDescription named(const CommandLine& c) {
+        const std::string& name = c.name();
+        if(name == "quick") {
+            const bool surface = CaseParts::is_surface(c, QuickCase::surface_at);
+            return QuickCase::of(surface);
+        }
+        if(name == "sp2011" && Sp2011Case::given(c)) {
+            return Sp2011Case::of(c);
+        }
+        if(name == "sounding" && SoundingCase::given(c)) {
+            return SoundingCase::of(c);
+        }
+        print_error(CommandLine::usage());
+        return CblDescription(); // not reached: print_error ends the program
+    }
+
+    /// @brief Applies the options that change a case: --diffusivity replaces the scalar diffusivity, --spinup and
+    /// --record replace the schedule's times, --moist makes the run moist.
+    ///
+    /// Ends the program with print_error() when --moist is given and the sounding has no total water.
+    /// @param d the case
+    /// @param c the command line
+    /// @return a copy of d with the options applied
+    static CblDescription with_options(CblDescription d, const CommandLine& c) {
+        if(c.diffusivity) {
+            CblNumerics n = d.numerics();
+            n.scalar = Diffusivity::lattice(*c.diffusivity);
+            d = d.with_numerics(n);
+        }
+        RunSchedule schedule = d.schedule();
+        if(c.spinup) {
+            schedule.spinup = *c.spinup;
+        }
+        if(c.record) {
+            schedule.record = *c.record;
+        }
+        d = d.with_schedule(schedule);
+        if(!c.moist) {
+            return d;
+        }
+        const bool has_water = d.sounding().has_water();
+        if(!has_water) {
+            print_error("--moist needs the sounding case with a qt_kgkg column in its profile");
+        }
+        const CblDescription moist = d.with_moisture(true);
+        return moist;
+    }
+};
+
+/// @brief The example's two ways to end: the cost of the case (--estimate), or the run.
+class Example {
+public:
+    /// @brief Prints the ESTIMATE line of a valid case: the cells, the device memory per domain and the time steps.
+    /// No device memory is used.
+    /// @param d the case
+    /// @throws SetupError when the case is not valid (CblDescription::validate()) or cannot be estimated
+    static void estimate(const CblDescription& d) {
+        d.validate();
+        const LatticeMemory lattice = Simulation::build_lattice_memory();
+        const RunEstimate estimate = d.estimate(lattice, std::nullopt);
+        const std::string estimate_text = estimate.describe();
+        std::printf("ESTIMATE %s\n", estimate_text.c_str());
+    }
+
+    /// @brief Builds and runs the case. The order: the SETUP line, the FINGERPRINT line (a hash of the whole set-up
+    /// before the first step), the observers (profiles.csv, and the capture with --capture), then the run with its
+    /// PROGRESS, CLOUD and WIND lines, and the RESULT line at the end.
+    ///
+    /// ConvectiveBoundaryLayer ends the program with print_error() when the case is not valid.
+    /// @param c the command line: the output folder and --capture
+    /// @param d the case
+    /// @throws std::filesystem::filesystem_error when the output folder cannot be created
+    /// @throws SetupError when a part of the case cannot be built (ConvectiveBoundaryLayer's constructor) or a file
+    /// cannot be written, or when the SETUP line does not fit its buffer (setup_line())
+    static void run(const CommandLine& c, const CblDescription& d) {
+        const std::filesystem::path folder(c.folder());
+        std::filesystem::create_directories(folder);
+        ConvectiveBoundaryLayer run(d);
+        const std::string setup = setup_line(run, d);
+        std::printf("%s\n", setup.c_str());
+        const unsigned long long fingerprint = static_cast<unsigned long long>(run.atmosphere().fingerprint());
+        std::printf("FINGERPRINT setup %016llx\n", fingerprint);
+        std::fflush(stdout);
+        const std::filesystem::path profiles_path = folder / "profiles.csv";
+        const bool moist = d.moist();
+        ProfileCsv csv(profiles_path, moist);
+        run.observe(csv);
+        std::unique_ptr<StageCapture> capture{};
+        if(c.capture) {
+            const std::filesystem::path capture_folder = folder / "capture";
+            capture = std::make_unique<StageCapture>(capture_folder, run);
+            run.observe(*capture);
+        }
+        const RunSummary summary = run.run();
+        const std::uint32_t intervals = summary.intervals;
+        const std::uint32_t recorded = summary.recorded;
+        const std::string& output_folder = c.folder();
+        std::printf("RESULT %u intervals (%u recorded) into %s\n", intervals, recorded, output_folder.c_str());
+    }
+
+private:
+    static constexpr std::size_t setup_line_capacity = 400u; ///< the SETUP line's buffer, in characters with the end zero
+
+    /// @brief Makes the SETUP line on stdout, which states the lattice that the run uses.
+    /// @param run the built run
+    /// @param d the run's description
+    /// @return the line: the cells (nx x ny x levels), the cell size, the time step, the lattice buoyancy factor beta,
+    /// the floor's heat rate per time step (lattice units), the patch's floor cells, and the sounding's description
+    /// @throws SetupError when the line does not fit setup_line_capacity (a long sounding description) or
+    /// std::snprintf fails
+    static std::string setup_line(ConvectiveBoundaryLayer& run, const CblDescription& d) {
+        const LatticeParameters p = run.parameters();
+        const AtmosphereGrid grid = d.grid();
+        const std::uint32_t nx = grid.nx();
+        const std::uint32_t ny = grid.ny();
+        const std::uint32_t levels = grid.levels().levels();
+        const double dx_m = p.dx.in(m);
+        const double dt_s = p.dt.in(s);
+        const double beta = static_cast<double>(p.beta);
+        const double heat_rate = static_cast<double>(p.heat_rate);
+        const unsigned long long patch_cells = static_cast<unsigned long long>(run.atmosphere().sources().patch_cells);
+        const std::string sounding = d.sounding().describe();
+        char text[setup_line_capacity]{};
+        const int written = std::snprintf(text, sizeof(text), "SETUP %u x %u x %u cells of %.2f m, dt %.3f s, beta %.4f, heat rate %.4e per step, patch %llu cells; %s",
+                                          nx, ny, levels, dx_m, dt_s, beta, heat_rate, patch_cells, sounding.c_str());
+        const bool fits = written >= 0 && static_cast<std::size_t>(written) < sizeof(text);
+        if(!fits) {
+            throw SetupError("the SETUP line does not fit " + std::to_string(setup_line_capacity) + " characters (snprintf gave " + std::to_string(written) + ")");
+        }
+        const std::string line = text;
+        return line;
+    }
 };
 
 } // namespace
 
-void main_setup() { // extensions: VOLUME_FORCE, TEMPERATURE, SUBGRID
-	const auto take_option = [](const string& name) { // removes "<name> <value>" from the arguments; returns the value (> 0), or 0 when the option is absent
-		for(size_t k=0u; k<main_arguments.size(); k++) {
-			if(main_arguments[k]!=name) continue;
-			if(k+1u>=main_arguments.size()) print_error(name+" needs a value.");
-			const float value = std::stof(main_arguments[k+1u]);
-			if(!(value>0.0f)) print_error(name+" must be greater than 0.");
-			main_arguments.erase(main_arguments.begin()+(long long)k, main_arguments.begin()+(long long)k+2);
-			return value;
-		}
-		return 0.0f;
-	};
-	const auto take_flag = [](const string& name) { // removes "<name>" from the arguments; returns whether it was there
-		for(size_t k=0u; k<main_arguments.size(); k++) if(main_arguments[k]==name) { main_arguments.erase(main_arguments.begin()+(long long)k); return true; }
-		return false;
-	};
-	const float alpha_option = take_option("--alpha"); // the molecular diffusivity of T and Q in lattice units (0: the case's own value)
-	const float zi_option = take_option("--zi"); // the sounding case's zi in m (0: 1864, the dry reference case's); the lid and the sponge count in it
-	const bool moist_option = take_flag("--moist"); // the sounding's qt, the moisture flux, the moist buoyancy and the clouds
-	if(main_arguments.empty()) print_error("convective_boundary_layer <output folder> [quick | sp2011 <cell m> <cells wide> [seed [domains [patch m [surface]]]] | sounding <cell m> <cells wide> <profile.csv> [seed [domains [lid zi [sponge from zi [wind m/s at 100 m [from deg]]]]]]] [--alpha <lattice units>] [--zi <m>] [--moist]");
-	CblSettings s;
-	if(main_arguments.size()>1u&&main_arguments[1]=="quick") { s = CblSettings::quick(); if(main_arguments.size()>2u&&main_arguments[2]=="surface") s.patch_surface = true; }
-	else if(main_arguments.size()>3u&&main_arguments[1]=="sp2011") {
-		s = CblSettings::sullivan_patton(std::stof(main_arguments[2]), (uint)std::stoul(main_arguments[3]));
-		if(main_arguments.size()>4u) s.seed = (unsigned)std::stoul(main_arguments[4]);
-		if(main_arguments.size()>5u) s.Dx = (uint)std::stoul(main_arguments[5]); // domains along x: one FP32 buffer holds at most 6140 MB on the 4090, 80 M cells of fi
-		if(main_arguments.size()>6u) { s.patch = std::stof(main_arguments[6]); s.patch_layers = 4u; s.frames = true; s.box = 256u; } // the 4x patch, the frames of a 256-cell box
-		if(main_arguments.size()>7u&&main_arguments[7]=="surface") s.patch_surface = true; // the 4x flux in the surface layer, not 4 layers
-	}
-	else if(main_arguments.size()>4u&&main_arguments[1]=="sounding") {
-		s = CblSettings::tabulated_sounding(std::stof(main_arguments[2]), (uint)std::stoul(main_arguments[3]), std::filesystem::path(main_arguments[4]), zi_option>0.0f ? zi_option : 1864.0f);
-		if(main_arguments.size()>5u) s.seed = (unsigned)std::stoul(main_arguments[5]);
-		if(main_arguments.size()>6u) s.Dx = (uint)std::stoul(main_arguments[6]);
-		if(main_arguments.size()>7u) s.Nz = (uint)std::lround(std::stof(main_arguments[7])*s.zi/s.dx)+2u; // the lid in zi (2.0 with the sponge, 3.0 without)
-		if(main_arguments.size()>8u) s.sponge_from = std::stof(main_arguments[8])*s.zi; // the sponge's start in zi (0: no sponge)
-		if(main_arguments.size()>9u) s.wind_speed = std::stof(main_arguments[9]); // m/s at 100 m, from the north
-		if(main_arguments.size()>10u) s.wind_from_deg = std::stof(main_arguments[10]);
-		if(s.wind_speed>0.0f) { // the geometry with wind: the domain twice as long north, the patch 2000 m upwind of the middle, the box 3 times longer and 4 km downwind of the patch
-			s.Ny = 2u*s.Nx; s.patch_north = 200.0f*s.dx; s.box_north = 3u*s.box; s.box_first_north = -(2.5f*(float)s.box*s.dx-0.5f*s.dx); s.Dx = 2u;
-		}
-	}
-	if(alpha_option>0.0f) {
-#ifndef SCALAR_FV
-		if(alpha_option<0.014f) print_error("--alpha below 0.014 (tauT 0.556) needs SCALAR_FV: the D3Q7 thermal lattice creates heat next to TYPE_S walls there (tests/physics/heat_conservation).");
-#endif // SCALAR_FV
-		s.alpha = alpha_option;
-	}
-	if(zi_option>0.0f&&!(main_arguments.size()>1u&&main_arguments[1]=="sounding")) print_error("--zi applies to the sounding case only.");
-	if(moist_option) {
-#ifndef MOISTURE
-		print_error("--moist needs MOISTURE: the total water is the moisture field Q.");
-#endif // MOISTURE
-		if(s.profile_qt.empty()) print_error("--moist needs the sounding case with a qt_kgkg column in its profile.");
-		s.moist = true;
-	}
-	CblRun run(s, std::filesystem::path(main_arguments[0]));
-	run.run();
+/// @brief The example's entry point, called by the core's main(): reads the command line, then prints the estimate
+/// (--estimate) or builds and runs the case.
+///
+/// This is the program's boundary: every error of the set-up or the run (a number that is not a number, a value out
+/// of its range, a file that cannot be written) ends the program with print_error() and its message, prefixed with
+/// "convective_boundary_layer: ". Nothing is thrown out of this function.
+void main_setup() { // extensions: VOLUME_FORCE TEMPERATURE SUBGRID THERMAL_DIFFUSIVITY_FIX LEVEL_FORCING MOISTURE SCALAR_FV
+    try {
+        const CommandLine c(main_arguments);
+        const CblDescription d = Cases::from(c);
+        if(c.estimate) {
+            Example::estimate(d);
+        } else {
+            Example::run(c, d);
+        }
+    } catch(const std::exception& error) { // the program's boundary: report the cause and end
+        const std::string message = std::string("convective_boundary_layer: ") + error.what();
+        print_error(message);
+    }
 }

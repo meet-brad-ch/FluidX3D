@@ -29,7 +29,9 @@ public:
 		for(const auto& triangle : triangles) {
 			const float normal[3] = { 0.0f, 0.0f, 0.0f };
 			file.write(reinterpret_cast<const char*>(normal), sizeof(normal));
-			for(const int corner : triangle) file.write(reinterpret_cast<const char*>(corners[corner]), 3 * sizeof(float));
+			for(const int corner : triangle) {
+				file.write(reinterpret_cast<const char*>(corners[corner]), 3 * sizeof(float));
+			}
 			const std::uint16_t attributes = 0u;
 			file.write(reinterpret_cast<const char*>(&attributes), sizeof(attributes));
 		}
@@ -49,27 +51,45 @@ private:
 
 /// The solid cells west and east of the lattice's middle.
 struct SolidHalves {
-	std::uint64_t west = 0u, east = 0u;
+	std::uint64_t west{ 0u }; ///< the solid cells west of the middle
+	std::uint64_t east{ 0u }; ///< the solid cells east of the middle
 };
 
 /// Voxelizes the box in a lattice of `domains` along X and counts its solid cells in each half.
 SolidHalves voxelized(const std::string& model, std::uint32_t domains) {
-	Simulation sim(Domain::around(Model(model)).clearances(0.5_m, 1.0_m, 0.3_m).cell_size(0.1_m).vram_limit(2000_mb).gpus(domains, 1u, 1u),
-	               Fluid::AIR, Speed::from_si(1.0f));
+	using namespace si::symbols;
+	const si::Length cell = 0.1 * m;
+	Domain domain = Domain::around(Model(model));
+	const si::Length clearance_below = 0.5 * m;
+	const si::Length clearance_above = 1.0 * m;
+	const si::Length clearance_sides = 0.3 * m;
+	const si::MemoryAmount memory_limit = 2000.0 * MiB;
+	domain.clearances(clearance_below, clearance_above, clearance_sides).cell_size(cell).vram_limit(memory_limit).gpus(domains, 1u, 1u);
+	const si::Speed reference_speed = 1.0 * m / s;
+	Simulation sim(domain, Fluid::AIR, reference_speed);
 	const FieldReader fields = sim.fields();
-	const float middle = 0.5f * (float)sim.lbm().get_Nx() * 0.1f;
+	const double nx = static_cast<double>(sim.lbm().get_Nx());
+	const si::Length middle = 0.5 * nx * cell;
 	SolidHalves halves;
-	fields.for_each_cell([&](const FieldReader::Cell& c) {
-		if(!c.solid) return;
-		if(c.center.x.si() < middle) halves.west++;
-		else halves.east++;
-	});
+	const std::uint64_t count{ fields.cell_count() };
+	for(std::uint64_t n{ 0u }; n < count; ++n) {
+		const FieldReader::Cell c{ fields.cell(n) };
+		if(!c.solid) {
+			continue;
+		}
+		if(c.center.x < middle) {
+			halves.west++;
+		} else {
+			halves.east++;
+		}
+	}
 	return halves;
 }
 
 } // namespace
 
 void main_setup() { // extensions: none
+	using namespace si::symbols;
 	const ResourceBox box("fluidx3d_test_sdf_domains.stl", 4.0f, 2.0f, 1.0f);
 	const SolidHalves whole = voxelized(box.name(), 1u);
 	const SolidHalves split = voxelized(box.name(), 2u);
@@ -80,5 +100,6 @@ void main_setup() { // extensions: none
 	                                   (whole.east > split.east ? whole.east - split.east : split.east - whole.east));
 	// the model in both halves, and the same cells in each: a relative difference of exactly 0 passes
 	const double error = (whole.west == 0u || whole.east == 0u) ? 1.0 : difference / total;
-	PhysicsCheck::report("SDF voxelization in two domains", error, 1E-9);
+	const double error_limit{ 1E-9 }; // exactly the same cells
+	PhysicsCheck::report("SDF voxelization in two domains", error, error_limit);
 }

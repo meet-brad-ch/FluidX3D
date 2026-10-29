@@ -1,0 +1,3 @@
+SETUP 128 x 128 x 207 cells of 10.00 m, dt 0.160 s, beta 83.7120, heat rate 3.8400e-03 per step, patch 0 cells; idealized: theta_0 300.00 K, inversion at 974 m, +8.00 K over 100 m, 0.0030 K/m above
+FINGERPRINT setup 88b7e0bbfe78550a
+RESULT 150 intervals (90 recorded) into <output folder>

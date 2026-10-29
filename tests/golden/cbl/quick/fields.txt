@@ -1,0 +1,6 @@
+Nx 128
+Ny 128
+Nz 100
+arrays u.x u.y u.z T
+order n = x + (y + z Ny) Nx, float32
+speed 0x1.f40000bb80004p+5 62.5000014

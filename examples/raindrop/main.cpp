@@ -1,56 +1,147 @@
-// Raindrop impact on sea water
+/// @file main.cpp
+/// @brief Raindrop impact on sea water: a 7 mm drop hits a pool at its terminal speed and 20 degrees from the
+/// vertical (free surface, interactive or video graphics).
 
 #include "setup/setup.hpp"
 
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <string>
+
+namespace {
+
+/// @brief One row of the original's drop table: a drop diameter and its impact speed, the terminal speed of a drop of
+/// that diameter in air.
+struct DropSize {
+	si::Length diameter{ au::ZERO };  ///< the drop's diameter
+	si::Speed impact_speed{ au::ZERO }; ///< the drop's impact (terminal) speed
+};
+
+/// @brief The drop's dimensionless numbers, printed with print_info() before the run.
+class DropNumbers {
+public:
+	/// @brief Prints the drop's diameter in m and its Weber, Froude, capillary and Bond numbers, each with 6 decimals.
+	/// @param D the drop's diameter
+	/// @param impact_speed the drop's speed at the impact
+	/// @param fluid the pool's and the drop's fluid (its density and kinematic viscosity)
+	/// @param surface_tension the fluid's surface tension, more than 0
+	/// @param gravity the gravitational acceleration, more than 0
+	static void print(si::Length D, si::Speed impact_speed, const FluidProperties& fluid, si::SurfaceTension surface_tension, si::Acceleration gravity) {
+		using namespace si::symbols;
+		const si::Density rho = fluid.density;
+		const si::KinematicViscosity nu = fluid.kinematic_viscosity;
+		const double weber = au::as_raw_number(D * impact_speed * impact_speed * rho / surface_tension); // We = d u² rho / sigma
+		const double froude = au::as_raw_number(impact_speed / au::sqrt(D * gravity));                   // Fr = u / sqrt(d g)
+		const double capillary = au::as_raw_number(impact_speed * rho * nu / surface_tension);           // Ca = u rho nu / sigma
+		const double bond = au::as_raw_number(D * D * rho * gravity / surface_tension);                  // Bo = d² rho g / sigma
+		const double D_m = D.in(m);
+		print_number("D = ", D_m);
+		print_number("We = ", weber);
+		print_number("Fr = ", froude);
+		print_number("Ca = ", capillary);
+		print_number("Bo = ", bond);
+	}
+
+private:
+	static constexpr uint printed_decimals = 6u; ///< the decimals of each printed number
+
+	/// @brief Prints one number with its label, as a float with printed_decimals decimals.
+	/// @param label the text before the number, for example "We = "
+	/// @param value the number
+	static void print_number(const std::string& label, double value) {
+		const float value_f = static_cast<float>(value);
+		const std::string text = label + to_string(value_f, printed_decimals);
+		print_info(text);
+	}
+};
+
+/// @brief The video's four cameras: two orbits from above the side (n, p), one at the level of the pool (o) and one
+/// from straight above (t).
+class RaindropCameras {
+public:
+	/// @brief Adds the four cameras to the video and sets the video's length to 20 s.
+	/// @param video the simulation's video (Simulation::video())
+	static void add(VideoRecorder& video) {
+		using namespace si::symbols;
+		const si::Angle n_azimuth = -30.0 * deg;
+		const si::Angle n_elevation = 20.0 * deg;
+		const si::Angle p_azimuth = 10.0 * deg;
+		const si::Angle p_elevation = 40.0 * deg;
+		const si::Angle o_azimuth = 0.0 * deg;
+		const si::Angle o_elevation = 0.0 * deg; // at the level of the pool
+		const si::Angle t_azimuth = 0.0 * deg;
+		const si::Angle t_elevation = 90.0 * deg; // straight down
+		const si::Angle narrow_field = 45.0 * deg;
+		const si::Duration video_length = 20.0 * s;
+		video.add("n", CameraView::orbit(n_azimuth, n_elevation))
+			.add("p", CameraView::orbit(p_azimuth, p_elevation))
+			.add("o", CameraView::orbit(o_azimuth, o_elevation).field_of_view(narrow_field))
+			.add("t", CameraView::orbit(t_azimuth, t_elevation).field_of_view(narrow_field))
+			.set_length(video_length);
+	}
+};
+
+} // namespace
+
+/// @brief Sets up a pool 2 drop diameters deep in a 4000 MiB grid (419 x 419 x 356 cells, as the original), prints
+/// the drop's Weber, Froude, capillary and Bond numbers, and records 3 ms of simulated time.
+///
+/// The lattice Mach number gives the original's lattice speed 0.05. The sides and the top above the pool drain the
+/// splashes that reach them.
+/// @throws std::out_of_range when select_drop_size is not a row of the drop table
 void main_setup() { // extensions: FP16C, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, SURFACE, INTERACTIVE_GRAPHICS or GRAPHICS
-	// drop diameters and their impact (terminal) speeds; 13 is for validation
-	const int select_drop_size = 12;
-	//                              0      1      2      3      4      5      6      7      8      9     10     11     12     13
-	const float diameters_mm[] = { 1.0f,  1.5f,  2.0f,  2.5f,  3.0f,  3.5f,  4.0f,  4.5f,  5.0f,  5.5f,  6.0f,  6.5f,  7.0f,  4.1f  };
-	const float speeds_mps[] =   { 4.50f, 5.80f, 6.80f, 7.55f, 8.10f, 8.45f, 8.80f, 9.05f, 9.20f, 9.30f, 9.40f, 9.45f, 9.55f, 7.21f };
-	const Length D = Length::from_si(1E-3f * diameters_mm[select_drop_size]);
-	const Speed impact_speed = Speed::from_si(speeds_mps[select_drop_size]);
-	const Angle inclination = 20_deg; // of the impact, 0 = vertical
-	const Duration simulation_time = 0.003_s;
-	const Acceleration gravity = 9.81_mps2;
-	const FluidProperties sea_water = { 1024.8103_kgpm3, 1.0508E-6_m2ps, {}, {} }; // at 20 °C and 35 g/l salinity
-	const SurfaceTension surface_tension = 73.81E-3_Npm;
+	using namespace si::symbols;
+	// drop diameters and their impact (terminal) speeds; row 13 is for validation
+	const std::size_t select_drop_size = 12u;
+	const si::Speed mps = 1.0 * m / s;
+	const std::array<DropSize, 14u> drop_sizes{ {
+		{ 1.0 * mm, 4.50 * mps }, { 1.5 * mm, 5.80 * mps }, { 2.0 * mm, 6.80 * mps }, { 2.5 * mm, 7.55 * mps },
+		{ 3.0 * mm, 8.10 * mps }, { 3.5 * mm, 8.45 * mps }, { 4.0 * mm, 8.80 * mps }, { 4.5 * mm, 9.05 * mps },
+		{ 5.0 * mm, 9.20 * mps }, { 5.5 * mm, 9.30 * mps }, { 6.0 * mm, 9.40 * mps }, { 6.5 * mm, 9.45 * mps },
+		{ 7.0 * mm, 9.55 * mps }, { 4.1 * mm, 7.21 * mps },
+	} };
+	const DropSize drop_size = drop_sizes.at(select_drop_size);
+	const si::Length D = drop_size.diameter;
+	const si::Speed impact_speed = drop_size.impact_speed;
+	const si::Angle inclination = 20.0 * deg; // of the impact, 0 = vertical
+	const si::Duration simulation_time = 0.003 * s;
+	const si::Acceleration gravity = 9.81 * m / (s * s);
+	const FluidProperties sea_water{ .density = 1024.8103 * kg / (m * m * m), .kinematic_viscosity = 1.0508E-6 * m * m / s }; // at 20 °C and 35 g/l salinity
+	const si::SurfaceTension surface_tension = 73.81E-3 * N / m;
 
-	Simulation sim(Domain::box(5.0f * D, 5.0f * D, 4.25f * D).vram(4000_mb), // 419 x 419 x 356 cells, as the original
-	               sea_water, impact_speed, LatticeMach(0.0866f)); // the original's lattice speed 0.05
+	const si::Length width = 5.0 * D;
+	const si::Length height = 4.25 * D;
+	const si::MemoryAmount vram = 4000.0 * MiB;
+	Domain domain = Domain::box(width, width, height); // 419 x 419 x 356 cells, as the original
+	domain.vram(vram);
+	const si::LatticeMach mach(0.0866); // the original's lattice speed 0.05
+	Simulation sim(domain, sea_water, impact_speed, mach);
 	sim.set_gravity(gravity).set_surface_tension(surface_tension);
-
-	const float d = D.si(), u = impact_speed.si(), nu = sea_water.kinematic_viscosity.si(), rho = sea_water.density.si();
-	const float sigma = surface_tension.si(), g = gravity.si();
-	print_info("D = " + to_string(d, 6u));
-	print_info("We = " + to_string(units.si_We(d, u, rho, sigma), 6u));
-	print_info("Fr = " + to_string(units.si_Fr(d, u, g), 6u));
-	print_info("Ca = " + to_string(units.si_Ca(u, rho, nu, sigma), 6u));
-	print_info("Bo = " + to_string(units.si_Bo(d, rho, g, sigma), 6u));
+	DropNumbers::print(D, impact_speed, sea_water, surface_tension, gravity);
 
 	// a pool 2 diameters deep; the drop 3 cells above it, falling at the inclination toward the domain's center
-	const Length depth = 2.0f * D, cell = sim.unit_scale().cell_size();
-	const Length width = 5.0f * D, height = 4.25f * D;
-	const float s = sinf(inclination.rad()), c = cosf(inclination.rad());
-	const Position drop { 0.5f * width, 0.5f * width - D * (s / c), depth + 0.5f * D + 3.0f * cell };
+	const si::Length depth = 2.0 * D;
+	const si::Length cell = sim.converter().cell();
+	const double sine = std::sin(inclination.in(rad));
+	const double cosine = std::cos(inclination.in(rad));
+	const si::Position drop{ 0.5 * width, 0.5 * width - D * (sine / cosine), depth + 0.5 * D + 3.0 * cell };
+	const si::Velocity drop_velocity{ si::Speed{}, sine * impact_speed, -cosine * impact_speed };
+	// the sides and the top, above the pool: splashes reaching them leave the domain
+	const Shape inner_box = Shape::box({ cell, cell, 0.0 * m }, { width - cell, width - cell, height - cell });
+	const Shape above_pool = Shape::box({ 0.0 * m, 0.0 * m, depth + 0.25 * D }, { width, width, height });
+	const Shape drain = (!inner_box) & above_pool;
 	sim.surface()
 		.set_water_level(depth)
-		.add_water(Shape::sphere(drop, 0.5f * D), { Speed{}, s * impact_speed, -c * impact_speed })
+		.add_water(Shape::sphere(drop, 0.5 * D), drop_velocity)
 		.set_solid_faces({ Face::Z_MIN })
-		// the sides and the top, above the pool: splashes reaching them leave the domain
-		.add_drain(!Shape::box({ cell, cell, 0_m }, { width - cell, width - cell, height - cell }) &
-		           Shape::box({ 0_m, 0_m, depth + 0.25f * D }, { width, width, height }))
+		.add_drain(drain)
 		.apply();
 
 	sim.graphics()
 		.show_free_surface()
 		.apply();
 
-	sim.video()
-		.add("n", CameraView::orbit(-30_deg, 20_deg))
-		.add("p", CameraView::orbit(10_deg, 40_deg))
-		.add("o", CameraView::orbit(0_deg, 0_deg).field_of_view(45_deg))
-		.add("t", CameraView::orbit(0_deg, 90_deg).field_of_view(45_deg))
-		.set_length(20.0_s);
+	RaindropCameras::add(sim.video());
 	sim.run_for(simulation_time);
 }

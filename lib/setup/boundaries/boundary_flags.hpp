@@ -1,13 +1,13 @@
 #pragma once
 
-/// A face of the domain.
+/// A face of the box: the outermost layer of cells on one side.
 enum class Face {
-    X_MIN,  ///< x = 0
-    X_MAX,  ///< x = Nx-1
-    Y_MIN,  ///< y = 0
-    Y_MAX,  ///< y = Ny-1
-    Z_MIN,  ///< z = 0
-    Z_MAX   ///< z = Nz-1
+    X_MIN,  ///< the layer x = 0 (west)
+    X_MAX,  ///< the layer x = Nx-1 (east)
+    Y_MIN,  ///< the layer y = 0 (south)
+    Y_MAX,  ///< the layer y = Ny-1 (north)
+    Z_MIN,  ///< the layer z = 0 (the floor)
+    Z_MAX   ///< the layer z = Nz-1 (the top)
 };
 
 /// A coordinate axis; Z is the height.

@@ -41,23 +41,44 @@ target_link_libraries(fluidx3d_test_core_shapes PRIVATE fluidx3d::setup)
 
 fluidx3d_add_test(fluidx3d_setup_tests
     SOURCES
-        unit/quantity_test.cpp
-        unit/unit_scale_test.cpp
-        unit/temperature_scale_test.cpp
         unit/lattice_test.cpp
         unit/geometry_scaler_test.cpp
         unit/domain_plan_test.cpp
+        unit/mesh_loader_test.cpp
         unit/domain_test.cpp
         unit/model_placement_test.cpp
         unit/camera_view_test.cpp
         unit/shape_test.cpp
+        unit/face_layer_test.cpp
         unit/step_schedule_test.cpp
+        unit/time_step_rule_test.cpp
+        unit/scalar_transport_rules_test.cpp
+        unit/boussinesq_buoyancy_test.cpp
+        unit/run_estimate_test.cpp
+        unit/units_test.cpp
+        unit/lattice_converter_test.cpp
+        unit/level_grid_test.cpp
+        unit/vertical_profile_test.cpp
+        unit/sounding_test.cpp
+        unit/moist_column_test.cpp
+        unit/wind_target_test.cpp
+        unit/sponge_profile_test.cpp
+        unit/start_noise_test.cpp
+        unit/heated_patch_test.cpp
+        unit/boundary_layer_diagnostics_test.cpp
+        unit/run_checks_test.cpp
+        unit/wind_nudging_test.cpp
+        unit/cbl_description_test.cpp
+        unit/lattice_parameters_test.cpp
     LINK
         fluidx3d::setup
         fluidx3d_test_core_shapes
 )
+# the tests' own expected values round as written, like the Setup API's (cmake/configs.cmake)
+set_target_properties(fluidx3d_setup_tests PROPERTIES FLUIDX3D_PRECISE_FLOAT ON)
 # test geometry files are written here; Model finds them relative to resources/
-target_compile_definitions(fluidx3d_setup_tests PRIVATE FLUIDX3D_TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_definitions(fluidx3d_setup_tests PRIVATE FLUIDX3D_TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+    FLUIDX3D_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden") # the frozen captures of the CBL example (golden_capture.hpp)
 
 # The SDF cache: its hash and key, and an SDF generated with SDFGen (GPU, or CPU without one) in a temp cache
 fluidx3d_add_test(fluidx3d_sdf_cache_tests

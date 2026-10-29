@@ -1,4 +1,5 @@
 #include "setup/simulation/step_schedule.hpp"
+#include "setup/core/setup_error.hpp"
 
 #include <gtest/gtest.h>
 
@@ -31,13 +32,6 @@ TEST(StepSchedule, WithoutTasksRunsToTheEnd) {
     EXPECT_EQ(StepSchedule().steps_to_next(7u, 100u), 93u);
 }
 
-TEST(StepSchedule, AnIntervalBelowOneStepIsEveryStep) {
-    StepSchedule schedule;
-    const std::size_t task = schedule.add(0u);
-    EXPECT_TRUE(schedule.is_due(task, 7u));
-    EXPECT_EQ(schedule.steps_to_next(7u, 100u), 1u);
-}
-
 TEST(StepSchedule, VisitsEveryDueStepOfARun) { // as Runner loops: tasks at the due steps, then run to the next
     StepSchedule schedule;
     const std::size_t every_4 = schedule.add(4u);
@@ -53,4 +47,22 @@ TEST(StepSchedule, VisitsEveryDueStepOfARun) { // as Runner loops: tasks at the 
     EXPECT_EQ(visited, (std::vector<std::uint64_t>{ 0u, 4u, 6u, 8u, 12u, 13u })); // the end too
     EXPECT_EQ(due_4, (std::vector<std::uint64_t>{ 0u, 4u, 8u, 12u }));
     EXPECT_EQ(due_6, (std::vector<std::uint64_t>{ 0u, 6u, 12u }));
+}
+
+// Runner::FirstCall::AFTER_ONE_INTERVAL: the first call after one interval, then as from the start
+TEST(StepSchedule, ATaskThatSkipsZeroIsFirstDueAfterOneInterval) {
+    StepSchedule schedule;
+    const std::size_t task = schedule.add(4u, true);
+    const std::size_t from_start = schedule.add(4u);
+    EXPECT_FALSE(schedule.is_due(task, 0u));
+    EXPECT_TRUE(schedule.is_due(from_start, 0u));
+    EXPECT_TRUE(schedule.is_due(task, 4u));
+    EXPECT_TRUE(schedule.is_due(task, 8u));
+    EXPECT_EQ(schedule.steps_to_next(0u, 100u), 4u);
+}
+
+// Regression for defect 15: an interval of 0 time steps is refused (it was taken as 1 without a message)
+TEST(StepSchedule, RefusesAnIntervalOfZero) {
+    StepSchedule schedule;
+    EXPECT_THROW(schedule.add(0u), SetupError);
 }

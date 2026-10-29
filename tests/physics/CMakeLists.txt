@@ -41,6 +41,23 @@ fluidx3d_add_physics_test(eddy_heat_diffusivity EXTENSIONS EQUILIBRIUM_BOUNDARIE
 fluidx3d_add_physics_test(thermal_diffusivity EXTENSIONS TEMPERATURE)
 # The same test with THERMAL_DIFFUSIVITY_FIX: alpha is the diffusivity
 fluidx3d_add_physics_test(thermal_diffusivity_fix SOURCE thermal_diffusivity EXTENSIONS TEMPERATURE THERMAL_DIFFUSIVITY_FIX)
+# The Setup API gives the core the alpha that makes it diffuse with the fluid's diffusivity, in all three builds
+fluidx3d_add_physics_test(thermal_diffusivity_api EXTENSIONS TEMPERATURE)
+fluidx3d_add_physics_test(thermal_diffusivity_api_fix SOURCE thermal_diffusivity_api EXTENSIONS TEMPERATURE THERMAL_DIFFUSIVITY_FIX)
+fluidx3d_add_physics_test(thermal_diffusivity_api_fv SOURCE thermal_diffusivity_api EXTENSIONS TEMPERATURE THERMAL_DIFFUSIVITY_FIX SCALAR_FV)
+# An atmosphere through the Setup API: the time step rule, the given diffusivities, the Boussinesq buoyancy
+fluidx3d_add_physics_test(atmosphere_setup EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX)
+# The atmosphere's middle layer gives the verified CBL example's set-up (its FINGERPRINT) on the golden cases; like the
+# example, its own code without fast math (cmake/configs.cmake)
+fluidx3d_add_physics_test(atmosphere_column EXTENSIONS VOLUME_FORCE TEMPERATURE SUBGRID THERMAL_DIFFUSIVITY_FIX LEVEL_FORCING MOISTURE SCALAR_FV)
+set_target_properties(physics_atmosphere_column_setup PROPERTIES FLUIDX3D_PRECISE_FLOAT ON)
+target_include_directories(physics_atmosphere_column_setup PRIVATE ${PROJECT_SOURCE_DIR}/tests/unit) # golden_capture.hpp
+target_compile_definitions(physics_atmosphere_column_setup PRIVATE FLUIDX3D_GOLDEN_DIR="${PROJECT_SOURCE_DIR}/tests/golden")
+# ... and its runs give the example's profiles.csv byte for byte
+fluidx3d_add_physics_test(atmosphere_profiles EXTENSIONS VOLUME_FORCE TEMPERATURE SUBGRID THERMAL_DIFFUSIVITY_FIX LEVEL_FORCING MOISTURE SCALAR_FV TIMEOUT 900)
+set_target_properties(physics_atmosphere_profiles_setup PROPERTIES FLUIDX3D_PRECISE_FLOAT ON)
+target_include_directories(physics_atmosphere_profiles_setup PRIVATE ${PROJECT_SOURCE_DIR}/tests/unit) # golden_capture.hpp
+target_compile_definitions(physics_atmosphere_profiles_setup PRIVATE FLUIDX3D_GOLDEN_DIR="${PROJECT_SOURCE_DIR}/tests/golden")
 # The per-level forcing: the wind nudging, the sponge's damping and temperature relaxation, two domains against one
 fluidx3d_add_physics_test(level_forcing EXTENSIONS VOLUME_FORCE TEMPERATURE LEVEL_FORCING)
 fluidx3d_add_physics_test(level_forcing_fix SOURCE level_forcing EXTENSIONS VOLUME_FORCE TEMPERATURE THERMAL_DIFFUSIVITY_FIX LEVEL_FORCING)

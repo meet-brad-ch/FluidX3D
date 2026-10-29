@@ -9,43 +9,48 @@
 
 namespace {
 
-constexpr LatticeMemory d3q19_fp16 { 55u };
-constexpr GeometryScaler::Clearances no_clearances { 0.0f, 0.0f, 0.0f };
-constexpr GeometryScaler::Clearances wide_clearances { 0.0f, 10.0f, 10.0f }; // bottom, top, sides in m
+using namespace si::symbols;
+
+constexpr LatticeMemory d3q19_fp16 { au::bytes(55.0) };
+const GeometryScaler::Clearances no_clearances{};
+const GeometryScaler::Clearances wide_clearances{ .bottom = 0.0 * m, .top = 10.0 * m, .sides = 10.0 * m };
+const si::Length cell_10cm{ 0.1 * m };
 
 TEST(GeometryScaler, ReadsTheGeometrySizeInMetres) {
     const BoxStl box("fluidx3d_test_box_size.stl", 4.0f, 2.0f, 1.0f);
-    const GeometryScaler scaler(box.path(), 0.1f, 20000u, no_clearances, d3q19_fp16);
-    EXPECT_NEAR(scaler.get_stl_size_meters().x, 4.0f, 1e-5f);
-    EXPECT_NEAR(scaler.get_stl_size_meters().y, 2.0f, 1e-5f);
-    EXPECT_NEAR(scaler.get_stl_size_meters().z, 1.0f, 1e-5f);
-    EXPECT_NEAR(scaler.get_reference_size_meters(), 2.0f, 1e-5f); // reference axis Y
+    const GeometryScaler scaler(box.path(), cell_10cm, 20000.0 * MiB, no_clearances, d3q19_fp16);
+    const si::Position size{ scaler.stl_size() };
+    EXPECT_NEAR(size.x.in(m), 4.0, 1e-5);
+    EXPECT_NEAR(size.y.in(m), 2.0, 1e-5);
+    EXPECT_NEAR(size.z.in(m), 1.0, 1e-5);
+    EXPECT_NEAR(scaler.reference_length().in(m), 2.0, 1e-5); // reference axis Y
 }
 
 // Measured as the core voxelizes it, after the rotation (ahmed_body's domain had its X and Y swapped).
 TEST(GeometryScaler, MeasuresTheRotatedGeometry) {
     const BoxStl box("fluidx3d_test_box_rotated.stl", 4.0f, 2.0f, 1.0f);
-    const GeometryScaler scaler(box.path(), 0.1f, 20000u, no_clearances, d3q19_fp16, float3x3(float3(0, 0, 1), radians(90.0f)));
-    EXPECT_NEAR(scaler.get_stl_size_meters().x, 2.0f, 1e-5f);
-    EXPECT_NEAR(scaler.get_stl_size_meters().y, 4.0f, 1e-5f);
-    EXPECT_NEAR(scaler.get_stl_size_meters().z, 1.0f, 1e-5f);
+    const GeometryScaler scaler(box.path(), cell_10cm, 20000.0 * MiB, no_clearances, d3q19_fp16, float3x3(float3(0, 0, 1), radians(90.0f)));
+    const si::Position size{ scaler.stl_size() };
+    EXPECT_NEAR(size.x.in(m), 2.0, 1e-5);
+    EXPECT_NEAR(size.y.in(m), 4.0, 1e-5);
+    EXPECT_NEAR(size.z.in(m), 1.0, 1e-5);
 }
 
 TEST(GeometryScaler, CellSizeModeCountsCellsFromTheCellSize) {
     const BoxStl box("fluidx3d_test_box_cells.stl", 4.0f, 2.0f, 1.0f);
-    const GeometryScaler scaler(box.path(), 0.1f, 20000u, no_clearances, d3q19_fp16);
-    const uint3 cells = scaler.get_stl_size_cells();
+    const GeometryScaler scaler(box.path(), cell_10cm, 20000.0 * MiB, no_clearances, d3q19_fp16);
+    const uint3 cells = scaler.stl_cells();
     EXPECT_EQ(cells.x, 40u);
     EXPECT_EQ(cells.y, 20u);
     EXPECT_EQ(cells.z, 10u);
-    EXPECT_FLOAT_EQ(scaler.get_reference_size_cells(), 20.0f);
-    EXPECT_FLOAT_EQ(scaler.get_scale_factor(), 0.1f);
+    EXPECT_FLOAT_EQ(scaler.reference_cells(), 20.0f);
+    EXPECT_EQ(scaler.cell_size().in(m), static_cast<double>(0.1f)); // the scaler's float metres
 }
 
 TEST(GeometryScaler, ClearancesAddCellsAroundTheGeometry) {
     const BoxStl box("fluidx3d_test_box_clearance.stl", 4.0f, 2.0f, 1.0f);
-    const GeometryScaler scaler(box.path(), 0.1f, 20000u, no_clearances, d3q19_fp16);
-    const GeometryScaler::Clearances clearances { 0.5f, 1.0f, 0.3f }; // bottom, top, sides in m
+    const GeometryScaler scaler(box.path(), cell_10cm, 20000.0 * MiB, no_clearances, d3q19_fp16);
+    const GeometryScaler::Clearances clearances{ .bottom = 0.5 * m, .top = 1.0 * m, .sides = 0.3 * m };
     const uint3 domain = scaler.calculate_domain_size(clearances);
     EXPECT_EQ(domain.x, 40u + 2u * 3u);
     EXPECT_EQ(domain.y, 20u + 2u * 3u);
@@ -58,28 +63,30 @@ TEST(GeometryScaler, ClearancesAddCellsAroundTheGeometry) {
 
 TEST(GeometryScaler, VramModeFitsGeometryAndClearancesIntoTheBudget) {
     const BoxStl box("fluidx3d_test_box_vram.stl", 4.0f, 2.0f, 1.0f);
-    const GeometryScaler::Clearances clearances { 0.5f, 1.0f, 0.3f };
-    const std::uint32_t budget_mb = 100u;
-    const GeometryScaler scaler(box.path(), budget_mb, clearances, d3q19_fp16);
+    const GeometryScaler::Clearances clearances{ .bottom = 0.5 * m, .top = 1.0 * m, .sides = 0.3 * m };
+    const si::MemoryAmount budget{ 100.0 * MiB };
+    const GeometryScaler scaler(box.path(), budget, clearances, d3q19_fp16);
     const uint3 domain = scaler.calculate_domain_size(clearances);
-    const std::uint64_t used_mb = required_memory_mb({ domain.x, domain.y, domain.z }, d3q19_fp16);
-    EXPECT_LE(used_mb, budget_mb + 2u); // whole cells: rounding the clearances can add a little
-    EXPECT_GE(used_mb, budget_mb * 9u / 10u);
-    EXPECT_NEAR(scaler.get_scale_factor() * (float)scaler.get_stl_size_cells().y, 2.0f, scaler.get_scale_factor());
+    const si::MemoryAmount used{ d3q19_fp16.required_memory({ domain.x, domain.y, domain.z }) };
+    EXPECT_LE(used, 102.0 * MiB); // whole cells: rounding the clearances can add a little
+    EXPECT_GE(used, 90.0 * MiB);
+    const double cell_m{ scaler.cell_size().in(m) };
+    const double cells_y{ static_cast<double>(scaler.stl_cells().y) };
+    EXPECT_NEAR(cell_m * cells_y, 2.0, cell_m);
 }
 
 // Regression for review A8: the cell-size mode checked only the geometry's own cells against the memory limit.
 TEST(GeometryScaler, CellSizeModeCountsTheClearancesInTheMemoryLimit) {
     const BoxStl box("fluidx3d_test_box_limit.stl", 4.0f, 2.0f, 1.0f);
     // 0.1 m cells: 40 x 20 x 10 cells alone (0.4 MB); with the clearances 240 x 220 x 110 cells (304 MB)
-    EXPECT_NO_THROW(GeometryScaler(box.path(), 0.1f, 100u, no_clearances, d3q19_fp16));
-    EXPECT_THROW(GeometryScaler(box.path(), 0.1f, 100u, wide_clearances, d3q19_fp16), SetupError);
+    EXPECT_NO_THROW(GeometryScaler(box.path(), cell_10cm, 100.0 * MiB, no_clearances, d3q19_fp16));
+    EXPECT_THROW(GeometryScaler(box.path(), cell_10cm, 100.0 * MiB, wide_clearances, d3q19_fp16), SetupError);
 }
 
 TEST(GeometryScaler, MemoryLimitErrorNamesTheNumbersAndACellSizeThatFits) {
     const BoxStl box("fluidx3d_test_box_message.stl", 4.0f, 2.0f, 1.0f);
     try {
-        GeometryScaler(box.path(), 0.1f, 100u, wide_clearances, d3q19_fp16);
+        GeometryScaler(box.path(), cell_10cm, 100.0 * MiB, wide_clearances, d3q19_fp16);
         FAIL() << "expected a SetupError";
     } catch(const SetupError& error) {
         const std::string message = error.what();
@@ -89,13 +96,14 @@ TEST(GeometryScaler, MemoryLimitErrorNamesTheNumbersAndACellSizeThatFits) {
     }
     // the suggestion: (24 x 22 x 11 m³ / cells in 100 MB)^(1/3) = 0.145 m; a little larger fits
     const float min_cell_size = std::cbrt(24.0f * 22.0f * 11.0f / (100.0f * 1048576.0f / 55.0f));
-    EXPECT_NO_THROW(GeometryScaler(box.path(), 1.05f * min_cell_size, 100u, wide_clearances, d3q19_fp16));
+    const double larger_cell_m{ static_cast<double>(1.05f * min_cell_size) };
+    EXPECT_NO_THROW(GeometryScaler(box.path(), larger_cell_m * m, 100.0 * MiB, wide_clearances, d3q19_fp16));
 }
 
 TEST(GeometryScaler, MissingStlThrows) {
     const std::string missing = (std::filesystem::temp_directory_path() / "fluidx3d_test_missing.stl").string();
-    EXPECT_THROW(GeometryScaler(missing, 0.1f, 100u, no_clearances, d3q19_fp16), SetupError);
-    EXPECT_THROW(GeometryScaler(missing, 100u, no_clearances, d3q19_fp16), SetupError);
+    EXPECT_THROW(GeometryScaler(missing, cell_10cm, 100.0 * MiB, no_clearances, d3q19_fp16), SetupError);
+    EXPECT_THROW(GeometryScaler(missing, 100.0 * MiB, no_clearances, d3q19_fp16), SetupError);
 }
 
 } // namespace

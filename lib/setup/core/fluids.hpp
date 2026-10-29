@@ -1,33 +1,46 @@
 #pragma once
 
 #include "setup/core/types.hpp"
-#include "setup/core/quantity.hpp"
+#include "setup/units/units.hpp"
 
-/// @brief Material properties of a fluid.
+/// @file fluids.hpp
+/// @brief The material properties of a fluid (FluidProperties) and two common fluids (Fluid::AIR, Fluid::WATER).
+
+/// @brief The material properties of a fluid: what Simulation needs to set the lattice density, the viscosity, the
+/// thermal diffusivity and the buoyancy.
 ///
-/// A custom fluid: FluidProperties{ .density = 1260_kgpm3, .kinematic_viscosity = 1.12E-3_m2ps }.
+/// A custom fluid (here a glycerine):
+/// @code
+/// using namespace si::symbols;
+/// const FluidProperties glycerine{ .density = 1260.0 * kg / (m * m * m), .kinematic_viscosity = 1.12E-3 * m * m / s };
+/// @endcode
 struct FluidProperties {
-    Density density;                        ///< kg/m³
-    KinematicViscosity kinematic_viscosity; ///< m²/s
-    KinematicViscosity thermal_diffusivity; ///< m²/s, alpha = k/(rho*cp)
-    ThermalExpansion thermal_expansion;     ///< 1/K, beta
+    si::Density density{ au::ZERO };                        ///< the density, which becomes the lattice density 1
+    si::KinematicViscosity kinematic_viscosity{ au::ZERO }; ///< the kinematic viscosity nu
+    si::KinematicViscosity thermal_diffusivity{ au::ZERO }; ///< the thermal diffusivity alpha = k / (rho cp)
+    si::ThermalExpansion thermal_expansion{ au::ZERO };     ///< the thermal expansion coefficient beta
 
-    /// @brief The same fluid with another viscosity, e.g. to match a Reynolds number: Fluid::WATER.with_viscosity(u * L / Re).
+    /// @brief Gives the same fluid with another viscosity, for example to match a Reynolds number:
+    /// Fluid::WATER.with_viscosity(u * L / Re).
     /// @param viscosity the kinematic viscosity of the copy
     /// @return a copy of this fluid with that viscosity
-    constexpr FluidProperties with_viscosity(KinematicViscosity viscosity) const {
-        FluidProperties fluid = *this;
+    constexpr FluidProperties with_viscosity(si::KinematicViscosity viscosity) const {
+        FluidProperties fluid{ *this };
         fluid.kinematic_viscosity = viscosity;
         return fluid;
     }
 };
 
-/// Fluids at 20 °C and 1 atm: Fluid::AIR, Fluid::WATER.
+/// @brief Two fluids at 20 °C and 1 atm: Fluid::AIR and Fluid::WATER.
 struct Fluid {
-    /// Air, Prandtl number 0.71.
-    static constexpr FluidProperties AIR = { Density::from_si(1.225f), KinematicViscosity::from_si(1.48e-5f),
-                                             KinematicViscosity::from_si(2.08e-5f), ThermalExpansion::from_si(0.00341f) };
-    /// Water, Prandtl number 7.0.
-    static constexpr FluidProperties WATER = { Density::from_si(998.2f), KinematicViscosity::from_si(1.004e-6f),
-                                               KinematicViscosity::from_si(1.43e-7f), ThermalExpansion::from_si(0.000207f) };
+    /// Air: Prandtl number 0.71.
+    static constexpr FluidProperties AIR{ .density = (si::kilograms / au::cubed(au::meters))(1.225),
+                                          .kinematic_viscosity = (au::squared(au::meters) / au::seconds)(1.48e-5),
+                                          .thermal_diffusivity = (au::squared(au::meters) / au::seconds)(2.08e-5),
+                                          .thermal_expansion = (au::inverse(au::kelvins))(0.00341) };
+    /// Water: Prandtl number 7.0.
+    static constexpr FluidProperties WATER{ .density = (si::kilograms / au::cubed(au::meters))(998.2),
+                                            .kinematic_viscosity = (au::squared(au::meters) / au::seconds)(1.004e-6),
+                                            .thermal_diffusivity = (au::squared(au::meters) / au::seconds)(1.43e-7),
+                                            .thermal_expansion = (au::inverse(au::kelvins))(0.000207) };
 };

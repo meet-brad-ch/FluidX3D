@@ -12,10 +12,20 @@ function(fluidx3d_add_header_check variant)
     fluidx3d_configure_defines(${dir} EXTENSIONS ${ARG_EXTENSIONS})
     set(sources)
     foreach(header IN LISTS fluidx3d_setup_headers)
-        # a header that needs an extension this variant lacks stops with its #error "... needs <EXTENSION> ..."
+        # a header that needs extensions this variant lacks stops with its #error "... needs <EXTENSION>[, <EXTENSION>
+        # and <EXTENSION>] in the EXTENSIONS"
         file(STRINGS ${PROJECT_SOURCE_DIR}/lib/${header} needs REGEX "^#error \".* needs [A-Z_]+")
-        if(needs MATCHES "needs ([A-Z_]+)" AND NOT CMAKE_MATCH_1 IN_LIST ARG_EXTENSIONS)
-            continue()
+        if(needs MATCHES "needs ([A-Z0-9_, ]+(and [A-Z0-9_]+)?)")
+            string(REGEX MATCHALL "[A-Z][A-Z0-9_]+" needed "${CMAKE_MATCH_1}")
+            set(missing FALSE)
+            foreach(extension IN LISTS needed)
+                if(NOT extension IN_LIST ARG_EXTENSIONS)
+                    set(missing TRUE)
+                endif()
+            endforeach()
+            if(missing)
+                continue()
+            endif()
         endif()
         string(MAKE_C_IDENTIFIER ${header} source_name)
         file(CONFIGURE OUTPUT ${dir}/${source_name}.cpp CONTENT "#include \"${header}\"\n#include \"${header}\"\n")
@@ -29,3 +39,6 @@ endfunction()
 fluidx3d_add_header_check(all_extensions EXTENSIONS
     VOLUME_FORCE FORCE_FIELD EQUILIBRIUM_BOUNDARIES MOVING_BOUNDARIES SURFACE TEMPERATURE SUBGRID PARTICLES GRAPHICS)
 fluidx3d_add_header_check(no_extensions)
+# the convection extensions of this fork: the atmosphere headers
+fluidx3d_add_header_check(convection EXTENSIONS
+    VOLUME_FORCE TEMPERATURE SUBGRID THERMAL_DIFFUSIVITY_FIX LEVEL_FORCING MOISTURE SCALAR_FV)

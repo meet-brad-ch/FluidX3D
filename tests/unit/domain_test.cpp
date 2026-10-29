@@ -10,14 +10,16 @@
 
 namespace {
 
-constexpr LatticeMemory d3q19_fp16 { 55u };
-constexpr LatticeMemory d3q19_fp16_surface { 67u };
+using namespace si::symbols;
+
+constexpr LatticeMemory d3q19_fp16 { au::bytes(55.0) };
+constexpr LatticeMemory d3q19_fp16_surface { au::bytes(67.0) };
 
 TEST(Domain, AroundAModelKeepsTheClearances) {
     const BoxStl box(test_file("fluidx3d_test_domain_around.stl"), 4.0f, 2.0f, 1.0f);
     const std::string file = resource_name(box.path());
     const DomainPlan plan = DomainPlanner::plan(
-        Domain::around(Model(file).rotation(0_deg, 0_deg, 90_deg)).clearances(0.5_m, 1.0_m, 0.3_m).cell_size(0.1_m).vram_limit(20_gb),
+        Domain::around(Model(file).rotation(0.0 * deg, 0.0 * deg, 90.0 * deg)).clearances(0.5 * m, 1.0 * m, 0.3 * m).cell_size(0.1 * m).vram_limit(20.0 * GiB),
         d3q19_fp16);
     EXPECT_EQ(plan.Nx, 20u + 6u); // measured after the rotation: 2 m along X, 4 m along Y
     EXPECT_EQ(plan.Ny, 40u + 6u);
@@ -31,34 +33,34 @@ TEST(Domain, AroundAModelKeepsTheClearances) {
 TEST(Domain, VramBudgetAroundAModel) {
     const BoxStl box(test_file("fluidx3d_test_domain_vram.stl"), 4.0f, 2.0f, 1.0f);
     const std::string file = resource_name(box.path());
-    const DomainPlan plan = DomainPlanner::plan(Domain::around(Model(file)).clearances(0.0_m, 1.0_m, 2.6_m).vram(100_mb), d3q19_fp16);
-    const std::uint64_t used_mb = required_memory_mb({ plan.Nx, plan.Ny, plan.Nz }, d3q19_fp16);
-    EXPECT_LE(used_mb, 102u); // whole cells: rounding the clearances can add a little
-    EXPECT_GE(used_mb, 90u);
+    const DomainPlan plan = DomainPlanner::plan(Domain::around(Model(file)).clearances(0.0 * m, 1.0 * m, 2.6 * m).vram(100.0 * MiB), d3q19_fp16);
+    const si::MemoryAmount used{ d3q19_fp16.required_memory({ plan.Nx, plan.Ny, plan.Nz }) };
+    EXPECT_LE(used, 102.0 * MiB); // whole cells: rounding the clearances can add a little
+    EXPECT_GE(used, 90.0 * MiB);
 }
 
 TEST(Domain, ConflictingSettingsThrow) {
-    EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).clearances(0_m, 0_m, 0_m).validate(), SetupError);
-    EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).vram(1_gb).vram_limit(2_gb).validate(), SetupError);
-    EXPECT_THROW(Domain::around(Model("any.stl")).vram(1_gb).cell_size(1_cm).validate(), SetupError);
-    EXPECT_NO_THROW(Domain::box(1_m, 1_m, 1_m).vram(1_gb).validate());
+    EXPECT_THROW(Domain::box(1.0 * m, 1.0 * m, 1.0 * m).clearances(0.0 * m, 0.0 * m, 0.0 * m).validate(), SetupError);
+    EXPECT_THROW(Domain::box(1.0 * m, 1.0 * m, 1.0 * m).vram(1.0 * GiB).vram_limit(2.0 * GiB).validate(), SetupError);
+    EXPECT_THROW(Domain::around(Model("any.stl")).vram(1.0 * GiB).cell_size(1.0 * cm).validate(), SetupError);
+    EXPECT_NO_THROW(Domain::box(1.0 * m, 1.0 * m, 1.0 * m).vram(1.0 * GiB).validate());
 }
 
 // A cell size gives whole cells along each side, as an original example's fixed grid (dam_break: 128 x 256 x 256).
 TEST(Domain, BoxWithACellSizeHasWholeCells) {
-    const DomainPlan plan = DomainPlanner::plan(Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(1.0_m / 256.0f), d3q19_fp16_surface);
+    const DomainPlan plan = DomainPlanner::plan(Domain::box(0.5 * m, 1.0 * m, 1.0 * m).cell_size(1.0 * m / 256.0f), d3q19_fp16_surface);
     EXPECT_EQ(plan.Nx, 128u);
     EXPECT_EQ(plan.Ny, 256u);
     EXPECT_EQ(plan.Nz, 256u);
     // 8.4 M cells need 536 MB
-    EXPECT_THROW(DomainPlanner::plan(Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(1.0_m / 256.0f).vram_limit(100_mb), d3q19_fp16_surface), SetupError);
-    EXPECT_THROW(DomainPlanner::plan(Domain::box(0.5_m, 1.0_m, 1.0_m).cell_size(2_m), d3q19_fp16_surface), SetupError);
+    EXPECT_THROW(DomainPlanner::plan(Domain::box(0.5 * m, 1.0 * m, 1.0 * m).cell_size(1.0 * m / 256.0f).vram_limit(100.0 * MiB), d3q19_fp16_surface), SetupError);
+    EXPECT_THROW(DomainPlanner::plan(Domain::box(0.5 * m, 1.0 * m, 1.0 * m).cell_size(2.0 * m), d3q19_fp16_surface), SetupError);
 }
 
 TEST(Domain, SizeWithACellSizeHasWholeCells) {
     const BoxStl box(test_file("fluidx3d_test_domain_cells.stl"), 4.0f, 2.0f, 1.0f);
     const std::string file = resource_name(box.path());
-    const DomainPlan plan = DomainPlanner::plan(Domain::around(Model(file).length(1.0_m)).size(2_m, 4_m, 1_m).cell_size(0.05_m), d3q19_fp16);
+    const DomainPlan plan = DomainPlanner::plan(Domain::around(Model(file).length(1.0 * m)).size(2.0 * m, 4.0 * m, 1.0 * m).cell_size(0.05 * m), d3q19_fp16);
     EXPECT_EQ(plan.Nx, 40u);
     EXPECT_EQ(plan.Ny, 80u);
     EXPECT_EQ(plan.Nz, 20u);
@@ -70,11 +72,11 @@ TEST(Domain, OnFloorPutsTheModelOneCellAboveZeroZ) {
     const BoxStl box(test_file("fluidx3d_test_domain_floor.stl"), 4.0f, 2.0f, 1.0f);
     const std::string file = resource_name(box.path());
     const DomainPlan plan = DomainPlanner::plan(
-        Domain::around(Model(file).length(1.2_m)).size(1.2_m, 2.4_m, 1.2_m).on_floor().vram(100_mb), d3q19_fp16);
+        Domain::around(Model(file).length(1.2 * m)).size(1.2 * m, 2.4 * m, 1.2 * m).on_floor().vram(100.0 * MiB), d3q19_fp16);
     const float half_height = 0.5f * 0.5f * plan.lbm_reference_size; // 1 of the box's 2 STL units along Y, halved
     EXPECT_NEAR(plan.center_lbm.z, 1.0f + half_height, 1e-3f);
-    EXPECT_THROW(Domain::around(Model(file).length(1.2_m)).size(1.2_m, 2.4_m, 1.2_m).on_floor().gap_to_floor(1_cm).validate(), SetupError);
-    EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).on_floor().validate(), SetupError); // no model to place
+    EXPECT_THROW(Domain::around(Model(file).length(1.2 * m)).size(1.2 * m, 2.4 * m, 1.2 * m).on_floor().gap_to_floor(1.0 * cm).validate(), SetupError);
+    EXPECT_THROW(Domain::box(1.0 * m, 1.0 * m, 1.0 * m).on_floor().validate(), SetupError); // no model to place
 }
 
 // Model::length() is the extent along its axis. The core's voxelizer scales the longest side, so the plan converts:
@@ -82,11 +84,11 @@ TEST(Domain, OnFloorPutsTheModelOneCellAboveZeroZ) {
 TEST(Domain, LengthIsTheExtentAlongItsAxis) {
     const BoxStl box(test_file("fluidx3d_test_domain_axis.stl"), 4.0f, 2.0f, 1.0f);
     const std::string file = resource_name(box.path());
-    const DomainPlan along_y = DomainPlanner::plan(Domain::around(Model(file).length(1.0_m, Axis::Y)).size(4_m, 4_m, 2_m).vram(100_mb), d3q19_fp16);
+    const DomainPlan along_y = DomainPlanner::plan(Domain::around(Model(file).length(1.0 * m, Axis::Y)).size(4.0 * m, 4.0 * m, 2.0 * m).vram(100.0 * MiB), d3q19_fp16);
     EXPECT_FLOAT_EQ(along_y.lbm_reference_size, 0.25f * (float)along_y.Ny); // 1 m of the 4 m domain length
     EXPECT_NEAR(along_y.voxel_size, 2.0f * along_y.lbm_reference_size, 1e-3f);
-    EXPECT_FLOAT_EQ(along_y.si_reference_size, 1.0f);
-    const DomainPlan along_x = DomainPlanner::plan(Domain::around(Model(file).length(2.0_m, Axis::X)).size(4_m, 4_m, 2_m).vram(100_mb), d3q19_fp16);
+    EXPECT_FLOAT_EQ(static_cast<float>(along_y.reference_length.in(m)), 1.0f);
+    const DomainPlan along_x = DomainPlanner::plan(Domain::around(Model(file).length(2.0 * m, Axis::X)).size(4.0 * m, 4.0 * m, 2.0 * m).vram(100.0 * MiB), d3q19_fp16);
     EXPECT_EQ(along_x.voxel_size, along_x.lbm_reference_size); // the longest side: exactly the core's size
     EXPECT_NEAR(along_x.voxel_size, along_y.voxel_size, 1e-3f);  // the same model size either way
 }
@@ -96,19 +98,19 @@ TEST(Domain, LengthIsTheExtentAlongItsAxis) {
 TEST(Domain, LengthIsMeasuredBeforeTheAngleOfAttack) {
     const BoxStl box(test_file("fluidx3d_test_domain_pitch.stl"), 1.0f, 4.0f, 1.0f);
     const std::string file = resource_name(box.path());
-    const DomainPlan plan = DomainPlanner::plan(Domain::around(Model(file).angle_of_attack(30_deg).length(4.0_m)).size(8_m, 8_m, 8_m).vram(100_mb), d3q19_fp16);
+    const DomainPlan plan = DomainPlanner::plan(Domain::around(Model(file).angle_of_attack(30.0 * deg).length(4.0 * m)).size(8.0 * m, 8.0 * m, 8.0 * m).vram(100.0 * MiB), d3q19_fp16);
     const float pitched = 4.0f * std::cos(0.5235988f) + 1.0f * std::sin(0.5235988f);
     EXPECT_NEAR(plan.voxel_size, plan.lbm_reference_size * pitched / 4.0f, 1e-2f);
 }
 
 TEST(Domain, SizeAndPlacementNeedTheirCounterparts) {
-    EXPECT_THROW(Domain::around(Model("any.stl")).size(1_m, 2_m, 1_m).validate(), SetupError); // no Model::length()
-    EXPECT_THROW(Domain::around(Model("any.stl").length(1_m)).size(1_m, 2_m, 1_m).clearances(0_m, 0_m, 0_m).validate(), SetupError);
-    EXPECT_THROW(Domain::around(Model("any.stl").length(1_m)).size(1_m, 2_m, 1_m).model_offset(0_m, 0_m, 0_m).gap_to_inlet(1_m).validate(), SetupError);
-    EXPECT_THROW(Domain::around(Model("any.stl").length(1_m)).clearances(0_m, 0_m, 0_m).validate(), SetupError); // length() is for size()
-    EXPECT_THROW(Domain::around(Model("any.stl")).clearances(0_m, 0_m, 0_m).gap_to_inlet(1_m).validate(), SetupError); // placement needs size()
-    EXPECT_THROW(Domain::box(1_m, 1_m, 1_m).model_offset(0_m, 0_m, 0_m).validate(), SetupError); // no model to place
-    EXPECT_NO_THROW(Domain::around(Model("any.stl").length(1_m)).size(1_m, 2_m, 1_m).gap_to_inlet(0.1_m).validate());
+    EXPECT_THROW(Domain::around(Model("any.stl")).size(1.0 * m, 2.0 * m, 1.0 * m).validate(), SetupError); // no Model::length()
+    EXPECT_THROW(Domain::around(Model("any.stl").length(1.0 * m)).size(1.0 * m, 2.0 * m, 1.0 * m).clearances(0.0 * m, 0.0 * m, 0.0 * m).validate(), SetupError);
+    EXPECT_THROW(Domain::around(Model("any.stl").length(1.0 * m)).size(1.0 * m, 2.0 * m, 1.0 * m).model_offset(0.0 * m, 0.0 * m, 0.0 * m).gap_to_inlet(1.0 * m).validate(), SetupError);
+    EXPECT_THROW(Domain::around(Model("any.stl").length(1.0 * m)).clearances(0.0 * m, 0.0 * m, 0.0 * m).validate(), SetupError); // length() is for size()
+    EXPECT_THROW(Domain::around(Model("any.stl")).clearances(0.0 * m, 0.0 * m, 0.0 * m).gap_to_inlet(1.0 * m).validate(), SetupError); // placement needs size()
+    EXPECT_THROW(Domain::box(1.0 * m, 1.0 * m, 1.0 * m).model_offset(0.0 * m, 0.0 * m, 0.0 * m).validate(), SetupError); // no model to place
+    EXPECT_NO_THROW(Domain::around(Model("any.stl").length(1.0 * m)).size(1.0 * m, 2.0 * m, 1.0 * m).gap_to_inlet(0.1 * m).validate());
 }
 
 TEST(Model, RequiredFilesAndInstructionsAreKept) {

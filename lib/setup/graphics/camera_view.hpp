@@ -1,89 +1,109 @@
 #pragma once
 #include "utilities.hpp"
-#include "setup/core/quantity.hpp"
+#include "setup/units/units.hpp"
+#include "setup/units/vector3.hpp"
 #include <optional>
 
-/// The core's camera parameters, as LBM::Graphics::set_camera_free() and set_camera_centered() take them.
+/// @file camera_view.hpp
+/// @brief A camera in physical units (CameraView) and the core's camera numbers it gives (CameraPose).
+
+/// @brief The core's camera numbers, as LBM::Graphics::set_camera_free() and set_camera_centered() take them.
 struct CameraPose {
-    bool free = false;            ///< set_camera_free(); otherwise set_camera_centered()
-    float3 position{};            ///< free: in cells from the domain's center (the core's coordinates)
-    float azimuth = 0.0f;         ///< degrees (the core's rx)
-    float elevation = 0.0f;       ///< degrees (the core's ry)
-    float field_of_view = 100.0f; ///< degrees
-    float zoom = 1.0f;            ///< centered: at 1 the frame's smaller side spans the domain's longest side
+    /// The core's field of view of a pose made without a CameraView, in degrees (as CameraView's default).
+    static constexpr float default_field_of_view_deg{ 100.0f };
+
+    bool free = false;            ///< true: set_camera_free() at position; false: set_camera_centered()
+    float3 position{};            ///< free: the camera's position in cells from the domain's centre (the core's coordinates)
+    float azimuth = 0.0f;         ///< the azimuth in degrees (the core's rx)
+    float elevation = 0.0f;       ///< the elevation in degrees (the core's ry)
+    float field_of_view = default_field_of_view_deg; ///< the horizontal field of view in degrees
+    float zoom = 1.0f;            ///< centred: at 1 the frame's smaller side spans the domain's longest side
 };
 
 /// @brief A camera for pictures and videos in physical units.
 ///
-/// Its angles give the direction from what it looks at to the camera: the azimuth about Z from +X toward +Y and the
-/// elevation above the horizontal. An orbit() camera circles the domain's center and looks at it; an at() camera stands
-/// at a position in metres from the domain's origin corner.
+/// Its angles give the direction from what it looks at to the camera: the azimuth about Z from +X toward +Y, and the
+/// elevation above the horizontal. An orbit() camera circles the domain's centre and looks at it; an at() camera
+/// stands at a position in metres from the domain's origin corner.
 /// @code
-/// CameraView::orbit(-40_deg, 20_deg).field_of_view(78_deg).view_height(3_m)
-/// CameraView::at({ 20_m, 2.7_m, 15_m }, -33_deg, 33_deg).field_of_view(80_deg)
-/// CameraView::at({ 20_m, 2.7_m, 15_m }).look_at({ 6.8_m, 13.5_m, 6.8_m })
+/// using namespace si::symbols;
+/// CameraView::orbit(-40.0 * deg, 20.0 * deg).field_of_view(78.0 * deg).view_height(3.0 * m)
+/// CameraView::at({ 20.0 * m, 2.7 * m, 15.0 * m }, -33.0 * deg, 33.0 * deg).field_of_view(80.0 * deg)
+/// CameraView::at({ 20.0 * m, 2.7 * m, 15.0 * m }).look_at({ 6.8 * m, 13.5 * m, 6.8 * m })
 /// @endcode
 class CameraView {
 public:
-    /// @brief Circles the domain's center.
-    /// @param azimuth   the azimuth the center is seen from
-    /// @param elevation the elevation
+    /// The field of view without field_of_view().
+    static constexpr si::Angle default_field_of_view{ au::degrees(100.0) };
+
+    /// @brief Makes a camera that circles the domain's centre and looks at it.
+    /// @param azimuth the azimuth from which the centre is seen
+    /// @param elevation the elevation from which the centre is seen
     /// @return the view
-    static CameraView orbit(Angle azimuth, Angle elevation) {
-        CameraView view;
+    static CameraView orbit(si::Angle azimuth, si::Angle elevation) {
+        CameraView view{};
         view.azimuth_ = azimuth;
         view.elevation_ = elevation;
         return view;
     }
 
-    /// @brief At a position, looking at what it sees from an azimuth and an elevation.
-    /// @param position  the camera's position
-    /// @param azimuth   the azimuth of the direction from what it looks at to the camera
+    /// @brief Makes a camera at a position, looking toward what it sees from an azimuth and an elevation.
+    /// @param position the camera's position in metres from the domain's origin corner
+    /// @param azimuth the azimuth of the direction from what it looks at to the camera
     /// @param elevation the elevation of that direction
     /// @return the view
-    static CameraView at(Position position, Angle azimuth = {}, Angle elevation = {}) {
-        CameraView view = orbit(azimuth, elevation);
+    static CameraView at(si::Position position, si::Angle azimuth = si::Angle{ au::ZERO }, si::Angle elevation = si::Angle{ au::ZERO }) {
+        CameraView view{ orbit(azimuth, elevation) };
         view.position_ = position;
         return view;
     }
 
-    /// @brief at(): turned toward a point.
-    /// @param target the point
+    /// @brief Turns an at() camera toward a point: the point sets the azimuth and the elevation.
+    /// @param target the point in metres from the domain's origin corner
     /// @return this view
-    CameraView& look_at(Position target) {
+    CameraView& look_at(si::Position target) {
         target_ = target;
         return *this;
     }
 
-    /// @brief The horizontal field of view (default 100 degrees).
+    /// @brief Sets the horizontal field of view (default 100 degrees).
     /// @param fov the field of view
     /// @return this view
-    CameraView& field_of_view(Angle fov) {
+    CameraView& field_of_view(si::Angle fov) {
         field_of_view_ = fov;
         return *this;
     }
 
-    /// @brief orbit(): the frame's smaller side spans a length at the domain's center (default: the domain's longest
-    /// side).
-    /// @param height the length
+    /// @brief Sets the length that the frame's smaller side spans at the domain's centre (orbit() only; default: the
+    /// domain's longest side).
+    /// @param height the length, more than 0
     /// @return this view
-    CameraView& view_height(Length height) {
+    CameraView& view_height(si::Length height) {
         view_height_ = height;
         return *this;
     }
 
-    /// @brief The core's parameters on a grid.
-    /// @param cells     the grid's cells along X, Y and Z
-    /// @param cell_size the cell size in m
+    /// @brief Gives the core's camera numbers on a grid.
+    /// @param cells the grid's cells along X, Y and Z
+    /// @param cell the grid's cell size, more than 0
     /// @return the pose
     /// @throws SetupError for look_at() on an orbit() camera, or view_height() on an at() camera
-    CameraPose pose(const uint3& cells, float cell_size) const;
+    CameraPose pose(const uint3& cells, si::Length cell) const;
 
 private:
-    std::optional<Position> position_;               ///< at()
-    Angle azimuth_{};                                ///< the azimuth of the direction from what the camera looks at to the camera
-    Angle elevation_{};                              ///< the elevation of that direction
-    Angle field_of_view_ = Angle::from_deg(100.0f); ///< field_of_view()
-    std::optional<Position> target_;                 ///< look_at()
-    std::optional<Length> view_height_;              ///< view_height()
+    /// @brief Gives a free camera's numbers: its position in the core's coordinates, turned toward the target when
+    /// look_at() is set.
+    /// @param pose the pose with the angles
+    /// @param position the at() camera's position in metres from the domain's origin corner
+    /// @param cells the grid's cells along X, Y and Z
+    /// @param cell the grid's cell size
+    /// @return the pose of the free camera
+    CameraPose free_pose(CameraPose pose, const si::Position& position, const uint3& cells, si::Length cell) const;
+
+    std::optional<si::Position> position_{};                           ///< at(): the camera's position, or none for orbit()
+    si::Angle azimuth_{ au::ZERO };                                     ///< the azimuth of the direction from what the camera looks at to the camera
+    si::Angle elevation_{ au::ZERO };                                   ///< the elevation of that direction
+    si::Angle field_of_view_{ default_field_of_view }; ///< the horizontal field of view
+    std::optional<si::Position> target_{};                             ///< look_at(): the point the camera looks at, or none
+    std::optional<si::Length> view_height_{};                          ///< view_height(), or none
 };

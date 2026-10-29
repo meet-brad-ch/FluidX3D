@@ -1,30 +1,42 @@
-// Hydraulic jump: water flowing over a socket into a slower, deeper stream
+/// @file main.cpp
+/// @brief Hydraulic jump: water flows over a socket at the inlet into a slower, deeper stream (free surface,
+/// interactive graphics).
 
 #include "setup/setup.hpp"
 
+/// @brief Sets up a 0.96 x 3.52 x 0.96 m channel in a 208 MiB grid with an inflow of 0.25 m³/s above the socket and
+/// an outflow at the far end, and runs until the window is closed.
+///
+/// The lattice Mach number gives the original's lattice speed 0.075.
 void main_setup() { // extensions: FP16S, VOLUME_FORCE, EQUILIBRIUM_BOUNDARIES, MOVING_BOUNDARIES, SURFACE, SUBGRID, INTERACTIVE_GRAPHICS
-	// physical parameters (SI units)
-	const Length domain_x = 0.96_m;
-	const Length domain_y = 3.52_m;
-	const Length domain_z = 0.96_m;
+	using namespace si::symbols;
+	const si::Length domain_x = 0.96 * m;
+	const si::Length domain_y = 3.52 * m;
+	const si::Length domain_z = 0.96 * m;
 
-	const Length socket_length = domain_y*3.0f/20.0f;
-	const Length socket_height = domain_z*2.0f/5.0f;
-	const Length water_height = domain_z*3.0f/5.0f;
+	const si::Length socket_length = domain_y * 3.0 / 20.0;
+	const si::Length socket_height = domain_z * 2.0 / 5.0;
+	const si::Length water_height = domain_z * 3.0 / 5.0;
 
-	const VolumeFlowRate flow_rate = 0.25_m3ps;
-	const Speed inlet_velocity = flow_rate/(domain_x*(water_height - socket_height)); // above the socket
-	const Speed outlet_velocity = flow_rate/(domain_x*socket_height);
+	const si::VolumeFlowRate flow_rate = 0.25 * m * m * m / s;
+	const si::Speed inlet_velocity = flow_rate / (domain_x * (water_height - socket_height)); // above the socket
+	const si::Speed outlet_velocity = flow_rate / (domain_x * socket_height);
 
-	Simulation sim(Domain::box(domain_x, domain_y, domain_z).vram(208_mb),
-	               Fluid::WATER, inlet_velocity, LatticeMach(0.13f)); // the original's lattice speed 0.075
-	sim.set_gravity(9.81_mps2);
+	const si::MemoryAmount vram = 208.0 * MiB;
+	const si::Acceleration gravity = 9.81 * m / (s * s);
+	Domain domain = Domain::box(domain_x, domain_y, domain_z);
+	domain.vram(vram);
+	const si::LatticeMach mach(0.13); // the original's lattice speed 0.075
+	Simulation sim(domain, Fluid::WATER, inlet_velocity, mach);
+	sim.set_gravity(gravity);
 
+	const si::Position socket_from{ 0.0 * m, 0.0 * m, 0.0 * m };
+	const si::Position socket_to{ domain_x, socket_length, socket_height };
 	sim.surface()
 		.set_water_level(water_height)
 		.initialize_hydrostatic()
-		.set_solid_faces({Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Z_MIN}) // sides and bottom, the top is open
-		.add_solid(Shape::box({0_m, 0_m, 0_m}, {domain_x, socket_length, socket_height})) // socket at the inlet
+		.set_solid_faces({ Face::X_MIN, Face::X_MAX, Face::Y_MIN, Face::Z_MIN }) // sides and bottom, the top is open
+		.add_solid(Shape::box(socket_from, socket_to)) // socket at the inlet
 		.add_inflow(Face::Y_MIN, inlet_velocity, socket_height, water_height)
 		.add_outflow(Face::Y_MAX, outlet_velocity)
 		.apply();
