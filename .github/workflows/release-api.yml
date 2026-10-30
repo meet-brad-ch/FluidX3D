@@ -1,0 +1,26 @@
+name: Release FluidX3D-API
+
+# Makes the GitHub release of a FluidX3D-API version tag (v<upstream version>-api.<n>, see scripts/release.sh) with the
+# CHANGELOG.md section as the notes. No assets: the repository offers no archive downloads.
+
+on:
+  push:
+    tags: ["v*-api.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Release notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" 'index($0, "## [" v "]") == 1 {found=1; next} found && /^## \[/ {exit} found {print}' CHANGELOG.md > notes.md
+          test -s notes.md
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --title "FluidX3D-API ${GITHUB_REF_NAME#v}" --notes-file notes.md

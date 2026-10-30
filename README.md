@@ -38,6 +38,18 @@ The CMake build makes FluidX3D easier to build and use with IDEs like Visual Stu
 
 Read the [FluidX3D Documentation](DOCUMENTATION.md)!
 
+## Releases
+
+FluidX3D-API makes its own releases. A version has the form `<FluidX3D version>-api.<n>`, for example `3.8-api.1`:
+the FluidX3D release that it is based on, and the number of the FluidX3D-API release on that base.
+[CHANGELOG.md](CHANGELOG.md) tells what each release changes. The
+[releases page](https://github.com/meet-brad-ch/FluidX3D-API/releases) shows the same notes. To get a release, clone
+the repository and check out its tag, for example `git checkout v3.8-api.1`.
+
+To make a release: add a section `## [<version>]` to CHANGELOG.md, run `scripts/release.sh <version>`, then push the
+tag (`git push origin v<version>`). The workflow `release-api.yml` makes the GitHub release from the changelog
+section. The release has no files to download.
+
 ---
 
 ## Setup API
