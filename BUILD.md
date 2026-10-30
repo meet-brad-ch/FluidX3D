@@ -7,7 +7,7 @@ How to build FluidX3D on Windows, Linux, and macOS.
 This project uses git submodules. Clone with:
 
 ```bash
-git clone --recurse-submodules https://github.com/meet-brad-ch/FluidX3D
+git clone --recurse-submodules https://github.com/meet-brad-ch/FluidX3D-API
 ```
 
 If you already cloned without submodules:
